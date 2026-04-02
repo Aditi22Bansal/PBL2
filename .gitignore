@@ -1,10 +1,9 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.js
-frontend/node_modules/
 
 # testing
 /coverage
@@ -12,6 +11,7 @@ frontend/node_modules/
 # production
 /build
 /dist
+out/
 
 # python
 __pycache__/
@@ -19,10 +19,9 @@ __pycache__/
 *$py.class
 *.so
 .Python
-backend/env/
-backend/.venv/
 env/
 venv/
+.venv/
 ENV/
 env.bak/
 venv.bak/
@@ -53,8 +52,8 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Next.js
-/.next/
-/out/
+.next/
+frontend/.next/
 
 # Vite
 dist-ssr/
@@ -71,11 +70,16 @@ Thumbs.db
 ehthumbs.db
 [Dd]esktop.ini
 
-# User-specific
+# User-specific & Data
 *.csv
 output_absolute_final.csv
 Roommate Preferences.csv
+allocations.csv
+profiles.csv
 
-# Compiled frontend assets
+# Compiled assets
 frontend/dist/
+backend/node_modules/
+frontend/node_modules/
+backend/__pycache__/
 backend/ml_engine/__pycache__/

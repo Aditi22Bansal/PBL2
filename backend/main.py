@@ -130,6 +130,155 @@ def sync_google_sheet(request: SyncRequest, repo: CSVRepository = Depends(get_re
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to sync Google Sheet: {str(e)}")
 
+@app.get("/admin/allocations/report")
+def download_allocations_report(repo: CSVRepository = Depends(get_repository)):
+    import pandas as pd
+    import os
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+
+    if not os.path.exists(repo.allocations_path):
+        raise HTTPException(status_code=404, detail="No allocations found.")
+        
+    allocations_df = pd.read_csv(repo.allocations_path).fillna("")
+    allocations = allocations_df.to_dict(orient="records")
+    
+    all_profiles = repo.get_all_profiles()
+    prof_dict = {p.user_id: p for p in all_profiles}
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    headers = [
+        "Room Assigned", "Overall Match %", "Student ID", "Name", "Gender", "Branch", "Year",
+        "Sleep Time", "Wake Time", "Cleanliness", "Study Environment", "Guest Frequency",
+        "Smoking Habit", "Drinking Habit", "Loud Alarms", "Temp Preference", "Study Hours",
+        "Active Late", "Conflict Style", "Room Org", "Noise Tolerance", "Introversion",
+        "Irritation", "Personal Space", "Fixed Routines", "Sharing Comfort", 
+        "Pref Roommate Sleep", "Pref Roommate Social", "Cleanliness Expectation", 
+        "Light Preference", "Most Important Factor", "Unfulfilled Notes"
+    ]
+    writer.writerow(headers)
+
+    for a in allocations:
+        room_id = str(a.get("id", ""))
+        comp_score_str = str(a.get("compatibility_score", "0"))
+        
+        members_str = str(a.get("members", ""))
+        members_list = [m.strip() for m in members_str.split(",") if m.strip()]
+        
+        def extract_email(m_raw):
+            if "::" in m_raw: return m_raw.split("::")[1]
+            import re
+            match = re.search(r'(.+?@.+?)\s*\(', m_raw)
+            if match: return match.group(1)
+            return m_raw
+
+        actual_ids = [extract_email(m) for m in members_list]
+        
+        for student_id in actual_ids:
+            p = prof_dict.get(student_id)
+            if not p:
+                continue
+                
+            rms = [prof_dict.get(m) for m in actual_ids if m != student_id and prof_dict.get(m)]
+            
+            # Helper to format "Value (Yes/No)"
+            def fmt(val, attr, is_numeric=False, exact=False):
+                if not rms: return val
+                if val in ["Does not matter", "Flexible", "Doesn’t matter", ""]:
+                    return f"{val} (Yes)"
+                
+                rm_vals = [getattr(r, attr, None) for r in rms]
+                matched = True
+                
+                if is_numeric:
+                    try:
+                        v = int(float(val))
+                        for rv in rm_vals:
+                            if rv is not None and abs(v - int(float(rv))) > 1:
+                                matched = False
+                    except:
+                        pass
+                else:
+                    if exact:
+                        if any(rv != val for rv in rm_vals): matched = False
+                    else:
+                        # loose match for binary traits
+                        if val == "No" and any(rv == "Yes" for rv in rm_vals): matched = False
+                        elif val == "Yes" and any(rv == "No" for rv in rm_vals): matched = False
+                        # otherwise exact
+                        elif any(rv != val for rv in rm_vals): matched = False
+
+                return f"{val} ({'Yes' if matched else 'No'})"
+            
+            # Specific Expectations
+            def exp_fmt(val, rm_attr):
+                if not rms: return val
+                if val in ["Does not matter", "Doesn’t matter"]: return f"{val} (Yes)"
+                
+                matched = True
+                if val == "Early Sleeper" and any("Late" in getattr(r, rm_attr, "") for r in rms): matched = False
+                elif val == "Late Sleeper" and any("Early" in getattr(r, rm_attr, "") for r in rms): matched = False
+                elif val == "Very Clean" and any(getattr(r, rm_attr, "") not in ["Very Clean", "Moderately Clean"] for r in rms): matched = False
+                
+                return f"{val} ({'Yes' if matched else 'No'})"
+
+            unf = []
+            if "(No)" in fmt(p.sleep_time, "sleep_time"): unf.append("Sleep Mismatch")
+            if "(No)" in fmt(p.cleanliness, "cleanliness"): unf.append("Cleanliness Mismatch")
+            if "(No)" in fmt(p.study_env, "study_env"): unf.append("Study Env Mismatch")
+            if "(No)" in fmt(p.smoking_habit, "smoking_habit", exact=False): unf.append("Smoking Mismatch")
+            if "(No)" in fmt(p.drinking_habit, "drinking_habit", exact=False): unf.append("Drinking Mismatch")
+
+            row = [
+                room_id,
+                f"{comp_score_str}%",
+                student_id,
+                p.name,
+                p.gender,
+                p.branch,
+                p.year_of_study,
+                
+                fmt(p.sleep_time, "sleep_time"),
+                fmt(p.wake_time, "wake_time"),
+                fmt(p.cleanliness, "cleanliness"),
+                fmt(p.study_env, "study_env"),
+                fmt(p.guest_frequency, "guest_frequency"),
+                fmt(p.smoking_habit, "smoking_habit", exact=False),
+                fmt(p.drinking_habit, "drinking_habit", exact=False),
+                fmt(p.loud_alarms, "loud_alarms", exact=False),
+                fmt(p.temp_preference, "temp_preference", exact=True),
+                fmt(p.study_hours, "study_hours", exact=True),
+                fmt(p.active_late, "active_late", exact=False),
+                fmt(p.conflict_style, "conflict_style", exact=True),
+                fmt(p.room_org, "room_org", exact=True),
+                
+                fmt(p.noise_tolerance, "noise_tolerance", is_numeric=True),
+                fmt(p.introversion, "introversion", is_numeric=True),
+                fmt(p.irritation, "irritation", is_numeric=True),
+                fmt(p.personal_space, "personal_space", is_numeric=True),
+                fmt(p.fixed_routines, "fixed_routines", is_numeric=True),
+                fmt(p.sharing_comfort, "sharing_comfort", is_numeric=True),
+                
+                exp_fmt(p.pref_roommate_sleep, "sleep_time"),
+                fmt(p.pref_roommate_social, "pref_roommate_social", exact=True),
+                exp_fmt(p.cleanliness_expectation, "cleanliness"),
+                fmt(p.light_preference, "light_preference", exact=True),
+                
+                p.most_important_factor,
+                "None" if not unf else ", ".join(unf)
+            ]
+            writer.writerow(row)
+            
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=Preference_Fulfillment_Report.csv"}
+    )
+
 @app.post("/admin/allocation/trigger")
 def trigger_allocation_run(repo: CSVRepository = Depends(get_repository)):
     run_id = f"run_{uuid.uuid4().hex[:8]}"
