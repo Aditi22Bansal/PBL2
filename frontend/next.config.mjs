@@ -1,13 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://127.0.0.1:8000/:path*' // Proxy to FastAPI
-      }
-    ]
-  }
+  // Empty config, rewrites removed to prevent intercepting NextAuth /api/auth paths
 };
 
 export default nextConfig;
