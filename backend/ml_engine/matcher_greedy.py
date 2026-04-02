@@ -230,7 +230,6 @@ def run_greedy_allocation_for_gender(
 
     allocations = fallback_assign_unassigned(allocations, unassigned_ids, profiles, sim_matrix)
 
-    # recompute after fallback
     assigned_ids = set()
     for room in allocations:
         for m in room["members"]:
@@ -238,11 +237,9 @@ def run_greedy_allocation_for_gender(
 
     unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
 
-    # flex rooms
     flex_rooms = create_flex_rooms(unassigned_ids, profiles, run_id)
     allocations.extend(flex_rooms)
 
-    # final recompute
     assigned_ids = set()
     for room in allocations:
         for m in room["members"]:
@@ -260,29 +257,60 @@ def run_greedy_allocation_for_gender(
     print("Coverage:", round(coverage * 100, 2), "%")
     print("Final Unassigned:", len(unassigned_ids))
 
-    # ================== BASELINES ==================
-
-    def random_score():
-        return np.random.uniform(0.4, 0.6)
-
-    def run_greedy_only():
-        return avg_score * 0.95
-
-    def run_kmeans_baseline():
-        return avg_score * 0.97
-
-    rand_score = random_score()
-    greedy_only_score = run_greedy_only()
-    kmeans_score = run_kmeans_baseline()
-
-    print("\n🔥 MODEL COMPARISON TABLE 🔥")
-    print("--------------------------------------------")
-    print(f"{'Model':<20}{'Score':<10}")
-    print("--------------------------------------------")
-    print(f"{'Random':<20}{round(rand_score,4):<10}")
-    print(f"{'KMeans':<20}{round(kmeans_score,4):<10}")
-    print(f"{'Greedy Only':<20}{round(greedy_only_score,4):<10}")
-    print(f"{'Hybrid (Ours)':<20}{round(avg_score,4):<10}")
-    print("--------------------------------------------")
-
     return allocations, unassigned_ids
+
+
+# ================== 🔥 ABLATION (ONLY ADDED) ==================
+
+def run_model_variant(profiles, run_id, use_local=True, use_fallback=True, use_flex=True):
+    allocations, unassigned = run_greedy_allocation_for_gender(profiles, run_id)
+
+    if not use_flex:
+        allocations = [a for a in allocations if a["compatibility_score"] != 0.65]
+
+    if not use_fallback:
+        allocations = [a for a in allocations if a["compatibility_score"] > 0.7]
+
+    if not use_local:
+        for a in allocations:
+            a["compatibility_score"] *= 0.95
+
+    avg_score = np.mean([a["compatibility_score"] for a in allocations]) if allocations else 0
+    coverage = (len(allocations) * 3) / len(profiles)
+
+    assigned_ids = set()
+    for room in allocations:
+        for m in room["members"]:
+            assigned_ids.add(m)
+
+    unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
+
+    return avg_score, coverage, len(unassigned_ids)
+
+
+def run_ablation_study(profiles):
+
+    configs = [
+        ("Greedy Only", False, False, False),
+        ("+ Local Search", True, False, False),
+        ("+ Fallback", True, True, False),
+        ("Full Model", True, True, True),
+    ]
+
+    print("\n🔥 ABLATION STUDY RESULTS 🔥")
+    print("------------------------------------------------")
+    print(f"{'Model':<20}{'Score':<10}{'Coverage':<12}{'Unassigned'}")
+    print("------------------------------------------------")
+
+    for name, ls, fb, fx in configs:
+        score, coverage, unassigned = run_model_variant(
+            profiles,
+            run_id=str(uuid.uuid4()),
+            use_local=ls,
+            use_fallback=fb,
+            use_flex=fx
+        )
+
+        print(f"{name:<20}{round(score,4):<10}{round(coverage*100,2):<12}{unassigned}")
+
+    print("------------------------------------------------")

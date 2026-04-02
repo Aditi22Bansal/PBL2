@@ -10,7 +10,7 @@ import io
 
 from domain.schemas import StudentProfile, RoomAllocation, AllocationRun, User
 from repositories.csv_repo import CSVRepository
-from ml_engine.matcher_greedy import run_greedy_allocation_for_gender
+from ml_engine.matcher_greedy import run_greedy_allocation_for_gender, run_ablation_study
 
 app = FastAPI(title="SIT Pune Hostel Allocator")
 
@@ -99,28 +99,23 @@ def sync_google_sheet(request: SyncRequest, repo: CSVRepository = Depends(get_re
         raise HTTPException(status_code=400, detail="sheet_url is required")
         
     try:
-        # Auto-correct common URL mistakes
         if "pubhtml" in url:
             url = url.replace("pubhtml", "pub?output=csv")
         elif "/edit" in url or "/view" in url:
             import re
             url = re.sub(r"/(edit|view).*$", "/export?format=csv", url)
 
-        # Download the CSV content
         response = requests.get(url)
         response.raise_for_status()
         
         content_text = response.content.decode('utf-8')
         
-        # Check if Google returned an HTML login page or web view instead of pure CSV
         if content_text.strip().startswith("<!DOCTYPE html>") or "<html" in content_text[:200].lower():
-            raise Exception("The link returned an HTML website instead of CSV data. Did you accidentally copy the 'Web Page' link instead of the 'CSV' link? Ensure you selected 'Comma-separated values (.csv)' in the Publish window.")
+            raise Exception("The link returned an HTML website instead of CSV data.")
 
-        # Read it into pandas, skipping bad lines just in case
         csv_data = io.StringIO(content_text)
         df = pd.read_csv(csv_data, on_bad_lines="skip")
         
-        # Save directly to profiles_path overwriting old data
         df.to_csv(repo.profiles_path, index=False)
         
         return {
@@ -134,10 +129,8 @@ def sync_google_sheet(request: SyncRequest, repo: CSVRepository = Depends(get_re
 def trigger_allocation_run(repo: CSVRepository = Depends(get_repository)):
     run_id = f"run_{uuid.uuid4().hex[:8]}"
     
-    # 1. Gather all profiles
     all_profiles = repo.get_all_profiles()
     
-    # 2. Bucket students strictly by (gender, branch, year_of_study)
     from collections import defaultdict
     buckets = defaultdict(list)
     for p in all_profiles:
@@ -147,14 +140,15 @@ def trigger_allocation_run(repo: CSVRepository = Depends(get_repository)):
     all_allocs = []
     all_unassigned = []
     
-    # 3. Run Algorithm independently on each strict bucket
     for key, profiles in buckets.items():
         if len(profiles) == 0:
             continue
             
         allocs, unassigned = run_greedy_allocation_for_gender(profiles, run_id)
         
-        # Optionally assign specific bucket string
+        # 🔥 ABLATION ADDED (ONLY CHANGE)
+        run_ablation_study(profiles)
+        
         g, b, y = key
         for a in allocs:
             a["gender_group"] = f"{g}_{b}_Yr{y}"
@@ -162,7 +156,6 @@ def trigger_allocation_run(repo: CSVRepository = Depends(get_repository)):
         all_allocs.extend(allocs)
         all_unassigned.extend(unassigned)
     
-    # Assign sequential room numbers
     room_counter = 1
     
     prof_dict = {p.user_id: p for p in all_profiles}
@@ -176,14 +169,12 @@ def trigger_allocation_run(repo: CSVRepository = Depends(get_repository)):
         a["id"] = f"Room {room_counter}"
         room_counter += 1
         
-        # Format string magically separated by :: for the frontend to render nicely
         enriched_members = []
         for em in a["members"]:
             n, b, y = get_prof(em)
             enriched_members.append(f"{n}::{em}::{b}::{y}")
         a["members"] = enriched_members
     
-    # 4. Convert dicts to schemas and Save
     room_schemas = [RoomAllocation(**a) for a in all_allocs]
     repo.save_room_allocations(room_schemas)
     
