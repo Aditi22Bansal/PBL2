@@ -9,7 +9,7 @@ const handler = NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "mock-client-id",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "mock-client-secret",
-    }),
+    }),  
     CredentialsProvider({
       name: "Demo Network Bypass",
       credentials: {
@@ -17,7 +17,8 @@ const handler = NextAuth({
         password: { label: "Demo Password", type: "password" }
       },
       async authorize(credentials) {
-        if (credentials?.password === "demo123" && credentials?.email?.endsWith("@sitpune.edu.in")) {
+        if (credentials?.password === "demo123" && credentials?.email?.endsWith("@sitpune.edu.in")) { 
+          
           return { id: credentials.email, email: credentials.email, name: credentials.email.split('@')[0] };
         }
         // Force authentication failure if password doesn't match the hidden backdoor
