@@ -297,7 +297,7 @@ def run_ablation_study(profiles):
         ("Full Model", True, True, True),
     ]
 
-    print("\n🔥 ABLATION STUDY RESULTS 🔥")
+    print("\n ABLATION STUDY RESULTS ")
     print("------------------------------------------------")
     print(f"{'Model':<20}{'Score':<10}{'Coverage':<12}{'Unassigned'}")
     print("------------------------------------------------")

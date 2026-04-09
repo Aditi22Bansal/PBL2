@@ -5,7 +5,10 @@ const roomAllocationSchema = new mongoose.Schema({
   gender_group: { type: String },
   compatibility_score: { type: Number },
   members: [{ type: String }], // Array of Emails or user_ids
-  room_number: { type: String }
+  block: { type: String },
+  floor: { type: Number },
+  room_number: { type: String },
+  isLocked: { type: Boolean, default: false }
 }, { timestamps: true });
 
 module.exports = mongoose.model('RoomAllocation', roomAllocationSchema);
