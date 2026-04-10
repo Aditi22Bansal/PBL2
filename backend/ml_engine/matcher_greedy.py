@@ -251,7 +251,7 @@ def run_greedy_allocation_for_gender(
     avg_score = np.mean([a["compatibility_score"] for a in allocations]) if allocations else 0
     coverage = (len(allocations) * 3) / len(profiles)
 
-    print("\n📊 EVALUATION METRICS")
+    print("\n=== EVALUATION METRICS ===")
     print("Average Compatibility Score:", round(avg_score, 4))
     print("Coverage:", round(coverage * 100, 2), "%")
     print("Final Unassigned:", len(unassigned_ids))
