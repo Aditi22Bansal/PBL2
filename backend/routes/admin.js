@@ -24,4 +24,7 @@ router.post('/allocations/toggle-lock', adminController.toggleRoomLock);
 router.get('/requests', adminController.getChangeRequests);
 router.post('/requests/action', adminController.handleRequestAction);
 
+// Force allocate remaining unassigned students
+router.post('/force-allocate', adminController.forceAllocateRemaining);
+
 module.exports = router;

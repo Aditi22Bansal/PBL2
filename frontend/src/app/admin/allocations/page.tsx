@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { ArrowLeft, Database, Download, Lock, Unlock, Shuffle, FileText } from "lucide-react";
+import { ArrowLeft, Database, Download, Lock, Unlock, Shuffle, FileText, ShieldAlert } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { API_URL } from "@/lib/api";
@@ -15,6 +15,7 @@ export default function AdminAllocations() {
   const [allocations, setAllocations] = useState([]);
   const [unassigned, setUnassigned] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [forceAllocating, setForceAllocating] = useState(false);
   
   // Custom manual swap states
   const [swapping, setSwapping] = useState(false);
@@ -78,6 +79,19 @@ export default function AdminAllocations() {
           fetchAllocations();
       } catch (err: any) {
           alert(err.response?.data?.error || "Failed to swap members. Double check member IDs.");
+      }
+  }
+
+  const handleForceAllocate = async () => {
+      setForceAllocating(true);
+      try {
+          const res = await axios.post(`${API_URL}/api/admin/force-allocate`);
+          alert(res.data.message);
+          fetchAllocations();
+      } catch (err: any) {
+          alert(err.response?.data?.error || "Force allocation failed.");
+      } finally {
+          setForceAllocating(false);
       }
   }
 
@@ -332,26 +346,53 @@ export default function AdminAllocations() {
             </div>
 
             {unassigned.length > 0 && (
-                <div className="bg-white border border-[#C4613A]/20 rounded-[20px] overflow-hidden mt-10 shadow-sm">
+                <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="bg-white border border-[#C4613A]/20 rounded-[20px] overflow-hidden mt-10 shadow-sm">
                     <div className="p-8 border-b border-[#C4613A]/10 flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#FAF0EB]/50">
                         <div>
                             <h3 className="font-semibold text-xl text-[#1A3A2A]">Unassigned Students</h3>
-                            <p className="text-[#C4613A]/80 text-[13px] font-light mt-1">Students who could not be accommodated due to capacity constraints.</p>
+                            <p className="text-[#C4613A]/80 text-[13px] font-light mt-1">These students could not be matched with sufficient compatibility. Force-allocate to assign them rooms anyway.</p>
                         </div>
-                        <div className="bg-[#white] border border-[#C4613A]/20 px-4 py-2 rounded-full text-[12px] font-semibold text-[#C4613A]">
-                            {unassigned.length} Pending
+                        <div className="flex items-center gap-3">
+                            <div className="bg-white border border-[#C4613A]/20 px-4 py-2 rounded-full text-[12px] font-semibold text-[#C4613A]">
+                                {unassigned.length} Pending
+                            </div>
+                            <button 
+                                onClick={handleForceAllocate}
+                                disabled={forceAllocating}
+                                className="bg-[#C4613A] hover:bg-[#D4784F] disabled:opacity-60 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-full text-[13px] font-medium flex items-center gap-2 shadow-[0_4px_24px_rgba(196,97,58,0.3)] hover:-translate-y-[1px] hover:shadow-[0_12px_36px_rgba(196,97,58,0.4)] transition-all"
+                            >
+                                {forceAllocating ? (
+                                    <>
+                                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        Allocating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <ShieldAlert size={14}/> Force Allocate All
+                                    </>
+                                )}
+                            </button>
                         </div>
                     </div>
-                    <div className="p-8">
-                        <div className="flex flex-wrap gap-3">
-                            {unassigned.map((student: string, idx: number) => (
-                                <span key={idx} className="bg-[#F7F4EE] px-4 py-2 rounded-xl text-[14px] border border-[#1A3A2A]/10 text-[#3A4F44] font-medium">
-                                    {student}
-                                </span>
-                            ))}
-                        </div>
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                        <table className="w-full text-left text-[14px]">
+                            <thead className="bg-[#FAF0EB]/50 text-[#7A9088] border-b border-[#C4613A]/10 sticky top-0">
+                                <tr>
+                                    <th className="px-8 py-4 font-semibold tracking-[1px] uppercase text-[11px] w-12">#</th>
+                                    <th className="px-8 py-4 font-semibold tracking-[1px] uppercase text-[11px]">Student</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#C4613A]/5 text-[#3A4F44]">
+                                {unassigned.map((student: string, idx: number) => (
+                                    <tr key={idx} className="hover:bg-[#FAF0EB]/30 transition-colors">
+                                        <td className="px-8 py-3 text-[#7A9088] text-[13px]">{idx + 1}</td>
+                                        <td className="px-8 py-3 font-medium text-[14px]">{student}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
-                </div>
+                </motion.div>
             )}
         </div>
     </div>

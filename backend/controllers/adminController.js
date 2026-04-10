@@ -367,3 +367,101 @@ exports.handleRequestAction = async (req, res) => {
         res.status(500).json({ error: 'Failed' });
     }
 }
+
+exports.forceAllocateRemaining = async (req, res) => {
+    try {
+        // 1. Find all currently allocated students
+        const allAllocations = await RoomAllocation.find({}).lean();
+        const allocatedEmails = new Set();
+        allAllocations.forEach(a => {
+            (a.members || []).forEach(m => allocatedEmails.add(m));
+        });
+
+        // 2. Find all profiles that are NOT allocated
+        const allProfiles = await Profile.find({}).lean();
+        const unassignedProfiles = allProfiles.filter(p => !allocatedEmails.has(p.user_id));
+
+        if (unassignedProfiles.length === 0) {
+            return res.json({ message: 'No unassigned students remaining!', total_new_rooms: 0 });
+        }
+
+        // 3. Group unassigned students into rooms of 3 (last room may have 2)
+        const ROOMS_PER_FLOOR = 8;
+        
+        // Find the highest existing room number to continue from there
+        let maxRoomNum = 0;
+        allAllocations.forEach(a => {
+            if (a.room_number) {
+                const parts = a.room_number.split('-');
+                if (parts[1]) {
+                    const num = parseInt(parts[1]);
+                    if (num > maxRoomNum) maxRoomNum = num;
+                }
+            }
+        });
+
+        const profileMap = {};
+        allProfiles.forEach(p => profileMap[p.user_id] = p);
+
+        // Sort unassigned by gender, branch, year for best grouping
+        unassignedProfiles.sort((a, b) => {
+            if (a.gender !== b.gender) return (a.gender || '').localeCompare(b.gender || '');
+            if (a.branch !== b.branch) return (a.branch || '').localeCompare(b.branch || '');
+            return (a.year_of_study || '').localeCompare(b.year_of_study || '');
+        });
+
+        const newRooms = [];
+        let roomCounter = maxRoomNum + 1;
+        const blockChar = 'Z'; // Use block Z for force-allocated rooms
+
+        for (let i = 0; i < unassignedProfiles.length; i += 3) {
+            const group = unassignedProfiles.slice(i, i + 3);
+            if (group.length < 2) {
+                // Single student left - skip (truly can't form a room alone)
+                continue;
+            }
+
+            const floor = Math.floor((roomCounter - 1) / ROOMS_PER_FLOOR) + 1;
+            const roomOnFloor = ((roomCounter - 1) % ROOMS_PER_FLOOR) + 1;
+            const roomNumber = `${blockChar}-${floor}0${roomOnFloor}`;
+
+            const members = group.map(p => p.user_id);
+            const memberDetails = members.map(email => {
+                const p = profileMap[email];
+                return p ? `${p.name} (${p.branch})` : email;
+            });
+
+            // Determine gender group label
+            const genders = group.map(p => (p.gender || 'Unknown').toLowerCase());
+            const isFemale = genders.every(g => g === 'f' || g === 'female');
+            const genderLabel = isFemale ? 'Female' : 'Male';
+            const branches = [...new Set(group.map(p => p.branch || 'Mixed'))];
+
+            newRooms.push({
+                allocation_run_id: 'force_allocated',
+                gender_group: `${genderLabel}_${branches.join('/')}_Force`,
+                compatibility_score: 0.50, // Mark as low-compatibility forced room
+                members: members,
+                block: blockChar,
+                floor: floor,
+                room_number: roomNumber,
+                isLocked: false
+            });
+
+            roomCounter++;
+        }
+
+        if (newRooms.length > 0) {
+            await RoomAllocation.insertMany(newRooms);
+        }
+
+        res.json({
+            message: `Force-allocated ${newRooms.length} new rooms for remaining students.`,
+            total_new_rooms: newRooms.length,
+            total_students_placed: newRooms.reduce((sum, r) => sum + r.members.length, 0)
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Force allocation failed', message: error.message });
+    }
+}
