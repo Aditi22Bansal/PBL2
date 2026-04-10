@@ -12,16 +12,7 @@ services:
         value: 5000
       - key: MONGO_URI
         sync: false # You must set this manually in the Render Dashboard!
-      - key: SELF_URL
-        # Set this in the Render Dashboard to your Node backend's URL
-        # e.g. https://pbl2-node-backend.onrender.com
-        sync: false
-      - key: PYTHON_BACKEND_URL
-        fromService:
-          type: web
-          name: pbl2-python-backend
-          property: url
-
+        
   # 2. Python Backend (FastAPI + ML Engine)
   - type: web
     name: pbl2-python-backend

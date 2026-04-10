@@ -16,7 +16,6 @@ export default function AdminDashboard() {
   const [syncing, setSyncing] = useState(false);
   const [allocating, setAllocating] = useState(false);
   const [message, setMessage] = useState("");
-  const [isError, setIsError] = useState(false);
 
   const [stats, setStats] = useState({ rooms: 0, unassigned: 0, pendingRequests: 0 });
 
@@ -51,15 +50,12 @@ export default function AdminDashboard() {
     if (!sheetUrl) return;
     setSyncing(true);
     setMessage("");
-    setIsError(false);
     try {
       const res = await axios.post(`${API_URL}/api/admin/sync-csv`, { sheet_url: sheetUrl });
       setMessage(res.data.message);
-      setIsError(false);
       fetchData();
     } catch (err: any) {
-      setMessage("Error: " + (err.response?.data?.details || err.response?.data?.error || err.message));
-      setIsError(true);
+      setMessage("Error: " + err.response?.data?.details || err.message);
     } finally {
       setSyncing(false);
     }
@@ -67,23 +63,13 @@ export default function AdminDashboard() {
 
   const handleAllocate = async () => {
     setAllocating(true);
-    setIsError(false);
-    setMessage("⏳ Waking up the AI engine... This may take up to 60 seconds on first run.");
+    setMessage("Running Similarity Matrix & Clustering... Please wait.");
     try {
-      // 3-minute timeout — backend retries up to 3× with 8s delays between them
-      const res = await axios.post(`${API_URL}/api/admin/trigger-allocation`, {}, { timeout: 180000 });
-      setMessage(`✓ ${res.data.message} | New Rooms Formed: ${res.data.total_new_rooms}`);
-      setIsError(false);
+      const res = await axios.post(`${API_URL}/api/admin/trigger-allocation`);
+      setMessage(res.data.message + ` | New Rooms Formed: ${res.data.total_new_rooms}`);
       fetchData();
     } catch (err: any) {
-      const serverMsg = err.response?.data?.message || err.response?.data?.error || err.message;
-      const isColdStart = err.response?.status === 502 || err.code === 'ECONNABORTED';
-      setMessage(
-        isColdStart
-          ? "⚠️ The AI engine is waking up (Render cold start). Please wait 30–60 seconds and try again."
-          : "Error: " + serverMsg
-      );
-      setIsError(true);
+      setMessage("Error: " + err.response?.data?.message || err.message);
     } finally {
       setAllocating(false);
     }
@@ -125,13 +111,9 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`p-4 rounded-xl flex items-center gap-3 text-sm shadow-sm border ${
-              isError
-                ? "bg-[#FDF2F0] border-[#C4613A]/30"
-                : "bg-[#EBF4EF] border-[#7BAE94]/30"
-            }`}
+            className="bg-[#EBF4EF] border border-[#7BAE94]/30 p-4 rounded-xl flex items-center gap-3 text-sm shadow-sm"
           >
-            <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${isError ? "text-[#C4613A]" : "text-[#2E6347]"}`} />
+            <CheckCircle2 className="text-[#2E6347] w-5 h-5 flex-shrink-0" />
             <span className="text-[#1A3A2A] font-medium">{message}</span>
           </motion.div>
         )}
@@ -212,7 +194,7 @@ export default function AdminDashboard() {
               disabled={allocating}
               className="w-full mt-10 bg-[#C4613A] hover:bg-[#D4784F] text-white py-4 rounded-full font-medium transition-all flex items-center justify-center gap-3 shadow-[0_4px_24px_rgba(196,97,58,0.3)] disabled:opacity-50 disabled:transform-none hover:-translate-y-0.5 hover:shadow-[0_12px_36px_rgba(196,97,58,0.4)]"
             >
-              {allocating ? <><RotateCw className="w-[18px] h-[18px] animate-spin" />&nbsp;Warming up engine...</> : "Run Engine"}
+              {allocating ? <RotateCw className="w-[18px] h-[18px] animate-spin" /> : "Run Engine"}
             </button>
           </motion.div>
         </div>
