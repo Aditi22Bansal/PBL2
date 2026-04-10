@@ -8,8 +8,6 @@ import { ArrowLeft, Database, Download, Lock, Unlock, Shuffle, FileText } from "
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { API_URL } from "@/lib/api";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
 export default function AdminAllocations() {
   const { data: session, status } = useSession();
@@ -83,11 +81,15 @@ export default function AdminAllocations() {
       }
   }
 
-  const downloadPDF = () => {
+  const downloadPDF = async () => {
     if (allocations.length === 0) {
         alert("No allocations to export. Run the engine first.");
         return;
     }
+
+    // Dynamic import to avoid SSR issues with fflate
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
