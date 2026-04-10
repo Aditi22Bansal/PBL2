@@ -313,7 +313,7 @@ export default function Landing() {
     return()=>window.removeEventListener("scroll",s);
   },[]);
   useEffect(()=>{
-    const m=(e)=>{
+    const m=(e: any)=>{
       if(curRef.current){curRef.current.style.left=e.clientX-5+"px";curRef.current.style.top=e.clientY-5+"px";}
       if(ringRef.current){ringRef.current.style.left=e.clientX-18+"px";ringRef.current.style.top=e.clientY-18+"px";}
     };

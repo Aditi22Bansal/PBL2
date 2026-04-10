@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { ArrowLeft, Loader2, Send, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
+import { API_URL } from "@/lib/api";
 
 export default function StudentRequestPage() {
   const { data: session, status } = useSession();
@@ -28,7 +29,7 @@ export default function StudentRequestPage() {
     try {
       const email = session?.user?.email;
       if (!email) return;
-      const res = await axios.get(`http://localhost:5000/api/student/dashboard/${email}`);
+      const res = await axios.get(`${API_URL}/api/student/dashboard/${email}`);
       if (res.data.status === 'ALLOCATED') {
           setAllocation(res.data);
       } else {
@@ -45,7 +46,7 @@ export default function StudentRequestPage() {
       
       setSubmitting(true);
       try {
-          await axios.post('http://localhost:5000/api/student/change-request', {
+          await axios.post(`${API_URL}/api/student/change-request`, {
               email: session?.user?.email,
               name: session?.user?.name,
               roomId: allocation.room_id,

@@ -7,6 +7,7 @@ import axios from "axios";
 import { ArrowLeft, Check, X, HelpCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { API_URL } from "@/lib/api";
 
 export default function AdminRequests() {
   const { data: session, status } = useSession();
@@ -25,7 +26,7 @@ export default function AdminRequests() {
 
   const fetchRequests = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/admin/requests");
+      const res = await axios.get(`${API_URL}/api/admin/requests`);
       setRequests(res.data);
     } catch (error) {
       console.error(error);
@@ -34,7 +35,7 @@ export default function AdminRequests() {
 
   const handleAction = async (requestId: string, actionStatus: string) => {
       try {
-          await axios.post("http://localhost:5000/api/admin/requests/action", {
+          await axios.post(`${API_URL}/api/admin/requests/action`, {
               requestId: requestId,
               status: actionStatus
           });

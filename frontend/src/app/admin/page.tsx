@@ -7,6 +7,7 @@ import axios from "axios";
 import { LogOut, Play, Upload, CheckCircle2, RotateCw, Database, Microchip, FileText, ClipboardList, ShieldAlert } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { API_URL } from "@/lib/api";
 
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
@@ -30,8 +31,8 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
       try {
-          const resA = await axios.get("http://localhost:5000/api/admin/allocations");
-          const resR = await axios.get("http://localhost:5000/api/admin/requests");
+          const resA = await axios.get(`${API_URL}/api/admin/allocations`);
+          const resR = await axios.get(`${API_URL}/api/admin/requests`);
           
           let aCount = 0, uCount = 0, rCount = 0;
           if (resA.data.allocations) {
@@ -50,7 +51,7 @@ export default function AdminDashboard() {
     setSyncing(true);
     setMessage("");
     try {
-      const res = await axios.post("http://localhost:5000/api/admin/sync-csv", { sheet_url: sheetUrl });
+      const res = await axios.post(`${API_URL}/api/admin/sync-csv`, { sheet_url: sheetUrl });
       setMessage(res.data.message);
       fetchData();
     } catch (err: any) {
@@ -64,7 +65,7 @@ export default function AdminDashboard() {
     setAllocating(true);
     setMessage("Running Similarity Matrix & Clustering... Please wait.");
     try {
-      const res = await axios.post("http://localhost:5000/api/admin/trigger-allocation");
+      const res = await axios.post(`${API_URL}/api/admin/trigger-allocation`);
       setMessage(res.data.message + ` | New Rooms Formed: ${res.data.total_new_rooms}`);
       fetchData();
     } catch (err: any) {

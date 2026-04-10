@@ -6,6 +6,7 @@ import { Send, MessageSquare, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { io, Socket } from "socket.io-client";
+import { API_URL } from "@/lib/api";
 
 interface RoomChatProps {
   roomId: string;
@@ -28,7 +29,7 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
     
     try {
       const res = await axios.get(
-        `http://localhost:5000/api/chat/${roomId}?email=${encodeURIComponent(currentUserEmail)}`
+        `${API_URL}/api/chat/${roomId}?email=${encodeURIComponent(currentUserEmail)}`
       );
       setMessages(res.data);
     } catch (err: any) {
@@ -47,7 +48,7 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
 
     // Setup Socket.IO
     if (!socketRef.current) {
-        socketRef.current = io("http://localhost:5000");
+        socketRef.current = io(API_URL);
     }
 
     const socket = socketRef.current;
@@ -102,7 +103,7 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
     socketRef.current?.emit("send_message", newMsgData);
 
     try {
-      await axios.post(`http://localhost:5000/api/chat/${roomId}`, {
+      await axios.post(`${API_URL}/api/chat/${roomId}`, {
         email: currentUserEmail,
         name: currentUserName,
         message: tempMessage,

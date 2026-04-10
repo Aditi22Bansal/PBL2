@@ -7,6 +7,7 @@ import axios from "axios";
 import { ArrowLeft, Database, Download, Lock, Unlock, Shuffle } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { API_URL } from "@/lib/api";
 
 export default function AdminAllocations() {
   const { data: session, status } = useSession();
@@ -30,7 +31,7 @@ export default function AdminAllocations() {
 
   const fetchAllocations = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/admin/allocations");
+      const res = await axios.get(`${API_URL}/api/admin/allocations`);
       if (res.data.allocations) {
          setAllocations(res.data.allocations);
          setUnassigned(res.data.unassigned || []);
@@ -42,7 +43,7 @@ export default function AdminAllocations() {
 
   const toggleLock = async (roomId: string, currentLockStatus: boolean) => {
       try {
-          await axios.post("http://localhost:5000/api/admin/allocations/toggle-lock", {
+          await axios.post(`${API_URL}/api/admin/allocations/toggle-lock`, {
               roomId: roomId,
               isLocked: !currentLockStatus
           });
@@ -55,7 +56,7 @@ export default function AdminAllocations() {
   const handleSwap = async (e: any) => {
       e.preventDefault();
       try {
-          await axios.post("http://localhost:5000/api/admin/allocations/manual-swap", swapData);
+          await axios.post(`${API_URL}/api/admin/allocations/manual-swap`, swapData);
           setSwapping(false);
           setSwapData({ roomAId: '', memberA: '', roomBId: '', memberB: '' });
           alert("Swap completed successfully!");
@@ -68,7 +69,7 @@ export default function AdminAllocations() {
   const downloadCSV = async () => {
     try {
         const response = await axios({
-            url: "http://localhost:5000/api/admin/allocations/report",
+            url: `${API_URL}/api/admin/allocations/report`,
             method: 'GET',
             responseType: 'blob'
         });

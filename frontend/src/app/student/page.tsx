@@ -7,6 +7,7 @@ import axios from "axios";
 import { LogOut, Home, Users, Loader2, Sparkles, Building2, UserCircle, Save, CheckCircle2, MessageSquare } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import RoomChat from "@/components/RoomChat";
+import { API_URL } from "@/lib/api";
 
 export default function StudentDashboard() {
   const { data: session, status } = useSession();
@@ -46,7 +47,7 @@ export default function StudentDashboard() {
           return;
       }
       
-      const res = await axios.get(`http://localhost:5000/api/student/dashboard/${email}`);
+      const res = await axios.get(`${API_URL}/api/student/dashboard/${email}`);
       setAllocation(res.data);
     } catch (err) {
       console.error(err);
