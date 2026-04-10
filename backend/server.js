@@ -77,4 +77,28 @@ app.get('/api/health', (req, res) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
     console.log(`Server & Socket.IO running on port ${PORT}`);
+
+    // Keep-alive: ping both services every 14 min to prevent Render free-tier cold starts.
+    // Render spins down after 15 min of inactivity — this keeps them warm.
+    const KEEP_ALIVE_INTERVAL = 14 * 60 * 1000; // 14 minutes
+    const axios = require('axios');
+
+    setInterval(async () => {
+        const nodeUrl = process.env.SELF_URL || `http://localhost:${PORT}`;
+        const pythonUrl = process.env.PYTHON_BACKEND_URL || 'http://127.0.0.1:8000';
+
+        try {
+            await axios.get(`${nodeUrl}/api/health`, { timeout: 10000 });
+            console.log('[Keep-Alive] Node backend pinged ✓');
+        } catch (e) {
+            console.warn('[Keep-Alive] Node ping failed:', e.message);
+        }
+
+        try {
+            await axios.get(`${pythonUrl}/health`, { timeout: 10000 });
+            console.log('[Keep-Alive] Python backend pinged ✓');
+        } catch (e) {
+            console.warn('[Keep-Alive] Python ping failed (may be waking up):', e.message);
+        }
+    }, KEEP_ALIVE_INTERVAL);
 });
