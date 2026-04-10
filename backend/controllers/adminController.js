@@ -269,18 +269,20 @@ exports.downloadReport = async (req, res) => {
 exports.getAllocations = async (req, res) => {
     try {
         const allocs = await RoomAllocation.find({}).lean();
+        const allProfiles = await Profile.find({}).lean();
         
+        const profileMap = new Map();
+        allProfiles.forEach(p => profileMap.set(p.user_id, p));
+
         let allocatedEmails = new Set();
         for(let a of allocs) {
-            const profiles = await Profile.find({ user_id: { $in: a.members } });
             a.memberDetails = a.members.map(email => {
                 allocatedEmails.add(email);
-                const p = profiles.find(pf => pf.user_id === email);
+                const p = profileMap.get(email);
                 return p ? `${p.name} (${p.branch})` : email;
             });
         }
 
-        const allProfiles = await Profile.find({}).lean();
         const unassignedProfiles = allProfiles.filter(p => !allocatedEmails.has(p.user_id));
         const unassigned = unassignedProfiles.map(p => `${p.name} (${p.branch})`);
 
