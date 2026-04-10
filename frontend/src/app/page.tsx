@@ -304,8 +304,8 @@ const ROADMAP_ITEMS = [
 
 export default function Landing() {
   const [nav, setNav] = useState(false);
-  const curRef = useRef(null);
-  const ringRef = useRef(null);
+  const curRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   useEffect(()=>{
     const s=()=>setNav(window.scrollY>30);
