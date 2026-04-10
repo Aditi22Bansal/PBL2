@@ -40,7 +40,7 @@ services:
         fromService:
           type: web
           name: pbl2-node-backend
-          property: hostport # This auto-links the Node backend URL
+          property: url
       - key: NEXTAUTH_URL
         # We temporarily set this to localhost, Render will overwrite it if we configure custom domains later. 
         # But you should update this in the dashboard to the final frontend URL.
