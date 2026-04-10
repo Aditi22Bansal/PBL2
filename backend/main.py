@@ -10,7 +10,7 @@ import io
 
 from domain.schemas import StudentProfile, RoomAllocation, AllocationRun, User
 from repositories.csv_repo import CSVRepository
-from ml_engine.matcher_greedy import run_greedy_allocation_for_gender, run_ablation_study
+from ml_engine.matcher_greedy import run_greedy_allocation_for_gender, run_ablation_study, run_relaxed_allocation
 
 app = FastAPI(title="SIT Pune Hostel Allocator")
 
@@ -400,4 +400,53 @@ def engine_allocate(profiles_dict: List[Dict]):
             "status": "COMPLETED"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/allocate-relaxed")
+def engine_allocate_relaxed(profiles_dict: List[Dict]):
+    """
+    Relaxed allocation for force-assigning remaining students.
+    - Only groups by gender (no branch/year bucketing)  
+    - No branch/year penalties in similarity matrix
+    - Minimum score threshold = 0.30 instead of 0.70
+    """
+    try:
+        profiles = [StudentProfile(**p) for p in profiles_dict]
+        run_id = f"force_{uuid.uuid4().hex[:8]}"
+        
+        from collections import defaultdict
+        import numpy as np
+        
+        # Only bucket by gender — everything else is relaxed
+        buckets = defaultdict(list)
+        for p in profiles:
+            gender_key = p.gender.lower()
+            if gender_key in ('f', 'female'):
+                buckets['Female'].append(p)
+            else:
+                buckets['Male'].append(p)
+            
+        all_allocs = []
+        all_unassigned = []
+        
+        for gender_label, bucket_profiles in buckets.items():
+            if len(bucket_profiles) == 0:
+                continue
+                
+            allocs, unassigned = run_relaxed_allocation(bucket_profiles, run_id)
+            
+            for a in allocs:
+                a["gender_group"] = f"{gender_label}_Mixed_Force"
+                
+            all_allocs.extend(allocs)
+            all_unassigned.extend(unassigned)
+            
+        return {
+            "allocations": all_allocs,
+            "unassigned_ids": all_unassigned,
+            "run_id": run_id,
+            "status": "COMPLETED"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

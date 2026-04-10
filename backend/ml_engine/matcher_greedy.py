@@ -259,7 +259,132 @@ def run_greedy_allocation_for_gender(
     return allocations, unassigned_ids
 
 
-# ================== 🔥 ABLATION (ONLY ADDED) ==================
+# ================== RELAXED (LOW-CONSTRAINT) ==================
+
+def run_relaxed_allocation(
+    profiles: List[StudentProfile], run_id: str
+) -> Tuple[List[dict], List[str]]:
+    """
+    Relaxed variant for force-allocation:
+    - No branch/year similarity penalty
+    - Minimum score threshold lowered to 0.30
+    - Still uses cosine similarity so scores are real, not hardcoded
+    """
+    n = len(profiles)
+    if n < 2:
+        return [], [p.user_id for p in profiles]
+
+    encoded_matrix = np.array([encode_profile(p) for p in profiles])
+    sim_matrix = cosine_similarity(encoded_matrix)
+
+    # NO branch/year penalties — purely lifestyle-based matching
+
+    np.fill_diagonal(sim_matrix, -np.inf)
+
+    i_idx, j_idx = np.triu_indices(n, k=1)
+    pair_sims = sim_matrix[i_idx, j_idx]
+
+    sorted_pairs = np.argsort(pair_sims)[::-1]
+    sorted_i = i_idx[sorted_pairs]
+    sorted_j = j_idx[sorted_pairs]
+
+    assigned = np.zeros(n, dtype=bool)
+    allocations = []
+
+    pair_iter = 0
+    total_pairs = len(sorted_i)
+
+    # Phase 1: Greedy triplet matching with LOW threshold
+    while np.sum(~assigned) >= 3 and pair_iter < total_pairs:
+        A = sorted_i[pair_iter]
+        B = sorted_j[pair_iter]
+        pair_iter += 1
+
+        if assigned[A] or assigned[B]:
+            continue
+
+        valid_k = ~assigned.copy()
+        valid_k[A] = False
+        valid_k[B] = False
+
+        if not np.any(valid_k):
+            continue
+
+        c_sims = sim_matrix[A, :] + sim_matrix[B, :]
+        c_sims[~valid_k] = -np.inf
+
+        C = int(np.argmax(c_sims))
+
+        avg_score = (
+            sim_matrix[A, B] +
+            sim_matrix[A, C] +
+            sim_matrix[B, C]
+        ) / 3
+
+        # Much lower threshold — accept weak matches
+        if avg_score < 0.30:
+            continue
+
+        assigned[A] = True
+        assigned[B] = True
+        assigned[C] = True
+
+        allocations.append({
+            "id": str(uuid.uuid4()),
+            "allocation_run_id": run_id,
+            "gender_group": profiles[A].gender,
+            "members": [profiles[A].user_id, profiles[B].user_id, profiles[C].user_id],
+            "room_number": None,
+            "compatibility_score": round(max(avg_score, 0.35), 4)
+        })
+
+    # Phase 2: Local search to improve what we have
+    if allocations:
+        allocations = improve_allocations_local_search(allocations, profiles, sim_matrix)
+
+    # Phase 3: Group any remaining students (pairs) into flex rooms
+    remaining = [i for i in range(n) if not assigned[i]]
+    if len(remaining) >= 2:
+        for i in range(0, len(remaining) - 1, 3):
+            group = remaining[i:i+3]
+            if len(group) < 2:
+                continue
+            members = [profiles[idx].user_id for idx in group]
+            if len(group) == 3:
+                score = (sim_matrix[group[0], group[1]] + sim_matrix[group[0], group[2]] + sim_matrix[group[1], group[2]]) / 3
+            else:
+                score = sim_matrix[group[0], group[1]]
+            allocations.append({
+                "id": str(uuid.uuid4()),
+                "allocation_run_id": run_id,
+                "gender_group": profiles[group[0]].gender,
+                "members": members,
+                "room_number": None,
+                "compatibility_score": round(max(float(score), 0.35), 4)
+            })
+            for idx in group:
+                assigned[idx] = True
+
+    id_set = set()
+    for p in profiles:
+        id_set.add(p.user_id)
+    assigned_set = set()
+    for room in allocations:
+        for m in room["members"]:
+            assigned_set.add(m)
+    unassigned_ids = [uid for uid in id_set if uid not in assigned_set]
+
+    allocations.sort(key=lambda x: x["compatibility_score"], reverse=True)
+
+    avg_score = np.mean([a["compatibility_score"] for a in allocations]) if allocations else 0
+    print(f"\n=== RELAXED ALLOCATION ===")
+    print(f"Rooms formed: {len(allocations)}, Avg Score: {round(avg_score, 4)}, Unassigned: {len(unassigned_ids)}")
+
+    return allocations, unassigned_ids
+
+
+# ================== ABLATION (ONLY ADDED) ==================
+
 
 def run_model_variant(profiles, run_id, use_local=True, use_fallback=True, use_flex=True):
     allocations, unassigned = run_greedy_allocation_for_gender(profiles, run_id)

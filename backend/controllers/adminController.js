@@ -3,7 +3,7 @@ const csv = require('csv-parser');
 const Profile = require('../models/Profile');
 const RoomAllocation = require('../models/RoomAllocation');
 const ChangeRequest = require('../models/ChangeRequest');
-const { runPythonAllocation } = require('../services/allocationService');
+const { runPythonAllocation, runRelaxedPythonAllocation } = require('../services/allocationService');
 
 exports.syncCsv = async (req, res) => {
     try {
@@ -385,10 +385,50 @@ exports.forceAllocateRemaining = async (req, res) => {
             return res.json({ message: 'No unassigned students remaining!', total_new_rooms: 0 });
         }
 
-        // 3. Group unassigned students into rooms of 3 (last room may have 2)
+        // 3. Build profile JSON for the Python ML engine
+        const profilesJson = unassignedProfiles.map(p => ({
+            user_id: p.user_id,
+            name: p.name || 'Unknown',
+            age: p.age || 18,
+            gender: p.gender || 'F',
+            year_of_study: p.year_of_study || '1st Year',
+            branch: p.branch || 'CSE',
+            sleep_time: p.sleep_time || '10 pm to 12 am',
+            wake_time: p.wake_time || '6-8 am',
+            cleanliness: p.cleanliness || 'Moderately Clean',
+            study_env: p.study_env || 'Light Background Noise',
+            guest_frequency: p.guest_frequency || 'Occasionally',
+            smoking_habit: p.smoking_habit || 'No',
+            drinking_habit: p.drinking_habit || 'No',
+            loud_alarms: p.loud_alarms || 'No',
+            first_time_hostel: p.first_time_hostel || 'No',
+            temp_preference: p.temp_preference || 'Doesn\'t matter',
+            study_hours: p.study_hours || '2-4',
+            active_late: p.active_late || 'No',
+            conflict_style: p.conflict_style || 'Talk directly and resolve',
+            room_org: p.room_org || 'Flexible',
+            noise_tolerance: p.noise_tolerance || 3,
+            introversion: p.introversion || 3,
+            irritation: p.irritation || 3,
+            personal_space: p.personal_space || 3,
+            fixed_routines: p.fixed_routines || 3,
+            sharing_comfort: p.sharing_comfort || 3,
+            pref_roommate_sleep: p.pref_roommate_sleep || 'Does not matter',
+            pref_roommate_social: p.pref_roommate_social || 'Does not matter',
+            cleanliness_expectation: p.cleanliness_expectation || 'Moderately Clean',
+            light_preference: p.light_preference || 'Dim light is fine',
+            most_important_factor: p.most_important_factor || 'Cleanliness and Organization'
+        }));
+
+        // 4. Call relaxed Python ML engine (low constraints, no branch/year penalty)
+        const result = await runRelaxedPythonAllocation(profilesJson);
+
+        if (!result || !result.allocations || result.allocations.length === 0) {
+            return res.status(400).json({ error: 'Relaxed engine returned no allocations. Students may be too few.' });
+        }
+
+        // 5. Assign room numbers (Block Z for force-allocated)
         const ROOMS_PER_FLOOR = 8;
-        
-        // Find the highest existing room number to continue from there
         let maxRoomNum = 0;
         allAllocations.forEach(a => {
             if (a.room_number) {
@@ -400,65 +440,37 @@ exports.forceAllocateRemaining = async (req, res) => {
             }
         });
 
-        const profileMap = {};
-        allProfiles.forEach(p => profileMap[p.user_id] = p);
-
-        // Sort unassigned by gender, branch, year for best grouping
-        unassignedProfiles.sort((a, b) => {
-            if (a.gender !== b.gender) return (a.gender || '').localeCompare(b.gender || '');
-            if (a.branch !== b.branch) return (a.branch || '').localeCompare(b.branch || '');
-            return (a.year_of_study || '').localeCompare(b.year_of_study || '');
-        });
-
-        const newRooms = [];
+        const blockChar = 'Z';
         let roomCounter = maxRoomNum + 1;
-        const blockChar = 'Z'; // Use block Z for force-allocated rooms
+        const newAllocations = [];
 
-        for (let i = 0; i < unassignedProfiles.length; i += 3) {
-            const group = unassignedProfiles.slice(i, i + 3);
-            if (group.length < 2) {
-                // Single student left - skip (truly can't form a room alone)
-                continue;
-            }
-
+        for (const alloc of result.allocations) {
             const floor = Math.floor((roomCounter - 1) / ROOMS_PER_FLOOR) + 1;
             const roomOnFloor = ((roomCounter - 1) % ROOMS_PER_FLOOR) + 1;
             const roomNumber = `${blockChar}-${floor}0${roomOnFloor}`;
 
-            const members = group.map(p => p.user_id);
-            const memberDetails = members.map(email => {
-                const p = profileMap[email];
-                return p ? `${p.name} (${p.branch})` : email;
-            });
-
-            // Determine gender group label
-            const genders = group.map(p => (p.gender || 'Unknown').toLowerCase());
-            const isFemale = genders.every(g => g === 'f' || g === 'female');
-            const genderLabel = isFemale ? 'Female' : 'Male';
-            const branches = [...new Set(group.map(p => p.branch || 'Mixed'))];
-
-            newRooms.push({
-                allocation_run_id: 'force_allocated',
-                gender_group: `${genderLabel}_${branches.join('/')}_Force`,
-                compatibility_score: 0.50, // Mark as low-compatibility forced room
-                members: members,
+            newAllocations.push({
+                allocation_run_id: result.run_id || 'force_allocated',
+                gender_group: alloc.gender_group || 'Force',
+                compatibility_score: alloc.compatibility_score,
+                members: alloc.members,
                 block: blockChar,
                 floor: floor,
                 room_number: roomNumber,
                 isLocked: false
             });
-
             roomCounter++;
         }
 
-        if (newRooms.length > 0) {
-            await RoomAllocation.insertMany(newRooms);
+        if (newAllocations.length > 0) {
+            await RoomAllocation.insertMany(newAllocations);
         }
 
         res.json({
-            message: `Force-allocated ${newRooms.length} new rooms for remaining students.`,
-            total_new_rooms: newRooms.length,
-            total_students_placed: newRooms.reduce((sum, r) => sum + r.members.length, 0)
+            message: `Force-allocated ${newAllocations.length} rooms using relaxed ML engine.`,
+            total_new_rooms: newAllocations.length,
+            total_students_placed: newAllocations.reduce((sum, r) => sum + r.members.length, 0),
+            still_unassigned: result.unassigned_ids ? result.unassigned_ids.length : 0
         });
     } catch (error) {
         console.error(error);
