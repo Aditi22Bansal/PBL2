@@ -12,7 +12,8 @@ router.post('/sync-user', async (req, res) => {
         }
         
         // Ensure email ends with @sitpune.edu.in
-        if (!email.endsWith('@sitpune.edu.in') && !email.endsWith('sitpune.edu.in')) {
+        const isDevAuth = process.env.DEV_AUTH === 'true';
+        if (!isDevAuth && !email.endsWith('@sitpune.edu.in') && !email.endsWith('sitpune.edu.in')) {
             return res.status(403).json({ error: 'Unauthorized domain.' });
         }
 
