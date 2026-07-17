@@ -59,7 +59,7 @@ export default function RegisterPage() {
           {/* Brand */}
           <div className="text-center mb-6">
             <span className="font-serif text-2xl font-semibold text-slate-700 tracking-tight">
-              Room<span className="text-orange-500">IQ</span>
+              Room<span className="text-orange-500">Sync</span>
             </span>
             <p className="text-xs text-slate-400 mt-1">Hostel Management Platform</p>
           </div>

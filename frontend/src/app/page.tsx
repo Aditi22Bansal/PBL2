@@ -294,12 +294,11 @@ const STUDENT_FEATS = [
 ];
 
 const ROADMAP_ITEMS = [
-  {s:"done",icon:"✓",lbl:"Shipped",title:"Core allocation algorithm",desc:"Cosine similarity + greedy matching + local search + fallback. Validated across 48 runs with real SIT Pune student data."},
-  {s:"done",icon:"✓",lbl:"Shipped",title:"Admin portal & hostel configurator",desc:"Room setup, occupancy types, amenity tagging, allocation report dashboard, and manual override system."},
-  {s:"active",icon:"◉",lbl:"In progress",title:"Student portal + roommate chat",desc:"Auth-gated student dashboard, lifestyle survey, real-time private messaging with roommates, allocation notifications."},
-  {s:"active",icon:"◉",lbl:"In progress",title:"Accessibility & special conditions",desc:"First-come preference system for floor, noise, and accessibility needs with graceful capacity limits and fair queue."},
-  {s:"soon",icon:"○",lbl:"Coming soon",title:"Analytics & conflict prediction",desc:"Post-allocation dashboard tracking satisfaction scores, early-conflict indicators, and semester-over-semester improvement trends."},
-  {s:"soon",icon:"○",lbl:"Coming soon",title:"Multi-hostel & university-wide deployment",desc:"Federated allocation across multiple hostels and campuses. Central admin with per-hostel warden access controls."},
+  {s:"done",icon:"✓",lbl:"Shipped",title:"Core Allocation Algorithm",desc:"Cosine similarity, weighted compatibility scoring, greedy matching, local search optimization, fallback allocation, validated using real hostel preference datasets."},
+  {s:"done",icon:"✓",lbl:"Shipped",title:"Admin Portal & Hostel Configuration",desc:"Admin dashboard, hostel setup, configurable room capacities, occupancy rules, allocation management, Google Form synchronization, reporting dashboard."},
+  {s:"active",icon:"◉",lbl:"In progress",title:"Student Portal & Roommate Chat",desc:"Student dashboard, simplified development authentication, roommate profiles, private room chat, allocation notifications, profile management."},
+  {s:"active",icon:"◉",lbl:"In progress",title:"Accessibility & Special Conditions",desc:"Accessibility preferences, medical/special requirements, configurable allocation constraints, graceful capacity handling, fairness rules."},
+  {s:"soon",icon:"○",lbl:"Coming soon",title:"Analytics & Conflict Prediction",desc:"Post-allocation analytics, compatibility insights, conflict prediction, satisfaction tracking, allocation quality metrics, semester-over-semester reports."}
 ];
 
 export default function Landing() {
@@ -329,7 +328,7 @@ export default function Landing() {
 
       {/* NAV */}
       <nav className={`nav${nav?" solid":""}`}>
-        <div className="logo">RoomIQ<div className="logo-dot"/></div>
+        <div className="logo">RoomSync<div className="logo-dot"/></div>
         <div className="nav-center">
           <a href="#how-it-works">How it works</a>
           <a href="#for-admins">Admins</a>
@@ -353,7 +352,7 @@ export default function Landing() {
               Rooms that feel like<br/><em>home</em> from day one.
               <span className="sub-line">Powered by research.</span>
             </h1>
-            <p className="hero-p">RoomIQ is a peer-reviewed AI system that matches hostel students by deep lifestyle compatibility — not luck. Built at Symbiosis Institute of Technology. Free for institutions during early access.</p>
+            <p className="hero-p">RoomSync is a peer-reviewed AI system that matches hostel students by deep lifestyle compatibility — not luck. Built at Symbiosis Institute of Technology. Free for institutions during early access.</p>
             <div className="hero-actions">
               <button className="btn-main" onClick={() => router.push("/register")}>Get free access →</button>
               <button className="btn-ghost"><span className="play-ic">▶</span>See it in action</button>
@@ -401,7 +400,7 @@ export default function Landing() {
         <div>
           <div className="free-tag"><div className="free-dot"/>Early Access Program</div>
           <h2 className="free-h2">Completely free.<br/><em>No strings attached.</em></h2>
-          <p className="free-sub">We're in early research phase. We want institutions to run RoomIQ on their real datasets — every new dataset makes the model smarter, more generalizable, and more proven. You get a world-class allocation system. We get richer validation.</p>
+          <p className="free-sub">We're in early research phase. We want institutions to run RoomSync on their real datasets — every new dataset makes the model smarter, more generalizable, and more proven. You get a world-class allocation system. We get richer validation.</p>
           <button className="btn-free" onClick={() => router.push("/register")}>Apply for early access →</button>
         </div>
         <div className="free-reasons">
@@ -512,7 +511,7 @@ export default function Landing() {
             {m:"Random Allocation",ms:"Baseline — no matching",s:"0.40–0.60",d:"±0.052",c:"~77.5%",u:"10–30",hi:false},
             {m:"K-Means Clustering",ms:"Baseline — group-only",s:"0.92–0.96",d:"±0.015",c:"~85%",u:"5–15",hi:false},
             {m:"Greedy-Only Matching",ms:"Baseline — no local search",s:"0.88–0.93",d:"±0.014",c:"~93.5%",u:"1–5",hi:false},
-            {m:"RoomIQ Hybrid Model",ms:"Proposed — this system",s:"0.95–0.98",d:"±0.015",c:"97–100%",u:"0–2",hi:true},
+            {m:"RoomSync Hybrid Model",ms:"Proposed — this system",s:"0.95–0.98",d:"±0.015",c:"97–100%",u:"0–2",hi:true},
           ].map(r=>(
             <div className={`bt-rw${r.hi?" hl":""}`} key={r.m}>
               <div><div className="bt-m">{r.m}</div><div className="bt-ms">{r.ms}</div></div>
@@ -570,7 +569,7 @@ export default function Landing() {
         <div className="cta-in">
           <div className="cta-chip">🎓 Free for educational institutions · No credit card</div>
           <h2 className="cta-h2">Stop guessing.<br/>Start <em>matching.</em></h2>
-          <p className="cta-sub">RoomIQ is completely free for institutions during early access. Help us validate the model on your data — and give your students the compatible living situation they deserve.</p>
+          <p className="cta-sub">RoomSync is completely free for institutions during early access. Help us validate the model on your data — and give your students the compatible living situation they deserve.</p>
           <div className="cta-acts">
             <button className="btn-main" onClick={() => router.push("/register")}>Apply for free access →</button>
             <button className="btn-ghost" onClick={() => window.open("YOUR_PAPER_URL_HERE", "_blank")}>Read the research paper</button>
@@ -582,7 +581,7 @@ export default function Landing() {
       <footer>
         <div className="footer-grid">
           <div>
-            <div className="footer-brand">RoomIQ<div className="footer-brand-dot"/></div>
+            <div className="footer-brand">RoomSync<div className="footer-brand-dot"/></div>
             <p className="footer-about">Compatibility-aware hostel allocation. Built on peer-reviewed research at Symbiosis Institute of Technology, Pune.</p>
           </div>
           <div className="fcol">
@@ -599,7 +598,7 @@ export default function Landing() {
           </div>
         </div>
         <div className="footer-btm">
-          <span>© 2025 RoomIQ · Symbiosis Institute of Technology, Pune</span>
+          <span>© 2025 RoomSync · Symbiosis Institute of Technology, Pune</span>
           <div className="res-badge">📄 Peer-reviewed research</div>
         </div>
       </footer>
