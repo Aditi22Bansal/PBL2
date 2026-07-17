@@ -4,7 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { LogOut, Home, Play, Upload, CheckCircle2, RotateCw, Database, Microchip } from "lucide-react";
+import { LogOut, Home, Play, Upload, CheckCircle2, RotateCw, Database, Microchip, Trash2, Plus } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function AdminDashboard() {
@@ -16,6 +16,41 @@ export default function AdminDashboard() {
   const [allocations, setAllocations] = useState([]);
   const [metrics, setMetrics] = useState<any>(null);
   const [message, setMessage] = useState("");
+
+  // Hostel Configuration state
+  const [roomTemplates, setRoomTemplates] = useState<Array<{ capacity: number | ""; count: number | "" }>>([
+    { capacity: 2, count: 20 },
+    { capacity: 3, count: 40 },
+    { capacity: 4, count: 10 }
+  ]);
+  const [validationError, setValidationError] = useState("");
+
+  const totalRooms = roomTemplates.reduce((sum, t) => sum + (typeof t.count === 'number' ? t.count : 0), 0);
+  const totalBeds = roomTemplates.reduce((sum, t) => sum + (typeof t.capacity === 'number' && typeof t.count === 'number' ? t.capacity * t.count : 0), 0);
+
+  useEffect(() => {
+    let err = "";
+    for (let i = 0; i < roomTemplates.length; i++) {
+      const { capacity, count } = roomTemplates[i];
+      if (capacity === "" && count === "") {
+        err = "Empty rows are not allowed. Please fill in or remove the empty row.";
+        break;
+      }
+      if (capacity !== "" && (typeof capacity !== 'number' || capacity <= 0)) {
+        err = "Room capacity must be greater than 0.";
+        break;
+      }
+      if (count !== "" && (typeof count !== 'number' || count < 0)) {
+        err = "Room count cannot be negative.";
+        break;
+      }
+      if (capacity === "" || count === "") {
+        err = "Both Capacity and Count must be filled for each row.";
+        break;
+      }
+    }
+    setValidationError(err);
+  }, [roomTemplates]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -51,15 +86,28 @@ export default function AdminDashboard() {
   };
 
   const handleAllocate = async () => {
+    if (validationError) return;
     setAllocating(true);
     setMessage("Running AI ML Engine... Please wait.");
+    
+    // Prepare payload config
+    const payload: any = {};
+    if (roomTemplates.length > 0) {
+      payload.config = {
+        roomTemplates: roomTemplates.map(t => ({
+          capacity: Number(t.capacity),
+          count: Number(t.count)
+        }))
+      };
+    }
+
     try {
-      const res = await axios.post("http://localhost:5000/api/admin/trigger-allocation");
+      const res = await axios.post("http://localhost:5000/api/admin/trigger-allocation", payload);
       setMessage(res.data.message + ` | Rooms Formed: ${res.data.total_rooms}`);
       if(res.data.metrics) setMetrics(res.data.metrics);
       fetchAllocations();
     } catch (err: any) {
-      setMessage("Error: " + err.response?.data?.message || err.message);
+      setMessage("Error: " + (err.response?.data?.message || err.message));
     } finally {
       setAllocating(false);
     }
@@ -183,10 +231,110 @@ export default function AdminDashboard() {
               Process the current database to automatically form optimal roommate clusters based on compatibility factors.
             </p>
             
+            {/* Hostel Configuration */}
+            <div className="relative z-10 mt-6 border-t border-slate-100 pt-6">
+              <h3 className="text-lg font-bold mb-3 text-slate-800 flex items-center gap-2">
+                Hostel Configuration
+              </h3>
+              <p className="text-slate-500 text-xs mb-4 leading-relaxed">
+                Define the available room inventory. If this configuration is empty, default room allocations (legacy capacity = 3) will be generated.
+              </p>
+              
+              {/* Dynamic Table */}
+              <div className="overflow-x-auto mb-4 border border-slate-100 rounded-2xl">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-400 border-b border-slate-100">
+                      <th className="px-4 py-3 font-semibold">Room Capacity</th>
+                      <th className="px-4 py-3 font-semibold">Number of Rooms</th>
+                      <th className="px-4 py-3 font-semibold text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {roomTemplates.map((t, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-4 py-2">
+                          <input 
+                            type="number"
+                            placeholder="Capacity"
+                            value={t.capacity}
+                            onChange={(e) => {
+                              const val = e.target.value === "" ? "" : parseInt(e.target.value);
+                              const updated = [...roomTemplates];
+                              updated[idx].capacity = val;
+                              setRoomTemplates(updated);
+                            }}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all placeholder:text-slate-400"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input 
+                            type="number"
+                            placeholder="Count"
+                            value={t.count}
+                            onChange={(e) => {
+                              const val = e.target.value === "" ? "" : parseInt(e.target.value);
+                              const updated = [...roomTemplates];
+                              updated[idx].count = val;
+                              setRoomTemplates(updated);
+                            }}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all placeholder:text-slate-400"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <button 
+                            onClick={() => {
+                              const updated = roomTemplates.filter((_, i) => i !== idx);
+                              setRoomTemplates(updated);
+                            }}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-xl transition-all inline-flex items-center gap-1 border border-transparent font-medium"
+                            title="Remove Room Type"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {roomTemplates.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="px-4 py-6 text-center text-slate-400 font-medium">
+                          No room types configured. Legacy capacity (3) will be used.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Action and Summary */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-5">
+                <button 
+                  onClick={() => setRoomTemplates([...roomTemplates, { capacity: "", count: "" }])}
+                  className="px-4 py-2.5 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4 text-slate-500" />
+                  <span>Add Room Type</span>
+                </button>
+                
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 flex gap-4 text-xs font-bold text-slate-500 shadow-inner">
+                  <div>Total Rooms: <span className="text-violet-600 font-black">{totalRooms}</span></div>
+                  <div className="border-l border-slate-200 pl-4">Total Beds: <span className="text-violet-600 font-black">{totalBeds}</span></div>
+                </div>
+              </div>
+
+              {/* Friendly Validation Error */}
+              {validationError && (
+                <div className="text-red-600 text-xs font-semibold bg-red-50 border border-red-200 p-3 rounded-2xl mb-5 leading-relaxed">
+                  ⚠️ {validationError}
+                </div>
+              )}
+            </div>
+            
             <button 
               onClick={handleAllocate}
-              disabled={allocating}
-              className="w-full mt-10 bg-violet-600 hover:bg-violet-700 text-white py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-3 shadow-md disabled:opacity-50"
+              disabled={allocating || !!validationError}
+              className="w-full mt-4 bg-violet-600 hover:bg-violet-700 text-white py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-3 shadow-md disabled:opacity-50"
             >
               {allocating ? <RotateCw className="w-6 h-6 animate-spin" /> : "Generate Room Allotments"}
             </button>

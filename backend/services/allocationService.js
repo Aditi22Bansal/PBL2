@@ -1,7 +1,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-const runPythonAllocation = async (profiles) => {
+const runPythonAllocation = async (profiles, config = null) => {
     return new Promise((resolve, reject) => {
         const scriptPath = path.join(__dirname, '..', 'ml_engine', 'executor.py');
         
@@ -47,7 +47,14 @@ const runPythonAllocation = async (profiles) => {
         });
         
         // Send JSON data to python stdin
-        pythonProcess.stdin.write(JSON.stringify(profiles));
+        let inputPayload = profiles;
+        if (config) {
+            inputPayload = {
+                profiles: profiles,
+                config: config
+            };
+        }
+        pythonProcess.stdin.write(JSON.stringify(inputPayload));
         pythonProcess.stdin.end();
     });
 };

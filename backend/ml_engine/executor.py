@@ -32,6 +32,25 @@ def run():
         
         run_id = f"run_{uuid.uuid4().hex[:8]}"
         
+        # 1. Normalize the config to get room templates
+        from ml_engine.matcher_greedy import normalize_config
+        room_templates = normalize_config(config, len(profiles))
+        
+        # 2. Build the global inventory of rooms
+        global_rooms = []
+        room_id_counter = 1
+        for template in room_templates:
+            cap = template["capacity"]
+            cnt = template["count"]
+            for _ in range(cnt):
+                global_rooms.append({
+                    "id": f"Room_{room_id_counter}",
+                    "capacity": cap,
+                    "assigned_members": []
+                })
+                room_id_counter += 1
+        
+        # 3. Bucket profiles
         buckets = collections.defaultdict(list)
         for p in profiles:
             key = (p.gender, p.branch, p.year_of_study)
@@ -40,17 +59,40 @@ def run():
         all_allocs = []
         all_unassigned = []
         
-        for key, bucket_profiles in buckets.items():
+        # Sort keys to ensure deterministic processing order
+        sorted_bucket_keys = sorted(buckets.keys())
+        
+        for key in sorted_bucket_keys:
+            bucket_profiles = buckets[key]
             if len(bucket_profiles) == 0:
                 continue
                 
-            # 'avoid overfitting accuracy till 95 is okayy'
-            # the greedy nature inherently finds best first
-            allocs, unassigned = run_greedy_allocation_for_gender(bucket_profiles, run_id, config)
+            # Greedily claim rooms from global_rooms for this bucket
+            bucket_student_count = len(bucket_profiles)
+            bucket_rooms = []
+            current_capacity = 0
+            
+            # Sort empty rooms (those without assigned members) descending by capacity
+            empty_rooms = [r for r in global_rooms if len(r["assigned_members"]) == 0]
+            empty_rooms.sort(key=lambda x: x["capacity"], reverse=True)
+            
+            for r in empty_rooms:
+                if current_capacity >= bucket_student_count:
+                    break
+                bucket_rooms.append(r)
+                current_capacity += r["capacity"]
+                
+            # Run allocation for this bucket using the claimed rooms
+            allocs, unassigned = run_greedy_allocation_for_gender(bucket_profiles, run_id, bucket_rooms)
+            
+            # Update the assigned members in our global inventory
+            allocated_rooms_map = {a["id"]: a for a in allocs}
+            for r in global_rooms:
+                if r["id"] in allocated_rooms_map:
+                    r["assigned_members"] = allocated_rooms_map[r["id"]]["members"]
             
             g, b, y = key
             for a in allocs:
-                # If this is a fallback flex-room, explicitly mark it for the UI
                 if a.get("compatibility_score", 1.0) == 0.65:
                     a["gender_group"] = f"{g}_{b}_Yr{y} (FLEX)"
                 else:
@@ -75,11 +117,39 @@ def run():
             "Hybrid (Ours)": round(final_avg, 4) # Base ~95%
         }
         
+        # 4. Generate generalized validation metrics
+        total_students = len(profiles)
+        total_beds = sum(r["capacity"] for r in global_rooms)
+        insufficient_capacity = max(0, total_students - total_beds)
+        
+        assigned_student_ids = set()
+        for room in all_allocs:
+            for m in room["members"]:
+                assigned_student_ids.add(m)
+        total_assigned = len(assigned_student_ids)
+        
+        unassigned_students = len(all_unassigned)
+        remaining_empty_beds = max(0, total_beds - total_assigned)
+        
+        allocated_room_ids = {a["id"] for a in all_allocs}
+        empty_rooms_count = sum(1 for r in global_rooms if r["id"] not in allocated_room_ids)
+        
+        validation_metrics = {
+            "total_students": total_students,
+            "total_beds": total_beds,
+            "insufficient_capacity": insufficient_capacity,
+            "unused_capacity": max(0, total_beds - total_students),
+            "remaining_empty_beds": remaining_empty_beds,
+            "remaining_empty_rooms": empty_rooms_count,
+            "unassigned_students": unassigned_students
+        }
+        
         # Return result as JSON
         output = {
             "allocations": all_allocs,
             "unassigned_ids": all_unassigned,
             "metrics": metrics,
+            "validationMetrics": validation_metrics,
             "run_id": run_id,
             "status": "COMPLETED"
         }

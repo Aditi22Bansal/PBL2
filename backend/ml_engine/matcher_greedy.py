@@ -12,6 +12,27 @@ ALL_RANDOM_SCORES = []
 ALL_COVERAGES = []
 
 
+# ================== CONFIG PARSING ==================
+
+def normalize_config(config, total_students_count):
+    if config is None:
+        config = {}
+        
+    room_templates = []
+    if "roomTemplates" in config:
+        room_templates = config["roomTemplates"]
+    elif "room_capacity" in config:
+        cap = config["room_capacity"]
+        count = (total_students_count + cap - 1) // cap
+        room_templates = [{"capacity": cap, "count": max(1, count)}]
+    else:
+        cap = 3
+        count = (total_students_count + cap - 1) // cap
+        room_templates = [{"capacity": cap, "count": max(1, count)}]
+        
+    return room_templates
+
+
 # ================== LOCAL SEARCH ==================
 
 def improve_allocations_local_search(allocations, profiles, sim_matrix):
@@ -130,14 +151,22 @@ def fallback_assign_unassigned(allocations, unassigned_ids, profiles, sim_matrix
 
 # ================== FLEX ROOMS ==================
 
-def create_flex_rooms(unassigned_ids, profiles, run_id, room_capacity=3):
+def create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms):
     import random
     random.shuffle(unassigned_ids)
 
     flex_allocations = []
+    current_idx = 0
 
-    for i in range(0, len(unassigned_ids) - room_capacity + 1, room_capacity):
-        group_ids = unassigned_ids[i:i+room_capacity]
+    for room_def in unused_rooms:
+        if current_idx >= len(unassigned_ids):
+            break
+
+        cap = room_def["capacity"]
+        group_ids = unassigned_ids[current_idx : current_idx + cap]
+        if not group_ids:
+            break
+        current_idx += len(group_ids)
 
         # Find gender from the first member profile
         gender = "Other"
@@ -146,7 +175,7 @@ def create_flex_rooms(unassigned_ids, profiles, run_id, room_capacity=3):
             gender = first_prof.gender
 
         flex_allocations.append({
-            "id": str(uuid.uuid4()),
+            "id": room_def["id"],
             "allocation_run_id": run_id,
             "gender_group": gender,
             "members": group_ids,
@@ -160,16 +189,34 @@ def create_flex_rooms(unassigned_ids, profiles, run_id, room_capacity=3):
 # ================== MAIN ==================
 
 def run_greedy_allocation_for_gender(
-    profiles: List[StudentProfile], run_id: str, config: dict = None
+    profiles: List[StudentProfile], run_id: str, config_or_rooms: any = None
 ) -> Tuple[List[dict], List[str]]:
 
-    if config is None:
-        config = {"room_capacity": 3}
-
-    room_capacity = config.get("room_capacity", 3)
+    if isinstance(config_or_rooms, list):
+        bucket_rooms = config_or_rooms
+    else:
+        # Default/Legacy config parsing
+        room_templates = normalize_config(config_or_rooms, len(profiles))
+        bucket_rooms = []
+        room_id_counter = 1
+        for template in room_templates:
+            cap = template["capacity"]
+            cnt = template["count"]
+            for _ in range(cnt):
+                bucket_rooms.append({
+                    "id": f"Room_{room_id_counter}",
+                    "capacity": cap
+                })
+                room_id_counter += 1
 
     n = len(profiles)
-    if n < room_capacity:
+    
+    # Sort bucket_rooms by capacity descending to fill larger rooms first
+    bucket_rooms = [r.copy() for r in bucket_rooms]
+    bucket_rooms.sort(key=lambda x: x["capacity"], reverse=True)
+    
+    # If no rooms available
+    if not bucket_rooms:
         return [], [p.user_id for p in profiles]
 
     encoded_matrix = np.array([encode_profile(p) for p in profiles])
@@ -192,67 +239,94 @@ def run_greedy_allocation_for_gender(
 
     assigned = np.zeros(n, dtype=bool)
     allocations = []
+    
+    # Track which rooms have been allocated
+    allocated_room_ids = set()
 
-    pair_iter = 0
-    total_pairs = len(sorted_i)
-
-    while np.sum(~assigned) >= room_capacity and pair_iter < total_pairs:
-
-        A = sorted_i[pair_iter]
-        B = sorted_j[pair_iter]
-        pair_iter += 1
-
-        if assigned[A] or assigned[B]:
+    for room_def in bucket_rooms:
+        cap = room_def["capacity"]
+        
+        # Check if we have enough unassigned students left to fill this room's capacity
+        if np.sum(~assigned) < cap:
             continue
 
-        # Start a candidate group of size `room_capacity` around pair A and B
-        members = [A, B]
-        unassigned_mask = ~assigned.copy()
-        unassigned_mask[A] = False
-        unassigned_mask[B] = False
-
-        # Find remaining members greedily
-        valid_group = True
-        while len(members) < room_capacity:
-            c_sims = np.sum(sim_matrix[members, :], axis=0)
-            c_sims[~unassigned_mask] = -np.inf
-            c_sims[members] = -np.inf
-
-            best_X = int(np.argmax(c_sims))
-            if c_sims[best_X] == -np.inf:
-                valid_group = False
-                break
-
-            members.append(best_X)
-            unassigned_mask[best_X] = False
-
-        if not valid_group:
+        # Single room allocation
+        if cap <= 1:
+            first_unassigned = next((i for i in range(n) if not assigned[i]), None)
+            if first_unassigned is not None:
+                assigned[first_unassigned] = True
+                allocations.append({
+                    "id": room_def["id"],
+                    "allocation_run_id": run_id,
+                    "gender_group": profiles[first_unassigned].gender,
+                    "members": [profiles[first_unassigned].user_id],
+                    "room_number": None,
+                    "compatibility_score": 1.0
+                })
+                allocated_room_ids.add(room_def["id"])
             continue
 
-        # Calculate average compatibility score
-        num_members = len(members)
-        sum_val = 0.0
-        count = 0
-        for idx_i in range(num_members):
-            for idx_j in range(idx_i + 1, num_members):
-                sum_val += sim_matrix[members[idx_i], members[idx_j]]
-                count += 1
-        avg_score = sum_val / count if count > 0 else 1.0
+        # For capacity >= 2:
+        # Search for the best unassigned pair that meets the threshold
+        group_found = False
+        for pair_iter in range(len(sorted_i)):
+            A = sorted_i[pair_iter]
+            B = sorted_j[pair_iter]
+            
+            if assigned[A] or assigned[B]:
+                continue
 
-        if avg_score < 0.70:
-            continue
+            # Start a candidate group of size `cap` around pair A and B
+            members = [A, B]
+            unassigned_mask = ~assigned.copy()
+            unassigned_mask[A] = False
+            unassigned_mask[B] = False
 
-        for m in members:
-            assigned[m] = True
+            # Find remaining members greedily
+            valid_group = True
+            while len(members) < cap:
+                c_sims = np.sum(sim_matrix[members, :], axis=0)
+                c_sims[~unassigned_mask] = -np.inf
+                c_sims[members] = -np.inf
 
-        allocations.append({
-            "id": str(uuid.uuid4()),
-            "allocation_run_id": run_id,
-            "gender_group": profiles[A].gender,
-            "members": [profiles[m].user_id for m in members],
-            "room_number": None,
-            "compatibility_score": round(avg_score, 4)
-        })
+                best_X = int(np.argmax(c_sims))
+                if c_sims[best_X] == -np.inf:
+                    valid_group = False
+                    break
+
+                members.append(best_X)
+                unassigned_mask[best_X] = False
+
+            if not valid_group:
+                continue
+
+            # Calculate average compatibility score
+            num_members = len(members)
+            sum_val = 0.0
+            count = 0
+            for idx_i in range(num_members):
+                for idx_j in range(idx_i + 1, num_members):
+                    sum_val += sim_matrix[members[idx_i], members[idx_j]]
+                    count += 1
+            avg_score = sum_val / count if count > 0 else 1.0
+
+            if avg_score < 0.70:
+                continue
+
+            for m in members:
+                assigned[m] = True
+
+            allocations.append({
+                "id": room_def["id"],
+                "allocation_run_id": run_id,
+                "gender_group": profiles[A].gender,
+                "members": [profiles[m].user_id for m in members],
+                "room_number": None,
+                "compatibility_score": round(avg_score, 4)
+            })
+            allocated_room_ids.add(room_def["id"])
+            group_found = True
+            break
 
     allocations = improve_allocations_local_search(allocations, profiles, sim_matrix)
 
@@ -267,7 +341,11 @@ def run_greedy_allocation_for_gender(
 
     unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
 
-    flex_rooms = create_flex_rooms(unassigned_ids, profiles, run_id, room_capacity)
+    # Find unused rooms in the claimed inventory for flex rooms
+    unused_rooms = [r for r in bucket_rooms if r["id"] not in allocated_room_ids]
+    unused_rooms.sort(key=lambda x: x["capacity"], reverse=True)
+
+    flex_rooms = create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms)
     allocations.extend(flex_rooms)
 
     assigned_ids = set()

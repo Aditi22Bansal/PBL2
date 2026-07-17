@@ -90,6 +90,7 @@ exports.syncCsv = async (req, res) => {
 
 exports.triggerAllocation = async (req, res) => {
     try {
+        const { config } = req.body;
         const profiles = await Profile.find({});
         if (profiles.length < 3) {
             return res.status(400).json({ error: 'Not enough profiles to run allocation (minimum 3 required)' });
@@ -129,7 +130,7 @@ exports.triggerAllocation = async (req, res) => {
             most_important_factor: p.most_important_factor || 'Cleanliness and Organization'
         }));
         
-        const result = await runPythonAllocation(profilesJson);
+        const result = await runPythonAllocation(profilesJson, config);
         
         let roomCounter = 1;
         const newAllocations = result.allocations.map(a => {
@@ -151,7 +152,8 @@ exports.triggerAllocation = async (req, res) => {
             run_id: result.run_id,
             total_rooms: newAllocations.length,
             unassigned: result.unassigned_ids.length,
-            metrics: result.metrics || null
+            metrics: result.metrics || null,
+            validationMetrics: result.validationMetrics || null
         });
         
     } catch (error) {
