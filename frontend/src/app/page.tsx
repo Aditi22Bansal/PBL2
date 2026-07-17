@@ -296,9 +296,9 @@ const STUDENT_FEATS = [
 const ROADMAP_ITEMS = [
   {s:"done",icon:"✓",lbl:"Shipped",title:"Core Allocation Algorithm",desc:"Cosine similarity, weighted compatibility scoring, greedy matching, local search optimization, fallback allocation, validated using real hostel preference datasets."},
   {s:"done",icon:"✓",lbl:"Shipped",title:"Admin Portal & Hostel Configuration",desc:"Admin dashboard, hostel setup, configurable room capacities, occupancy rules, allocation management, Google Form synchronization, reporting dashboard."},
-  {s:"active",icon:"◉",lbl:"In progress",title:"Student Portal & Roommate Chat",desc:"Student dashboard, simplified development authentication, roommate profiles, private room chat, allocation notifications, profile management."},
-  {s:"active",icon:"◉",lbl:"In progress",title:"Accessibility & Special Conditions",desc:"Accessibility preferences, medical/special requirements, configurable allocation constraints, graceful capacity handling, fairness rules."},
-  {s:"soon",icon:"○",lbl:"Coming soon",title:"Analytics & Conflict Prediction",desc:"Post-allocation analytics, compatibility insights, conflict prediction, satisfaction tracking, allocation quality metrics, semester-over-semester reports."}
+  {s:"done",icon:"✓",lbl:"Shipped",title:"Student Portal & Roommate Chat",desc:"Student dashboard, simplified development authentication, roommate profiles, private room chat, allocation notifications, profile management."},
+  {s:"done",icon:"✓",lbl:"Shipped",title:"Accessibility & Special Conditions",desc:"Accessibility preferences, medical/special requirements, configurable allocation constraints, graceful capacity handling, fairness rules."},
+  {s:"active",icon:"◉",lbl:"In progress",title:"Analytics & Conflict Prediction",desc:"Post-allocation analytics, compatibility insights, conflict prediction, satisfaction tracking, allocation quality metrics, semester-over-semester reports."}
 ];
 
 export default function Landing() {
