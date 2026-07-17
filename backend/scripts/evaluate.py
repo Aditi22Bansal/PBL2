@@ -1,7 +1,7 @@
 import numpy as np
 
 def evaluate_allocations(allocations, profiles, unassigned_ids):
-    print("\n📊 EVALUATION METRICS\n")
+    print("\n[Evaluation Metrics]\n")
 
     # 1. Average Compatibility Score
     if len(allocations) > 0:
@@ -23,8 +23,8 @@ def evaluate_allocations(allocations, profiles, unassigned_ids):
 
     # 4. Basic Insight
     if coverage > 0.9:
-        print("✅ Excellent allocation coverage")
+        print("[OK] Excellent allocation coverage")
     elif coverage > 0.7:
-        print("⚠️ Moderate coverage")
+        print("[Warning] Moderate coverage")
     else:
-        print("❌ Low coverage — needs improvement")
+        print("[Error] Low coverage — needs improvement")

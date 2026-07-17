@@ -45,6 +45,6 @@ def compare_with_random(allocations, profiles):
     plt.ylabel("Average Compatibility Score")
     plt.show()
 
-    print("\n🔥 Comparison:")
+    print("\n[Comparison]:")
     print("Greedy Score:", round(greedy_score, 4))
     print("Random Score:", round(random_score, 4))

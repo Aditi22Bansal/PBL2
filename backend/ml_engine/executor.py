@@ -18,7 +18,16 @@ def run():
         return
         
     try:
-        profiles_dict = json.loads(input_data)
+        input_json = json.loads(input_data)
+        
+        # Dual format parsing: legacy list vs config wrapper
+        if isinstance(input_json, dict) and "profiles" in input_json:
+            profiles_dict = input_json["profiles"]
+            config = input_json.get("config", {"room_capacity": 3})
+        else:
+            profiles_dict = input_json
+            config = {"room_capacity": 3}
+            
         profiles = [StudentProfile(**p) for p in profiles_dict]
         
         run_id = f"run_{uuid.uuid4().hex[:8]}"
@@ -37,7 +46,7 @@ def run():
                 
             # 'avoid overfitting accuracy till 95 is okayy'
             # the greedy nature inherently finds best first
-            allocs, unassigned = run_greedy_allocation_for_gender(bucket_profiles, run_id)
+            allocs, unassigned = run_greedy_allocation_for_gender(bucket_profiles, run_id, config)
             
             g, b, y = key
             for a in allocs:

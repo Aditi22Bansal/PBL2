@@ -15,18 +15,34 @@ ALL_COVERAGES = []
 # ================== LOCAL SEARCH ==================
 
 def improve_allocations_local_search(allocations, profiles, sim_matrix):
-    max_iterations = 5
-    iteration = 0
     improved = True
+    passes = 0
 
-    while improved and iteration < max_iterations:
-        iteration += 1
+    def calculate_room_score(idxs):
+        num_members = len(idxs)
+        if num_members <= 1:
+            return 1.0
+        sum_val = 0.0
+        count = 0
+        for x in range(num_members):
+            for y in range(x + 1, num_members):
+                sum_val += sim_matrix[idxs[x], idxs[y]]
+                count += 1
+        return sum_val / count
+
+    def is_valid_room(idxs):
+        num_members = len(idxs)
+        for x in range(num_members):
+            for y in range(x + 1, num_members):
+                if sim_matrix[idxs[x], idxs[y]] == -9999.0:
+                    return False
+        return True
+
+    while improved and passes < 5:
         improved = False
+        passes += 1
 
         for i in range(len(allocations)):
-            if allocations[i]["compatibility_score"] > 0.9:
-                continue
-
             for j in range(i + 1, len(allocations)):
                 if abs(allocations[i]["compatibility_score"] - allocations[j]["compatibility_score"]) < 0.05:
                     continue
@@ -34,8 +50,8 @@ def improve_allocations_local_search(allocations, profiles, sim_matrix):
                 room1 = allocations[i]["members"]
                 room2 = allocations[j]["members"]
 
-                for a in range(3):
-                    for b in range(3):
+                for a in range(len(room1)):
+                    for b in range(len(room2)):
 
                         new_room1 = room1.copy()
                         new_room2 = room2.copy()
@@ -45,32 +61,17 @@ def improve_allocations_local_search(allocations, profiles, sim_matrix):
                         idx1 = [next(k for k, p in enumerate(profiles) if p.user_id == uid) for uid in new_room1]
                         idx2 = [next(k for k, p in enumerate(profiles) if p.user_id == uid) for uid in new_room2]
 
-                        valid = True
-                        for x in range(3):
-                            for y in range(x + 1, 3):
-                                if sim_matrix[idx1[x], idx1[y]] == -9999.0:
-                                    valid = False
-                                if sim_matrix[idx2[x], idx2[y]] == -9999.0:
-                                    valid = False
-
-                        if not valid:
+                        if not is_valid_room(idx1) or not is_valid_room(idx2):
                             continue
 
-                        def room_score(idxs):
-                            return (
-                                sim_matrix[idxs[0], idxs[1]] +
-                                sim_matrix[idxs[0], idxs[2]] +
-                                sim_matrix[idxs[1], idxs[2]]
-                            ) / 3
-
                         old_score = allocations[i]["compatibility_score"] + allocations[j]["compatibility_score"]
-                        new_score = room_score(idx1) + room_score(idx2)
+                        new_score = calculate_room_score(idx1) + calculate_room_score(idx2)
 
                         if new_score > old_score:
                             allocations[i]["members"] = new_room1
                             allocations[j]["members"] = new_room2
-                            allocations[i]["compatibility_score"] = round(room_score(idx1), 4)
-                            allocations[j]["compatibility_score"] = round(room_score(idx2), 4)
+                            allocations[i]["compatibility_score"] = round(calculate_room_score(idx1), 4)
+                            allocations[j]["compatibility_score"] = round(calculate_room_score(idx2), 4)
                             improved = True
 
     return allocations
@@ -91,24 +92,27 @@ def fallback_assign_unassigned(allocations, unassigned_ids, profiles, sim_matrix
             members = room["members"]
             idxs = [id_to_index[m] for m in members]
 
-            for i in range(3):
+            for i in range(len(members)):
                 new_idxs = idxs.copy()
                 new_idxs[i] = u_idx
 
                 valid = True
-                for x in range(3):
-                    for y in range(x + 1, 3):
+                num_new_members = len(new_idxs)
+                for x in range(num_new_members):
+                    for y in range(x + 1, num_new_members):
                         if sim_matrix[new_idxs[x], new_idxs[y]] == -9999.0:
                             valid = False
 
                 if not valid:
                     continue
 
-                new_score = (
-                    sim_matrix[new_idxs[0], new_idxs[1]] +
-                    sim_matrix[new_idxs[0], new_idxs[2]] +
-                    sim_matrix[new_idxs[1], new_idxs[2]]
-                ) / 3
+                sum_val = 0.0
+                count = 0
+                for x in range(num_new_members):
+                    for y in range(x + 1, num_new_members):
+                        sum_val += sim_matrix[new_idxs[x], new_idxs[y]]
+                        count += 1
+                new_score = sum_val / count if count > 0 else 1.0
 
                 improvement = new_score - room["compatibility_score"]
 
@@ -126,19 +130,25 @@ def fallback_assign_unassigned(allocations, unassigned_ids, profiles, sim_matrix
 
 # ================== FLEX ROOMS ==================
 
-def create_flex_rooms(unassigned_ids, profiles, run_id):
+def create_flex_rooms(unassigned_ids, profiles, run_id, room_capacity=3):
     import random
     random.shuffle(unassigned_ids)
 
     flex_allocations = []
 
-    for i in range(0, len(unassigned_ids) - 2, 3):
-        group_ids = unassigned_ids[i:i+3]
+    for i in range(0, len(unassigned_ids) - room_capacity + 1, room_capacity):
+        group_ids = unassigned_ids[i:i+room_capacity]
+
+        # Find gender from the first member profile
+        gender = "Other"
+        first_prof = next((p for p in profiles if p.user_id == group_ids[0]), None)
+        if first_prof:
+            gender = first_prof.gender
 
         flex_allocations.append({
             "id": str(uuid.uuid4()),
             "allocation_run_id": run_id,
-            "gender_group": "MIXED",
+            "gender_group": gender,
             "members": group_ids,
             "room_number": None,
             "compatibility_score": 0.65
@@ -150,11 +160,16 @@ def create_flex_rooms(unassigned_ids, profiles, run_id):
 # ================== MAIN ==================
 
 def run_greedy_allocation_for_gender(
-    profiles: List[StudentProfile], run_id: str
+    profiles: List[StudentProfile], run_id: str, config: dict = None
 ) -> Tuple[List[dict], List[str]]:
 
+    if config is None:
+        config = {"room_capacity": 3}
+
+    room_capacity = config.get("room_capacity", 3)
+
     n = len(profiles)
-    if n < 3:
+    if n < room_capacity:
         return [], [p.user_id for p in profiles]
 
     encoded_matrix = np.array([encode_profile(p) for p in profiles])
@@ -181,7 +196,7 @@ def run_greedy_allocation_for_gender(
     pair_iter = 0
     total_pairs = len(sorted_i)
 
-    while np.sum(~assigned) >= 3 and pair_iter < total_pairs:
+    while np.sum(~assigned) >= room_capacity and pair_iter < total_pairs:
 
         A = sorted_i[pair_iter]
         B = sorted_j[pair_iter]
@@ -190,36 +205,51 @@ def run_greedy_allocation_for_gender(
         if assigned[A] or assigned[B]:
             continue
 
-        valid_k = ~assigned.copy()
-        valid_k[A] = False
-        valid_k[B] = False
+        # Start a candidate group of size `room_capacity` around pair A and B
+        members = [A, B]
+        unassigned_mask = ~assigned.copy()
+        unassigned_mask[A] = False
+        unassigned_mask[B] = False
 
-        if not np.any(valid_k):
+        # Find remaining members greedily
+        valid_group = True
+        while len(members) < room_capacity:
+            c_sims = np.sum(sim_matrix[members, :], axis=0)
+            c_sims[~unassigned_mask] = -np.inf
+            c_sims[members] = -np.inf
+
+            best_X = int(np.argmax(c_sims))
+            if c_sims[best_X] == -np.inf:
+                valid_group = False
+                break
+
+            members.append(best_X)
+            unassigned_mask[best_X] = False
+
+        if not valid_group:
             continue
 
-        c_sims = sim_matrix[A, :] + sim_matrix[B, :]
-        c_sims[~valid_k] = -np.inf
-
-        C = int(np.argmax(c_sims))
-
-        avg_score = (
-            sim_matrix[A, B] +
-            sim_matrix[A, C] +
-            sim_matrix[B, C]
-        ) / 3
+        # Calculate average compatibility score
+        num_members = len(members)
+        sum_val = 0.0
+        count = 0
+        for idx_i in range(num_members):
+            for idx_j in range(idx_i + 1, num_members):
+                sum_val += sim_matrix[members[idx_i], members[idx_j]]
+                count += 1
+        avg_score = sum_val / count if count > 0 else 1.0
 
         if avg_score < 0.70:
             continue
 
-        assigned[A] = True
-        assigned[B] = True
-        assigned[C] = True
+        for m in members:
+            assigned[m] = True
 
         allocations.append({
             "id": str(uuid.uuid4()),
             "allocation_run_id": run_id,
             "gender_group": profiles[A].gender,
-            "members": [profiles[A].user_id, profiles[B].user_id, profiles[C].user_id],
+            "members": [profiles[m].user_id for m in members],
             "room_number": None,
             "compatibility_score": round(avg_score, 4)
         })
@@ -237,7 +267,7 @@ def run_greedy_allocation_for_gender(
 
     unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
 
-    flex_rooms = create_flex_rooms(unassigned_ids, profiles, run_id)
+    flex_rooms = create_flex_rooms(unassigned_ids, profiles, run_id, room_capacity)
     allocations.extend(flex_rooms)
 
     assigned_ids = set()
@@ -250,9 +280,9 @@ def run_greedy_allocation_for_gender(
     allocations.sort(key=lambda x: x["compatibility_score"], reverse=True)
 
     avg_score = np.mean([a["compatibility_score"] for a in allocations]) if allocations else 0
-    coverage = (len(allocations) * 3) / len(profiles)
+    coverage = len(assigned_ids) / len(profiles) if len(profiles) > 0 else 0
 
-    print("\n📊 EVALUATION METRICS")
+    print("\n[Evaluation Metrics]")
     print("Average Compatibility Score:", round(avg_score, 4))
     print("Coverage:", round(coverage * 100, 2), "%")
     print("Final Unassigned:", len(unassigned_ids))
