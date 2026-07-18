@@ -242,12 +242,17 @@ exports.getAllocations = async (req, res) => {
         const rawAllocs = await RoomAllocation.find({}).lean();
         const allocs = await analyticsService.getEnrichedAllocations(rawAllocs);
         
+        const conflictService = require('../services/conflictPredictionService');
+
         for(let a of allocs) {
             const profiles = await Profile.find({ user_id: { $in: a.members } });
             a.memberDetails = a.members.map(email => {
                 const p = profiles.find(pf => pf.user_id === email);
                 return p ? `${p.name} (${p.branch})` : email;
             });
+
+            // Run conflict prediction and attach result
+            a.conflict_analysis = conflictService.analyzeRoom(a, profiles);
         }
         res.json(allocs);
     } catch (err) {
@@ -286,6 +291,20 @@ exports.getSubmissionStats = async (req, res) => {
 exports.getAnalytics = async (req, res) => {
     try {
         const payload = await analyticsService.calculateAnalytics();
+        
+        // Enrich with conflict analysis summary DTO
+        const conflictService = require('../services/conflictPredictionService');
+        const allocationsDocs = await RoomAllocation.find({}).lean();
+        const completedProfilesDocs = await Profile.find({ profileCompleted: { $ne: false } }).lean();
+
+        const conflictAnalysis = conflictService.analyzeAllRooms(allocationsDocs, completedProfilesDocs);
+        payload.conflictAnalysis = conflictAnalysis;
+
+        // Merge conflict warnings into global banner insights list
+        if (conflictAnalysis.insights) {
+            payload.insights = [...(payload.insights || []), ...conflictAnalysis.insights];
+        }
+
         res.json(payload);
     } catch (error) {
         console.error(error);

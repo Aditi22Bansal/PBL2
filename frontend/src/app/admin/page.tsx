@@ -3,13 +3,14 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import axios from "axios";
 import { 
   LogOut, Home, Play, Upload, CheckCircle2, Database, 
-  Trash2, Plus, AlertTriangle, Download, FileText, Search, Filter, Sparkles 
+  Trash2, Plus, AlertTriangle, Download, FileText, Search, Filter, Sparkles,
+  ChevronDown, ChevronUp, User, ShieldAlert, Award, Smile
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
@@ -26,6 +27,7 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [riskFilter, setRiskFilter] = useState("All");
   const [occupancyFilter, setOccupancyFilter] = useState("All");
+  const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null);
 
   // Hostel Configurations states
   const [configs, setConfigs] = useState<any[]>([]);
@@ -201,14 +203,15 @@ export default function AdminDashboard() {
 
   const exportToCSV = () => {
     if (!allocations || allocations.length === 0) return;
-    const headers = ["Room Number", "Gender Group", "Compatibility %", "Capacity", "Occupancy Status", "Risk", "Members"];
+    const headers = ["Room Number", "Gender Group", "Compatibility %", "Capacity", "Occupancy Status", "Risk", "Conflict Reasons", "Members"];
     const rows = allocations.map((a: any) => [
       a.room_number,
       a.gender_group || "N/A",
       `${Math.round((a.compatibility_score || 0) * 100)}%`,
       a.room_capacity || a.members.length,
       a.occupancy_status || "Full",
-      a.risk_indicator || "Low",
+      a.conflict_analysis?.conflictRisk || "Low",
+      a.conflict_analysis?.conflictReasons.map((r: any) => r.text).join("; ") || "None",
       a.members.join("; ")
     ]);
     const csvContent = [headers, ...rows].map(e => e.map(val => `"${val}"`).join(",")).join("\n");
@@ -247,7 +250,7 @@ export default function AdminDashboard() {
         a.members.some((m: string) => m.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (a.memberDetails && a.memberDetails.some((d: string) => d.toLowerCase().includes(searchQuery.toLowerCase())));
       
-      const matchRisk = riskFilter === "All" || a.risk_indicator === riskFilter;
+      const matchRisk = riskFilter === "All" || (a.conflict_analysis?.conflictRisk === riskFilter);
       const matchOccupancy = occupancyFilter === "All" || a.occupancy_status === occupancyFilter;
 
       return matchQuery && matchRisk && matchOccupancy;
@@ -287,7 +290,7 @@ export default function AdminDashboard() {
         }
       `}} />
 
-      {/* Decorative Blur Circles - hidden in print */}
+      {/* Decorative Blur Circles */}
       <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-blue-100/40 blur-[120px] pointer-events-none print-hidden" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-violet-100/40 blur-[120px] pointer-events-none print-hidden" />
 
@@ -323,8 +326,8 @@ export default function AdminDashboard() {
         {/* Banner Title & Exports */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6">
           <div>
-            <h1 className="text-3xl font-black text-slate-800 tracking-tight">System & Allocation Analytics</h1>
-            <p className="text-slate-500 text-sm mt-1">Real-time room occupancy, demographics analysis, and compatibility monitoring.</p>
+            <h1 className="text-3xl font-black text-slate-800 tracking-tight">Explainable Room Allocations & Analytics</h1>
+            <p className="text-slate-500 text-sm mt-1">Audit roommate compatibility, resolve conflicts pairwise, and monitor capacity.</p>
           </div>
           <div className="flex items-center gap-3 print-hidden">
             <button 
@@ -393,7 +396,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* SECTION 8: Dynamic Allocation Insights */}
+        {/* SECTION 8: Dynamic AI Insights & Alerts Banner */}
         {analytics && analytics.insights && analytics.insights.length > 0 && (
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
@@ -401,7 +404,7 @@ export default function AdminDashboard() {
             className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm print-card"
           >
             <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-violet-600 animate-pulse" /> AI System Insights & Alerts
+              <Sparkles className="w-4 h-4 text-violet-600 animate-pulse" /> AI System Insights & Explanations
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {analytics.insights.map((insight: any, idx: number) => (
@@ -425,6 +428,79 @@ export default function AdminDashboard() {
               ))}
             </div>
           </motion.div>
+        )}
+
+        {/* SECTION: Conflict Analysis Risk Breakdown (New Section!) */}
+        {analytics && analytics.conflictAnalysis && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 print-grid">
+            {/* Risk Levels Summary */}
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm print-card col-span-1">
+              <h3 className="font-extrabold text-slate-800 text-md border-b border-slate-100 pb-3 mb-4">Conflict Risk Assessment</h3>
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between text-xs font-bold p-3 bg-red-50 border border-red-100 rounded-2xl text-red-700">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4" />
+                    <span>High Risk Rooms</span>
+                  </div>
+                  <span className="text-lg font-black">{analytics.conflictAnalysis.summary.highRiskCount}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-bold p-3 bg-amber-50 border border-amber-100 rounded-2xl text-amber-700">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Needs Attention</span>
+                  </div>
+                  <span className="text-lg font-black">{analytics.conflictAnalysis.summary.needsAttentionCount}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-bold p-3 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-700">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Good Rooms</span>
+                  </div>
+                  <span className="text-lg font-black">{analytics.conflictAnalysis.summary.goodCount}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-bold p-3 bg-violet-50 border border-violet-100 rounded-2xl text-violet-700">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-4 h-4" />
+                    <span>Excellent Match</span>
+                  </div>
+                  <span className="text-lg font-black">{analytics.conflictAnalysis.summary.excellentCount}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Top Conflict Causes SVG Chart (Section 5 & 6) */}
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm print-card col-span-2">
+              <h3 className="font-extrabold text-slate-800 text-md border-b border-slate-100 pb-3 mb-4">Common Conflict Categories</h3>
+              <div className="space-y-4">
+                {Object.entries(analytics.conflictAnalysis.conflictCauses).map(([cause, count]: any) => {
+                  const maxCount = Math.max(...Object.values(analytics.conflictAnalysis.conflictCauses) as number[], 1);
+                  const pct = Math.round((count / maxCount) * 100);
+                  
+                  return (
+                    <div key={cause} className="text-xs space-y-1">
+                      <div className="flex items-center justify-between font-bold text-slate-600">
+                        <span>{cause}</span>
+                        <span className="text-slate-800 font-extrabold">{count} Room(s) ({pct}%)</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden border border-slate-200">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ duration: 0.5 }}
+                          className={`h-full rounded-full ${
+                            cause === 'Smoking' ? 'bg-red-500' :
+                            cause === 'Sleep Schedule' ? 'bg-violet-600' :
+                            cause === 'Cleanliness' ? 'bg-amber-500' :
+                            'bg-blue-500'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* SECTION 2 & 3: Allocation Quality & Utilization Cards */}
@@ -563,7 +639,6 @@ export default function AdminDashboard() {
               </div>
               
               <div className="flex items-center justify-center relative py-4">
-                {/* Premium concentric circular rings */}
                 <svg viewBox="0 0 100 100" className="w-36 h-36">
                   {Object.entries(analytics.roomSizeDistribution).map(([capStr, count]: any, idx) => {
                     const cap = Number(capStr);
@@ -584,7 +659,6 @@ export default function AdminDashboard() {
 
                     return (
                       <g key={cap}>
-                        {/* Background track circle */}
                         <circle
                           cx="50"
                           cy="50"
@@ -593,7 +667,6 @@ export default function AdminDashboard() {
                           stroke="#f1f5f9"
                           strokeWidth="6"
                         />
-                        {/* Actual progress circle */}
                         <circle
                           cx="50"
                           cy="50"
@@ -635,7 +708,7 @@ export default function AdminDashboard() {
               <h3 className="font-extrabold text-slate-800 text-md border-b border-slate-100 pb-3 mb-4">Student Demographics</h3>
               
               <div className="space-y-4 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
-                {/* Branch break-down */}
+                {/* Branch breakdown */}
                 <div className="space-y-2">
                   <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Branch Distribution</span>
                   {Object.entries(analytics.studentDemographics.branch).slice(0, 3).map(([branch, count]: any) => {
@@ -655,7 +728,7 @@ export default function AdminDashboard() {
                   })}
                 </div>
 
-                {/* Year break-down */}
+                {/* Year breakdown */}
                 <div className="space-y-2 pt-2 border-t border-slate-100">
                   <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Year of Study</span>
                   <div className="grid grid-cols-4 gap-2 text-center text-xs font-bold">
@@ -1020,7 +1093,7 @@ export default function AdminDashboard() {
           )}
         </motion.div>
 
-        {/* SECTION 7: Searchable, Sortable, and Filterable Room Report Table */}
+        {/* SECTION 7: Explainable Room Report Table (with Collapsible Details!) */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1030,9 +1103,9 @@ export default function AdminDashboard() {
           {/* Header */}
           <div className="p-8 border-b border-slate-200 bg-slate-50/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
-              <h3 className="font-bold text-xl text-slate-800 tracking-wide">Detailed Room Allotments Report</h3>
+              <h3 className="font-bold text-xl text-slate-800 tracking-wide">Explainable Room Allotments Report</h3>
               <p className="text-slate-500 text-sm mt-1">
-                Risk assessment dashboard sorted by lowest compatibility rooms.
+                Risk assessment dashboard sorted by lowest compatibility rooms. Click rows to expand explanation details.
               </p>
             </div>
             <div className="bg-blue-50 border border-blue-200 px-4 py-2 rounded-xl text-xs font-bold text-blue-700 flex items-center gap-1.5 self-start">
@@ -1063,9 +1136,10 @@ export default function AdminDashboard() {
                 className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all font-bold text-slate-600"
               >
                 <option value="All">Risk Level: All</option>
-                <option value="High">Risk Level: High</option>
-                <option value="Medium">Risk Level: Medium</option>
-                <option value="Low">Risk Level: Low</option>
+                <option value="Excellent">Risk Level: Excellent</option>
+                <option value="Good">Risk Level: Good</option>
+                <option value="Needs Attention">Risk Level: Needs Attention</option>
+                <option value="High Risk">Risk Level: High Risk</option>
               </select>
             </div>
 
@@ -1094,57 +1168,190 @@ export default function AdminDashboard() {
                   <th className="px-8 py-5 text-center">Beds Capacity</th>
                   <th className="px-8 py-5 text-center">Compatibility %</th>
                   <th className="px-8 py-5 text-center">Occupancy Status</th>
-                  <th className="px-8 py-5 text-center">Risk Indicator</th>
+                  <th className="px-8 py-5 text-center">Conflict Risk</th>
+                  <th className="px-8 py-5 text-center print-hidden">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredAllocations.map((a: any) => (
-                  <tr key={a._id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-8 py-5 font-bold text-slate-800">{a.room_number}</td>
-                    <td className="px-8 py-5">
-                      <div className="flex flex-col gap-1.5 max-w-[400px]">
-                        {(a.memberDetails || a.members).map((member: string, idx: number) => (
-                          <span key={idx} className="bg-slate-50 px-3 py-1.5 rounded-lg text-xs border border-slate-150 text-slate-600 font-semibold truncate">
-                            {member}
+                {filteredAllocations.map((a: any) => {
+                  const isExpanded = expandedRoomId === a._id;
+                  const analysis = a.conflict_analysis || {};
+                  
+                  return (
+                    <Fragment key={a._id}>
+                      <tr 
+                        onClick={() => setExpandedRoomId(isExpanded ? null : a._id)}
+                        className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
+                      >
+                        <td className="px-8 py-5 font-bold text-slate-800">{a.room_number}</td>
+                        <td className="px-8 py-5">
+                          <div className="flex flex-col gap-1">
+                            {(a.memberDetails || a.members).map((member: string, idx: number) => (
+                              <span key={idx} className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                                <User className="w-3.5 h-3.5 text-slate-400" /> {member}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-8 py-5 text-center font-extrabold text-slate-800">
+                          {a.room_capacity || a.members.length} Beds
+                        </td>
+                        <td className="px-8 py-5 text-center font-black">
+                          <span className={
+                            (a.compatibility_score || 0) < 0.80 ? 'text-red-500' :
+                            (a.compatibility_score || 0) < 0.88 ? 'text-amber-500' :
+                            'text-emerald-600'
+                          }>
+                            {Math.round((a.compatibility_score || 0) * 100)}%
                           </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-8 py-5 text-center font-extrabold text-slate-800">
-                      {a.room_capacity || a.members.length} Beds
-                    </td>
-                    <td className="px-8 py-5 text-center font-black">
-                      <span className={
-                        (a.compatibility_score || 0) < 0.80 ? 'text-red-500' :
-                        (a.compatibility_score || 0) < 0.88 ? 'text-amber-500' :
-                        'text-emerald-600'
-                      }>
-                        {Math.round((a.compatibility_score || 0) * 100)}%
-                      </span>
-                    </td>
-                    <td className="px-8 py-5 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${
-                        a.occupancy_status === 'Full' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' :
-                        a.occupancy_status === 'Empty' ? 'bg-red-50 text-red-700 border border-red-150' :
-                        'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>
-                        {a.occupancy_status || "Full"}
-                      </span>
-                    </td>
-                    <td className="px-8 py-5 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${
-                        a.risk_indicator === 'High' ? 'bg-red-600 text-white shadow-sm' :
-                        a.risk_indicator === 'Medium' ? 'bg-amber-400 text-slate-900 font-extrabold' :
-                        'bg-slate-100 text-slate-600'
-                      }`}>
-                        {a.risk_indicator || "Low"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                        </td>
+                        <td className="px-8 py-5 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                            a.occupancy_status === 'Full' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' :
+                            a.occupancy_status === 'Empty' ? 'bg-red-50 text-red-700 border border-red-150' :
+                            'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}>
+                            {a.occupancy_status || "Full"}
+                          </span>
+                        </td>
+                        <td className="px-8 py-5 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                            analysis.conflictRisk === 'High Risk' ? 'bg-red-600 text-white shadow-sm animate-pulse' :
+                            analysis.conflictRisk === 'Needs Attention' ? 'bg-amber-400 text-slate-900 font-extrabold' :
+                            analysis.conflictRisk === 'Good' ? 'bg-emerald-500 text-white font-extrabold' :
+                            'bg-violet-600 text-white'
+                          }`}>
+                            {analysis.conflictRisk || "Low"}
+                          </span>
+                        </td>
+                        <td className="px-8 py-5 text-center print-hidden">
+                          <button className="text-slate-400 group-hover:text-slate-600 p-1 rounded hover:bg-slate-100 transition-colors">
+                            {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {/* Expanded Section */}
+                      <AnimatePresence initial={false}>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={7} className="bg-slate-50/50 px-8 py-6 border-y border-slate-200">
+                              <motion.div 
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="space-y-6 overflow-hidden"
+                              >
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  
+                                  {/* Conflict Reasons (Ranked) */}
+                                  <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4">
+                                    <h4 className="font-extrabold text-xs text-red-700 uppercase tracking-wide flex items-center gap-1.5">
+                                      <ShieldAlert className="w-4 h-4" /> Compatibility Conflicts ({analysis.conflictReasons?.length || 0})
+                                    </h4>
+                                    
+                                    {analysis.conflictReasons && analysis.conflictReasons.length > 0 ? (
+                                      <div className="space-y-3">
+                                        {analysis.conflictReasons.map((reason: any, idx: number) => (
+                                          <div key={idx} className="p-3 bg-red-50/30 border border-red-100 rounded-xl space-y-1">
+                                            <div className="flex items-center justify-between text-[10px] font-extrabold">
+                                              <span className="text-red-700 uppercase">{reason.category}</span>
+                                              <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">Weight: {reason.score}</span>
+                                            </div>
+                                            <p className="text-xs text-slate-700 leading-relaxed font-semibold">{reason.text}</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-xs text-slate-500 italic py-4 flex items-center gap-2">
+                                        <Smile className="w-4 h-4 text-emerald-500" /> No compatibility conflicts detected in this room.
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Positive Factors & Actionable Recommendations */}
+                                  <div className="space-y-6">
+                                    {/* Positive Factors */}
+                                    <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
+                                      <h4 className="font-extrabold text-xs text-emerald-700 uppercase tracking-wide flex items-center gap-1.5">
+                                        <Award className="w-4 h-4" /> Strong Roommate Commonalities ({analysis.positiveFactors?.length || 0})
+                                      </h4>
+                                      {analysis.positiveFactors && analysis.positiveFactors.length > 0 ? (
+                                        <ul className="space-y-2">
+                                          {analysis.positiveFactors.map((factor: string, idx: number) => (
+                                            <li key={idx} className="text-xs text-slate-700 font-semibold flex items-center gap-2">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                              <span>{factor}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      ) : (
+                                        <p className="text-xs text-slate-500 italic">No significant matching indicators found.</p>
+                                      )}
+                                    </div>
+
+                                    {/* Recommendations */}
+                                    <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
+                                      <h4 className="font-extrabold text-xs text-blue-700 uppercase tracking-wide flex items-center gap-1.5">
+                                        <Sparkles className="w-4 h-4" /> Dynamic Actionable Recommendations
+                                      </h4>
+                                      <ul className="space-y-2">
+                                        {analysis.recommendations?.map((rec: string, idx: number) => (
+                                          <li key={idx} className="text-xs text-slate-700 font-bold flex items-start gap-2">
+                                            <span className="text-blue-500 mt-0.5 font-bold shrink-0">✓</span>
+                                            <span>{rec}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+
+                                  </div>
+                                </div>
+
+                                {/* Roommate Comparison Matrix (Privacy-Sensitive Admin View) */}
+                                {analysis.roommatePreferences && analysis.roommatePreferences.length > 0 && (
+                                  <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
+                                    <h4 className="font-extrabold text-xs text-slate-700 uppercase tracking-wide">
+                                      Roommate Mismatch Resolution Matrix (Admin-Only View)
+                                    </h4>
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-left text-xs text-slate-600 whitespace-nowrap">
+                                        <thead>
+                                          <tr className="border-b border-slate-100 font-bold uppercase text-[9px] tracking-wider text-slate-400">
+                                            <th className="pb-2">Roommate</th>
+                                            <th className="pb-2">Sleep Schedule</th>
+                                            <th className="pb-2">Cleanliness</th>
+                                            <th className="pb-2">Study Environment</th>
+                                            <th className="pb-2">Smoking Habit</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50 font-semibold text-slate-700">
+                                          {analysis.roommatePreferences.map((pref: any, idx: number) => (
+                                            <tr key={idx} className="h-8">
+                                              <td>{pref.name}</td>
+                                              <td>{pref.sleep_time}</td>
+                                              <td>{pref.cleanliness}</td>
+                                              <td>{pref.study_env}</td>
+                                              <td>{pref.smoking}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
+
+                              </motion.div>
+                            </td>
+                          </tr>
+                        )}
+                      </AnimatePresence>
+                    </Fragment>
+                  );
+                })}
                 {filteredAllocations.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-8 py-20 text-center text-slate-400 text-sm font-semibold">
+                    <td colSpan={7} className="px-8 py-20 text-center text-slate-400 text-sm font-semibold">
                       No matching room records found.
                     </td>
                   </tr>
