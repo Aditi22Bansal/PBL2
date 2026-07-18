@@ -11,6 +11,7 @@ router.post('/trigger-allocation', adminController.triggerAllocation);
 
 // Get results
 router.get('/allocations', adminController.getAllocations);
+router.get('/submission-stats', adminController.getSubmissionStats);
 
 // Hostel Configurations CRUD routes
 router.get('/hostel-configurations', hostelConfigController.getHostelConfigurations);

@@ -56,7 +56,7 @@ const ProdAuthProviders = [
   }),
 ];
 
-const handler = NextAuth({
+export const authOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   providers: IS_DEV_AUTH ? [DevAuthProvider] : ProdAuthProviders,
   callbacks: {
@@ -120,6 +120,8 @@ const handler = NextAuth({
     signIn: "/login",   // ← updated: login page is now at /login
     error: "/unauthorized",
   },
-});
+};
+
+const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };

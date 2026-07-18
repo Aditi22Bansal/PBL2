@@ -16,6 +16,7 @@ export default function AdminDashboard() {
   const [allocations, setAllocations] = useState([]);
   const [metrics, setMetrics] = useState<any>(null);
   const [message, setMessage] = useState("");
+  const [stats, setStats] = useState<any>(null);
 
   // Hostel Configurations states
   const [configs, setConfigs] = useState<any[]>([]);
@@ -74,6 +75,7 @@ export default function AdminDashboard() {
     } else if (status === "authenticated") {
       fetchAllocations();
       fetchConfigs();
+      fetchStats();
     }
   }, [status, router, session]);
 
@@ -92,6 +94,15 @@ export default function AdminDashboard() {
       setConfigs(res.data);
     } catch (error) {
       console.error("Failed to fetch configurations:", error);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const res = await axios.get("http://localhost:5000/api/admin/submission-stats");
+      setStats(res.data);
+    } catch (error) {
+      console.error("Failed to fetch submission stats:", error);
     }
   };
 
@@ -162,6 +173,7 @@ export default function AdminDashboard() {
     try {
       const res = await axios.post("http://localhost:5000/api/admin/sync-csv", { sheet_url: sheetUrl });
       setMessage(res.data.message);
+      fetchStats();
     } catch (err: any) {
       setMessage("Error: " + err.response?.data?.details || err.message);
     } finally {
@@ -221,6 +233,36 @@ export default function AdminDashboard() {
           >
             <CheckCircle2 className="text-emerald-600 w-5 h-5 flex-shrink-0" />
             <span className="text-emerald-800 font-medium">{message}</span>
+          </motion.div>
+        )}
+
+        {stats && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm"
+          >
+            <h2 className="text-xl font-bold mb-4 text-slate-800 flex items-center gap-2">
+               Questionnaire Submission Overview
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center">
+                <div className="text-slate-500 text-xs font-bold mb-1 uppercase tracking-wider text-center">Total Students</div>
+                <div className="text-2xl font-black text-slate-800 mt-1">{stats.totalStudents}</div>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center">
+                <div className="text-slate-500 text-xs font-bold mb-1 uppercase tracking-wider text-center">Profiles Completed</div>
+                <div className="text-2xl font-black text-emerald-600 mt-1">{stats.profilesCompleted}</div>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center">
+                <div className="text-slate-500 text-xs font-bold mb-1 uppercase tracking-wider text-center">Profiles Pending</div>
+                <div className="text-2xl font-black text-amber-600 mt-1">{stats.profilesPending}</div>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center">
+                <div className="text-slate-500 text-xs font-bold mb-1 uppercase tracking-wider text-center">Submission Rate</div>
+                <div className="text-2xl font-black text-violet-600 mt-1">{stats.submissionProgress}%</div>
+              </div>
+            </div>
           </motion.div>
         )}
 

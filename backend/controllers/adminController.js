@@ -34,20 +34,36 @@ exports.syncCsv = async (req, res) => {
         response.data.pipe(csv())
             .on('data', (data) => results.push(data))
             .on('end', async () => {
+                const getValue = (row, ...substrings) => {
+                    const keys = Object.keys(row);
+                    for (let sub of substrings) {
+                        const foundKey = keys.find(k => k.toLowerCase().includes(sub.toLowerCase()));
+                        if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null) {
+                            return row[foundKey].trim();
+                        }
+                    }
+                    return "";
+                };
+
                 const profilesToUpsert = results.map((row, index) => {
                     const keys = Object.keys(row);
                     const emailKey = keys.find(k => k.toLowerCase().includes('email'));
                     const nameKey = keys.find(k => k.toLowerCase().includes('name'));
                     const branchKey = keys.find(k => k.toLowerCase().includes('branch'));
                     
-                    // Fall back to a deterministic synthetic email if no explicit email column exists
                     const email = emailKey && row[emailKey] ? row[emailKey].trim() : `student_${index}@sitpune.edu.in`;
-                    
                     if(!email) return null;
 
-                    // Fix: Set name to the student ID prefix instead of Unknown
                     const fallbackName = nameKey && row[nameKey] ? row[nameKey] : email.split('@')[0];
                     
+                    const noise = parseInt(getValue(row, "noise tolerance", "noise_tolerance")) || 3;
+                    const intro = parseInt(getValue(row, "introverted", "introversion")) || 3;
+                    const irrit = parseInt(getValue(row, "irritated", "irritation")) || 3;
+                    const space = parseInt(getValue(row, "personal space", "personal_space")) || 3;
+                    const routines = parseInt(getValue(row, "fixed routines", "fixed_routines")) || 3;
+                    const sharing = parseInt(getValue(row, "sharing belongings", "sharing_comfort")) || 3;
+                    const age = parseInt(getValue(row, "age")) || 18;
+
                     return {
                         updateOne: {
                             filter: { user_id: email },
@@ -55,14 +71,41 @@ exports.syncCsv = async (req, res) => {
                                 $set: {
                                     user_id: email,
                                     name: fallbackName,
+                                    age: age,
                                     branch: branchKey ? row[branchKey] : "Unknown",
                                     gender: row["Gender"] || row["gender"] || "Other",
                                     year_of_study: row["Year of Study"] || "1st Year",
-                                    sleep_time: row["When do you usually sleep?"],
-                                    wake_time: row["When do you usually wake up?"],
-                                    cleanliness: row["How clean do you keep your room?"],
-                                    smoking_habit: row["Do you smoke?"],
-                                    drinking_habit: row["Do you drink alcohol?"],
+                                    
+                                    sleep_time: getValue(row, "sleep time", "sleeping time"),
+                                    wake_time: getValue(row, "wake-up time", "wake time"),
+                                    cleanliness: getValue(row, "cleanliness level", "How clean"),
+                                    study_env: getValue(row, "study environment", "study_env"),
+                                    guest_frequency: getValue(row, "guest", "friends frequency"),
+                                    smoking_habit: getValue(row, "smoke", "smoking"),
+                                    drinking_habit: getValue(row, "drink", "drinking"),
+                                    first_time_hostel: getValue(row, "first time", "first hostel"),
+                                    temp_preference: getValue(row, "temperature", "temp"),
+                                    study_hours: getValue(row, "study hours"),
+                                    room_org: getValue(row, "room organization", "room_org"),
+                                    active_late: getValue(row, "active late", "active_late"),
+                                    conflict_style: getValue(row, "conflict", "When conflicts arise"),
+                                    
+                                    noise_tolerance: noise,
+                                    introversion: intro,
+                                    irritation: irrit,
+                                    personal_space: space,
+                                    fixed_routines: routines,
+                                    sharing_comfort: sharing,
+                                    
+                                    pref_roommate_sleep: getValue(row, "preferred roommate sleep", "pref_roommate_sleep"),
+                                    pref_roommate_social: getValue(row, "prefer my roommate to", "pref_roommate_social"),
+                                    cleanliness_expectation: getValue(row, "cleanliness expectation", "cleanliness_expectation"),
+                                    light_preference: getValue(row, "light preference", "light_preference"),
+                                    most_important_factor: getValue(row, "factor matters most", "most_important_factor"),
+                                    
+                                    profileCompleted: true,
+                                    submittedAt: new Date(),
+                                    lastEditedAt: new Date()
                                 }
                             },
                             upsert: true
@@ -192,5 +235,32 @@ exports.getAllocations = async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Failed to fetch allocations' });
+    }
+};
+
+exports.getSubmissionStats = async (req, res) => {
+    try {
+        const User = require('../models/User');
+        const Profile = require('../models/Profile');
+
+        // Union of all student users and profiles to find total population
+        const studentsFromUsers = await User.find({ role: { $ne: 'ADMIN' } }).distinct('email');
+        const studentsFromProfiles = await Profile.distinct('user_id');
+        const allStudentEmails = new Set([...studentsFromUsers, ...studentsFromProfiles]);
+
+        const totalStudents = allStudentEmails.size;
+        const profilesCompleted = await Profile.countDocuments({ profileCompleted: { $ne: false } });
+        const profilesPending = Math.max(0, totalStudents - profilesCompleted);
+        const submissionProgress = totalStudents > 0 ? Math.round((profilesCompleted / totalStudents) * 100) : 0;
+
+        res.json({
+            totalStudents,
+            profilesCompleted,
+            profilesPending,
+            submissionProgress
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to retrieve submission stats', message: error.message });
     }
 };

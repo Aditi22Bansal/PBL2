@@ -33,7 +33,10 @@ const profileSchema = new mongoose.Schema({
   pref_roommate_social: { type: String },
   cleanliness_expectation: { type: String },
   light_preference: { type: String },
-  most_important_factor: { type: String }
+  most_important_factor: { type: String },
+  profileCompleted: { type: Boolean, default: false },
+  submittedAt: { type: Date },
+  lastEditedAt: { type: Date }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Profile', profileSchema);
