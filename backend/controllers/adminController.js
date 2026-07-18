@@ -3,6 +3,7 @@ const csv = require('csv-parser');
 const Profile = require('../models/Profile');
 const RoomAllocation = require('../models/RoomAllocation');
 const { runPythonAllocation } = require('../services/allocationService');
+const analyticsService = require('../services/analyticsService');
 
 exports.syncCsv = async (req, res) => {
     try {
@@ -190,15 +191,31 @@ exports.triggerAllocation = async (req, res) => {
         
         const result = await runPythonAllocation(profilesJson, activeConfig);
         
+        // Rebuild the global rooms inventory exactly like the Python executor to map room capacities
+        const globalRoomCapacities = {};
+        if (activeConfig && activeConfig.roomTemplates) {
+            let roomIdCounter = 1;
+            for (const template of activeConfig.roomTemplates) {
+                const cap = template.capacity;
+                const cnt = template.count;
+                for (let i = 0; i < cnt; i++) {
+                    globalRoomCapacities[`Room_${roomIdCounter}`] = cap;
+                    roomIdCounter++;
+                }
+            }
+        }
+
         let roomCounter = 1;
         const newAllocations = result.allocations.map(a => {
             const num = `Room ${roomCounter++}`;
+            const capacity = globalRoomCapacities[a.id] || a.members.length;
             return {
                 allocation_run_id: result.run_id,
                 gender_group: a.gender_group,
                 compatibility_score: a.compatibility_score,
                 members: a.members,
-                room_number: num
+                room_number: num,
+                room_capacity: capacity
             };
         });
         
@@ -222,7 +239,8 @@ exports.triggerAllocation = async (req, res) => {
 
 exports.getAllocations = async (req, res) => {
     try {
-        const allocs = await RoomAllocation.find({}).lean();
+        const rawAllocs = await RoomAllocation.find({}).lean();
+        const allocs = await analyticsService.getEnrichedAllocations(rawAllocs);
         
         for(let a of allocs) {
             const profiles = await Profile.find({ user_id: { $in: a.members } });
@@ -262,5 +280,15 @@ exports.getSubmissionStats = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Failed to retrieve submission stats', message: error.message });
+    }
+};
+
+exports.getAnalytics = async (req, res) => {
+    try {
+        const payload = await analyticsService.calculateAnalytics();
+        res.json(payload);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to calculate dashboard analytics', message: error.message });
     }
 };

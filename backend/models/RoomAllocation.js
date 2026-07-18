@@ -5,7 +5,8 @@ const roomAllocationSchema = new mongoose.Schema({
   gender_group: { type: String },
   compatibility_score: { type: Number },
   members: [{ type: String }], // Array of Emails or user_ids
-  room_number: { type: String }
+  room_number: { type: String },
+  room_capacity: { type: Number }
 }, { timestamps: true });
 
 module.exports = mongoose.model('RoomAllocation', roomAllocationSchema);
