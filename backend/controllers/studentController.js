@@ -1,5 +1,7 @@
 const Profile = require('../models/Profile');
 const RoomAllocation = require('../models/RoomAllocation');
+const ChangeRequest = require('../models/ChangeRequest');
+const User = require('../models/User');
 
 exports.getDashboardData = async (req, res) => {
     try {
@@ -94,5 +96,46 @@ exports.submitProfile = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Server Error', message: error.message });
+    }
+};
+
+exports.submitPreferences = async (req, res) => {
+    try {
+        const payload = req.body; // should extract email from token normally, here body
+        const email = payload.user_id;
+
+        const existing = await Profile.findOne({ user_id: email });
+        if (existing) {
+            return res.status(400).json({ message: 'Form already submitted' });
+        }
+
+        const newProfile = new Profile(payload);
+        await newProfile.save();
+
+        await User.findOneAndUpdate({ email: email }, { isFormSubmitted: true });
+
+        res.status(201).json({ message: 'Preferences saved successfully' });
+    } catch(err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server Error' });
+    }
+};
+
+exports.submitChangeRequest = async (req, res) => {
+    try {
+        const { email, name, roomId, reason } = req.body;
+        
+        const newReq = new ChangeRequest({
+            studentId: email,
+            studentName: name,
+            currentRoomId: roomId,
+            reason: reason,
+            status: 'Pending'
+        });
+        await newReq.save();
+        res.status(201).json({ message: 'Request submitted to admin' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server Error' });
     }
 };

@@ -9,7 +9,17 @@ const adminRoutes = require('./routes/admin');
 const studentRoutes = require('./routes/student');
 const chatRoutes = require('./routes/chat');
 
+const http = require('http');
+const { Server } = require('socket.io');
+
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*", // allow frontend access
+    methods: ["GET", "POST"]
+  }
+});
 
 // Middleware
 app.use(cors());
@@ -29,6 +39,30 @@ const connectDB = async () => {
 
 connectDB();
 
+// Make io accessible to routes if needed
+app.set('socketio', io);
+
+// Socket.IO logic
+io.on('connection', (socket) => {
+    console.log(`User connected: ${socket.id}`);
+    
+    // Join a specific room based on allocation ID
+    socket.on('join_room', (roomId) => {
+        socket.join(roomId);
+        console.log(`User ${socket.id} joined room ${roomId}`);
+    });
+
+    // Handle incoming chat messages
+    socket.on('send_message', (data) => {
+        // Broadcast to everyone in the room including sender (or use socket.to().emit)
+        io.to(data.roomId).emit('receive_message', data);
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`User disconnected: ${socket.id}`);
+    });
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -41,6 +75,6 @@ app.get('/api/health', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+server.listen(PORT, () => {
+    console.log(`Server & Socket.IO running on port ${PORT}`);
 });

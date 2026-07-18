@@ -70,6 +70,8 @@ export default function AdminDashboard() {
     setFormValidationError(err);
   }, [formTemplates, formHostelName, showForm]);
 
+  const [stats, setStats] = useState({ rooms: 0, unassigned: 0, pendingRequests: 0 });
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -174,7 +176,7 @@ export default function AdminDashboard() {
     setSyncing(true);
     setMessage("");
     try {
-      const res = await axios.post("http://localhost:5000/api/admin/sync-csv", { sheet_url: sheetUrl });
+      const res = await axios.post(`${API_URL}/api/admin/sync-csv`, { sheet_url: sheetUrl });
       setMessage(res.data.message);
       fetchAllocations();
       fetchAnalytics();
@@ -187,7 +189,7 @@ export default function AdminDashboard() {
 
   const handleAllocate = async () => {
     setAllocating(true);
-    setMessage("Running AI ML Engine... Please wait.");
+    setMessage("Running Similarity Matrix & Clustering... Please wait.");
     try {
       const res = await axios.post("http://localhost:5000/api/admin/trigger-allocation");
       setMessage(res.data.message + ` | Rooms Formed: ${res.data.total_rooms}`);
@@ -311,6 +313,7 @@ export default function AdminDashboard() {
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
             Administrator Mode
           </div>
+          
           <button 
             onClick={() => signOut({ callbackUrl: "/" })}
             className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2.5 px-5 rounded-xl text-xs transition-all shadow-sm"

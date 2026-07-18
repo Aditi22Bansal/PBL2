@@ -38,7 +38,10 @@ export default function StudentDashboard() {
     setError(null);
     try {
       const email = session?.user?.email;
-      if (!email) return;
+      if (!email) {
+          setLoading(false);
+          return;
+      }
       
       const res = await axios.get(`http://localhost:5000/api/student/dashboard/${email}`);
       setDashboardData(res.data);
@@ -61,7 +64,7 @@ export default function StudentDashboard() {
     window.print();
   };
 
-  if (status === "loading" || loading) {
+  if (status === "loading" || (status === "authenticated" && loading)) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
         <motion.div

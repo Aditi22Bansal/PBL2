@@ -1,5 +1,4 @@
-const { spawn } = require('child_process');
-const path = require('path');
+const axios = require('axios');
 
 const runPythonAllocation = async (profiles, config = null) => {
     return new Promise((resolve, reject) => {
@@ -60,5 +59,6 @@ const runPythonAllocation = async (profiles, config = null) => {
 };
 
 module.exports = {
-    runPythonAllocation
+    runPythonAllocation,
+    runRelaxedPythonAllocation
 };

@@ -3,7 +3,7 @@ const router = express.Router();
 const adminController = require('../controllers/adminController');
 const hostelConfigController = require('../controllers/hostelConfigController');
 
-// Sync Google Sheets CSV
+// Sync Google Sheets CSV (Legacy, can keep it)
 router.post('/sync-csv', adminController.syncCsv);
 
 // Trigger Python Allocation engine
@@ -21,5 +21,21 @@ router.post('/hostel-configurations', hostelConfigController.createHostelConfigu
 router.put('/hostel-configurations/:id', hostelConfigController.updateHostelConfiguration);
 router.delete('/hostel-configurations/:id', hostelConfigController.deleteHostelConfiguration);
 router.patch('/hostel-configurations/:id/activate', hostelConfigController.activateHostelConfiguration);
+
+// Manually modify assignments
+router.post('/allocations/manual-swap', adminController.manualSwap);
+
+// Export CSV Report
+router.get('/allocations/report', adminController.downloadReport);
+
+// Toggle room lock
+router.post('/allocations/toggle-lock', adminController.toggleRoomLock);
+
+// Room change requests endpoints
+router.get('/requests', adminController.getChangeRequests);
+router.post('/requests/action', adminController.handleRequestAction);
+
+// Force allocate remaining unassigned students
+router.post('/force-allocate', adminController.forceAllocateRemaining);
 
 module.exports = router;
