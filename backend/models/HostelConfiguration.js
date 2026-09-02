@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { SIT_PUNE_ORG_ID } = require('../config/defaultOrg');
 
 const roomTemplateSchema = new mongoose.Schema({
   capacity: { 
@@ -24,7 +25,8 @@ const roomTemplateSchema = new mongoose.Schema({
 });
 
 const hostelConfigurationSchema = new mongoose.Schema({
-  hostelName: { 
+  organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, default: SIT_PUNE_ORG_ID },
+  hostelName: {
     type: String, 
     required: [true, 'Hostel name is required'] 
   },

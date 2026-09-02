@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
+const { SIT_PUNE_ORG_ID } = require('../config/defaultOrg');
 
 const profileSchema = new mongoose.Schema({
+  organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, default: SIT_PUNE_ORG_ID },
   user_id: { type: String, required: true, unique: true },
   name: { type: String, default: 'Unknown Name' },
   age: { type: Number },

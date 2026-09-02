@@ -76,6 +76,9 @@ Thumbs.db
 ehthumbs.db
 [Dd]esktop.ini
 
+# Local DB backup dumps (real student data - never committed)
+backend/scripts/backups/
+
 # User-specific & Data
 *.csv
 output_absolute_final.csv
