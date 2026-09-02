@@ -10,9 +10,9 @@ const STABILITY_WEIGHTS = {
 /**
  * Aggregates and transforms student allocation, profile, and explainability data into a clean DTO
  */
-const getDashboardDTO = async (email) => {
+const getDashboardDTO = async (email, organizationId) => {
     // 1. Fetch current student profile
-    const profile = await Profile.findOne({ user_id: email }).lean();
+    const profile = await Profile.findOne({ user_id: email, organizationId }).lean();
     if (!profile) {
         return {
             status: 'NOT_SUBMITTED',
@@ -38,7 +38,7 @@ const getDashboardDTO = async (email) => {
     }
 
     // 2. Fetch room allocation
-    const allocation = await RoomAllocation.findOne({ members: email }).lean();
+    const allocation = await RoomAllocation.findOne({ members: email, organizationId }).lean();
     if (!allocation) {
         return {
             status: 'PENDING_ALLOCATION',
@@ -56,7 +56,7 @@ const getDashboardDTO = async (email) => {
 
     // 3. Find roommates details (excluding current user)
     const roommateEmails = allocation.members.filter(m => m !== email);
-    const roommatesDocs = await Profile.find({ user_id: { $in: roommateEmails } }).lean();
+    const roommatesDocs = await Profile.find({ user_id: { $in: roommateEmails }, organizationId }).lean();
 
     // 4. Run conflict & explainability matching service
     const allRoommateProfiles = [profile, ...roommatesDocs];

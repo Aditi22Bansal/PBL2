@@ -3,7 +3,7 @@ const HostelConfiguration = require('../models/HostelConfiguration');
 // GET /api/admin/hostel-configurations
 exports.getHostelConfigurations = async (req, res) => {
     try {
-        const configs = await HostelConfiguration.find({}).sort({ createdAt: -1 });
+        const configs = await HostelConfiguration.find({ organizationId: req.currentUser.organizationId }).sort({ createdAt: -1 });
         res.json(configs);
     } catch (error) {
         console.error(error);
@@ -14,7 +14,7 @@ exports.getHostelConfigurations = async (req, res) => {
 // GET /api/admin/hostel-configurations/:id
 exports.getHostelConfigurationById = async (req, res) => {
     try {
-        const config = await HostelConfiguration.findById(req.params.id);
+        const config = await HostelConfiguration.findOne({ _id: req.params.id, organizationId: req.currentUser.organizationId });
         if (!config) {
             return res.status(404).json({ error: 'Hostel configuration not found' });
         }
@@ -47,18 +47,17 @@ exports.createHostelConfiguration = async (req, res) => {
         }
         
         const newConfig = new HostelConfiguration({
+            organizationId: req.currentUser.organizationId,
             hostelName,
             hostelCode,
             gender,
             roomTemplates,
             isActive: isActive || false
         });
-        
-        if (newConfig.isActive) {
-            // Deactivate all other configurations first
-            await HostelConfiguration.updateMany({}, { isActive: false });
-        }
-        
+
+        // No exclusivity: multiple configs can be active at once for an org
+        // (e.g. a Female config and a Male config both active simultaneously
+        // is the correct, common case, not an edge case to guard against).
         await newConfig.save();
         res.status(201).json(newConfig);
     } catch (error) {
@@ -88,25 +87,21 @@ exports.updateHostelConfiguration = async (req, res) => {
             }
         }
         
-        const config = await HostelConfiguration.findById(req.params.id);
+        const config = await HostelConfiguration.findOne({ _id: req.params.id, organizationId: req.currentUser.organizationId });
         if (!config) {
             return res.status(404).json({ error: 'Hostel configuration not found' });
         }
-        
+
         config.hostelName = hostelName;
         config.hostelCode = hostelCode;
         config.gender = gender;
         config.roomTemplates = roomTemplates;
-        
+
         if (isActive !== undefined) {
             config.isActive = isActive;
         }
-        
-        if (config.isActive) {
-            // Deactivate all other configurations
-            await HostelConfiguration.updateMany({ _id: { $ne: config._id } }, { isActive: false });
-        }
-        
+
+        // No exclusivity: multiple configs can be active at once for an org.
         await config.save();
         res.json(config);
     } catch (error) {
@@ -118,7 +113,7 @@ exports.updateHostelConfiguration = async (req, res) => {
 // DELETE /api/admin/hostel-configurations/:id
 exports.deleteHostelConfiguration = async (req, res) => {
     try {
-        const config = await HostelConfiguration.findByIdAndDelete(req.params.id);
+        const config = await HostelConfiguration.findOneAndDelete({ _id: req.params.id, organizationId: req.currentUser.organizationId });
         if (!config) {
             return res.status(404).json({ error: 'Hostel configuration not found' });
         }
@@ -132,18 +127,16 @@ exports.deleteHostelConfiguration = async (req, res) => {
 // PATCH /api/admin/hostel-configurations/:id/activate
 exports.activateHostelConfiguration = async (req, res) => {
     try {
-        const config = await HostelConfiguration.findById(req.params.id);
+        const config = await HostelConfiguration.findOne({ _id: req.params.id, organizationId: req.currentUser.organizationId });
         if (!config) {
             return res.status(404).json({ error: 'Hostel configuration not found' });
         }
-        
-        // Deactivate all configurations
-        await HostelConfiguration.updateMany({}, { isActive: false });
-        
-        // Activate this one
+
+        // No exclusivity: activating this one doesn't deactivate any others -
+        // multiple configs can be active at once for an org.
         config.isActive = true;
         await config.save();
-        
+
         res.json({ message: 'Hostel configuration activated successfully', config });
     } catch (error) {
         console.error(error);

@@ -115,18 +115,18 @@ const generateDynamicInsights = (systemOverview, allocationQuality, compBuckets,
 /**
  * Calculates complete dashboard analytics
  */
-const calculateAnalytics = async () => {
+const calculateAnalytics = async (organizationId) => {
     // 1. System Overview Metrics
-    const studentsFromUsers = await User.find({ role: { $ne: 'ADMIN' } }).distinct('email');
-    const studentsFromProfiles = await Profile.find({}).distinct('user_id');
+    const studentsFromUsers = await User.find({ role: { $ne: 'ADMIN' }, organizationId }).distinct('email');
+    const studentsFromProfiles = await Profile.find({ organizationId }).distinct('user_id');
     const allStudentEmails = new Set([...studentsFromUsers, ...studentsFromProfiles]);
-    
+
     const totalStudents = allStudentEmails.size;
-    const profilesCompleted = await Profile.countDocuments({ profileCompleted: { $ne: false } });
+    const profilesCompleted = await Profile.countDocuments({ profileCompleted: { $ne: false }, organizationId });
     const profilesPending = Math.max(0, totalStudents - profilesCompleted);
 
     // 2. Fetch allocations
-    const allocations = await RoomAllocation.find({}).lean();
+    const allocations = await RoomAllocation.find({ organizationId }).lean();
     const totalRoomsGenerated = allocations.length;
 
     let totalBeds = 0;
@@ -197,7 +197,7 @@ const calculateAnalytics = async () => {
     const averageRoomSize = totalRoomsGenerated > 0 ? Number((occupiedBeds / totalRoomsGenerated).toFixed(1)) : 0;
 
     // Find completed profiles that are not assigned
-    const completedProfilesDocs = await Profile.find({ profileCompleted: { $ne: false } }).distinct('user_id');
+    const completedProfilesDocs = await Profile.find({ profileCompleted: { $ne: false }, organizationId }).distinct('user_id');
     const unassignedStudentsCount = completedProfilesDocs.filter(email => !allocatedStudentEmails.has(email)).length;
 
     // 3. Demographics calculations
@@ -205,7 +205,7 @@ const calculateAnalytics = async () => {
     const yearDist = {};
     const genderDist = {};
 
-    const completedProfiles = await Profile.find({ profileCompleted: { $ne: false } }).lean();
+    const completedProfiles = await Profile.find({ profileCompleted: { $ne: false }, organizationId }).lean();
     for (const p of completedProfiles) {
         const b = p.branch || 'Unknown';
         const y = p.year_of_study || 'Unknown';

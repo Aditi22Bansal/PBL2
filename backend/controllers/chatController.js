@@ -11,8 +11,10 @@ exports.getRoomChat = async (req, res) => {
             return res.status(400).json({ error: 'Invalid room ID' });
         }
 
-        // Verify the user is actually part of this room
-        const room = await RoomAllocation.findById(room_id);
+        // Verify the user is actually part of this room (and that the room
+        // belongs to their org - a room ID from another org should read as
+        // not-found, not a membership failure).
+        const room = await RoomAllocation.findOne({ _id: room_id, organizationId: req.currentUser.organizationId });
         if (!room) {
             return res.status(404).json({ error: 'Room not found' });
         }
@@ -22,7 +24,7 @@ exports.getRoomChat = async (req, res) => {
         }
 
         // Fetch messages for this room
-        const messages = await Chat.find({ room_id }).sort({ createdAt: 1 });
+        const messages = await Chat.find({ room_id, organizationId: req.currentUser.organizationId }).sort({ createdAt: 1 });
         
         return res.json(messages);
 
@@ -47,8 +49,9 @@ exports.sendMessage = async (req, res) => {
             return res.status(400).json({ error: 'Invalid room ID' });
         }
 
-        // Verify the user is part of the room
-        const room = await RoomAllocation.findById(room_id);
+        // Verify the user is part of the room (and that the room belongs to
+        // their org)
+        const room = await RoomAllocation.findOne({ _id: room_id, organizationId: req.currentUser.organizationId });
         if (!room) {
             return res.status(404).json({ error: 'Room not found' });
         }
@@ -59,6 +62,7 @@ exports.sendMessage = async (req, res) => {
 
         // Save new message
         const newMsg = new Chat({
+            organizationId: req.currentUser.organizationId,
             room_id,
             sender_email: email,
             sender_name: name,

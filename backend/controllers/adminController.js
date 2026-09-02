@@ -66,10 +66,11 @@ exports.syncCsv = async (req, res) => {
 
                     return {
                         updateOne: {
-                            filter: { user_id: email },
+                            filter: { user_id: email, organizationId: req.currentUser.organizationId },
                             update: {
                                 $set: {
                                     user_id: email,
+                                    organizationId: req.currentUser.organizationId,
                                     name: fallbackName,
                                     age: age,
                                     branch: branchKey ? row[branchKey] : "Unknown",
@@ -127,10 +128,13 @@ exports.syncCsv = async (req, res) => {
                 }).filter(p => p !== null);
 
                 if (profilesToUpsert.length > 0) {
-                    await Profile.deleteMany({});
+                    // Scoped to the caller's own org - this used to be an
+                    // unscoped Profile.deleteMany({}), wiping every
+                    // organization's profiles on any admin's sync.
+                    await Profile.deleteMany({ organizationId: req.currentUser.organizationId });
                     await Profile.bulkWrite(profilesToUpsert);
                     // Only delete NOT locked ones from RoomAllocation if resetting
-                    await RoomAllocation.deleteMany({ isLocked: { $ne: true } });
+                    await RoomAllocation.deleteMany({ isLocked: { $ne: true }, organizationId: req.currentUser.organizationId });
                 }
                 
                 res.json({ message: `Successfully synced ${profilesToUpsert.length} profiles from CSV.` });
@@ -148,24 +152,28 @@ exports.triggerAllocation = async (req, res) => {
         let activeConfig = config;
         if (!activeConfig) {
             const HostelConfiguration = require('../models/HostelConfiguration');
-            const dbConfig = await HostelConfiguration.findOne({ isActive: true }).lean();
-            if (dbConfig) {
+            // No more single-active exclusivity: an org can have several
+            // configs active at once (e.g. a Female wing config and a Male
+            // wing config), so aggregate room-template inventory across all
+            // of them rather than assuming exactly one.
+            const dbConfigs = await HostelConfiguration.find({ isActive: true, organizationId: req.currentUser.organizationId }).lean();
+            if (dbConfigs.length > 0) {
                 activeConfig = {
-                    roomTemplates: dbConfig.roomTemplates.map(t => ({
+                    roomTemplates: dbConfigs.flatMap(c => c.roomTemplates.map(t => ({
                         capacity: t.capacity,
                         count: t.count
-                    }))
+                    })))
                 };
             }
         }
 
-        const profiles = await Profile.find({});
+        const profiles = await Profile.find({ organizationId: req.currentUser.organizationId });
         if (profiles.length < 3) {
             return res.status(400).json({ error: 'Not enough profiles to run allocation (minimum 3 required)' });
         }
-        
+
         // Exclude students who are already placed in locked allocations
-        const lockedAllocations = await RoomAllocation.find({ isLocked: true });
+        const lockedAllocations = await RoomAllocation.find({ isLocked: true, organizationId: req.currentUser.organizationId });
         const lockedEmails = new Set(lockedAllocations.flatMap(a => a.members));
         const activeProfiles = profiles.filter(p => !lockedEmails.has(p.user_id));
 
@@ -268,6 +276,7 @@ exports.triggerAllocation = async (req, res) => {
             if (roomData) {
                 const roomCapacity = capacityPool.length > 0 ? capacityPool.shift() : (alloc.members ? alloc.members.length : CAPACITY_PER_ROOM);
                 newAllocations.push({
+                    organizationId: req.currentUser.organizationId,
                     allocation_run_id: result.run_id || 'manual_id',
                     gender_group: alloc.gender_group,
                     compatibility_score: alloc.compatibility_score,
@@ -289,7 +298,7 @@ exports.triggerAllocation = async (req, res) => {
 
         // Snapshot which unlocked allocations exist right now, for the cascade
         // delete below. Pure read, not destructive.
-        const oldAllocs = await RoomAllocation.find({ isLocked: { $ne: true } }).lean();
+        const oldAllocs = await RoomAllocation.find({ isLocked: { $ne: true }, organizationId: req.currentUser.organizationId }).lean();
         const oldIds = oldAllocs.map(a => a._id);
 
         // Safe swap: insert the new rooms FIRST, only delete the old ones after
@@ -348,8 +357,8 @@ exports.triggerAllocation = async (req, res) => {
 
 exports.downloadReport = async (req, res) => {
     try {
-        const allocs = await RoomAllocation.find({}).lean();
-        const profiles = await Profile.find({}).lean();
+        const allocs = await RoomAllocation.find({ organizationId: req.currentUser.organizationId }).lean();
+        const profiles = await Profile.find({ organizationId: req.currentUser.organizationId }).lean();
         
         const profileMap = {};
         profiles.forEach(p => profileMap[p.user_id] = p);
@@ -383,8 +392,8 @@ exports.downloadReport = async (req, res) => {
 
 exports.getAllocations = async (req, res) => {
     try {
-        const rawAllocs = await RoomAllocation.find({}).lean();
-        const allProfiles = await Profile.find({}).lean();
+        const rawAllocs = await RoomAllocation.find({ organizationId: req.currentUser.organizationId }).lean();
+        const allProfiles = await Profile.find({ organizationId: req.currentUser.organizationId }).lean();
         
         const profileMap = new Map();
         allProfiles.forEach(p => profileMap.set(p.user_id, p));
@@ -422,12 +431,12 @@ exports.getSubmissionStats = async (req, res) => {
         const Profile = require('../models/Profile');
 
         // Union of all student users and profiles to find total population
-        const studentsFromUsers = await User.find({ role: { $ne: 'ADMIN' } }).distinct('email');
-        const studentsFromProfiles = await Profile.distinct('user_id');
+        const studentsFromUsers = await User.find({ role: { $ne: 'ADMIN' }, organizationId: req.currentUser.organizationId }).distinct('email');
+        const studentsFromProfiles = await Profile.distinct('user_id', { organizationId: req.currentUser.organizationId });
         const allStudentEmails = new Set([...studentsFromUsers, ...studentsFromProfiles]);
 
         const totalStudents = allStudentEmails.size;
-        const profilesCompleted = await Profile.countDocuments({ profileCompleted: { $ne: false } });
+        const profilesCompleted = await Profile.countDocuments({ profileCompleted: { $ne: false }, organizationId: req.currentUser.organizationId });
         const profilesPending = Math.max(0, totalStudents - profilesCompleted);
         const submissionProgress = totalStudents > 0 ? Math.round((profilesCompleted / totalStudents) * 100) : 0;
 
@@ -445,12 +454,12 @@ exports.getSubmissionStats = async (req, res) => {
 
 exports.getAnalytics = async (req, res) => {
     try {
-        const payload = await analyticsService.calculateAnalytics();
-        
+        const payload = await analyticsService.calculateAnalytics(req.currentUser.organizationId);
+
         // Enrich with conflict analysis summary DTO
         const conflictService = require('../services/conflictPredictionService');
-        const allocationsDocs = await RoomAllocation.find({}).lean();
-        const completedProfilesDocs = await Profile.find({ profileCompleted: { $ne: false } }).lean();
+        const allocationsDocs = await RoomAllocation.find({ organizationId: req.currentUser.organizationId }).lean();
+        const completedProfilesDocs = await Profile.find({ profileCompleted: { $ne: false }, organizationId: req.currentUser.organizationId }).lean();
 
         const conflictAnalysis = conflictService.analyzeAllRooms(allocationsDocs, completedProfilesDocs);
         payload.conflictAnalysis = conflictAnalysis;
@@ -473,8 +482,9 @@ exports.manualSwap = async (req, res) => {
         const validIdA = roomAId.match(/^[0-9a-fA-F]{24}$/) ? roomAId : null;
         const validIdB = roomBId.match(/^[0-9a-fA-F]{24}$/) ? roomBId : null;
         
-        const roomA = await RoomAllocation.findOne({ $or: [{ room_number: roomAId }, { _id: validIdA }] });
-        const roomB = await RoomAllocation.findOne({ $or: [{ room_number: roomBId }, { _id: validIdB }] });
+        const orgFilter = { organizationId: req.currentUser.organizationId };
+        const roomA = await RoomAllocation.findOne({ ...orgFilter, $or: [{ room_number: roomAId }, { _id: validIdA }] });
+        const roomB = await RoomAllocation.findOne({ ...orgFilter, $or: [{ room_number: roomBId }, { _id: validIdB }] });
         
         if (!roomA || !roomB) {
             return res.status(404).json({ error: 'Room not found. Make sure to use exact Room Number (e.g. D-101).' });
@@ -514,7 +524,13 @@ exports.toggleRoomLock = async (req, res) => {
         if (typeof isLocked !== 'boolean') {
             return res.status(400).json({ error: 'isLocked must be a boolean' });
         }
-        await RoomAllocation.findByIdAndUpdate(roomId, { isLocked: isLocked });
+        const updated = await RoomAllocation.findOneAndUpdate(
+            { _id: roomId, organizationId: req.currentUser.organizationId },
+            { isLocked: isLocked }
+        );
+        if (!updated) {
+            return res.status(404).json({ error: 'Room not found' });
+        }
         res.json({ message: `Room ${isLocked ? 'locked' : 'unlocked'}` });
     } catch (err) {
         res.status(500).json({ error: 'Locking failed' });
@@ -523,10 +539,10 @@ exports.toggleRoomLock = async (req, res) => {
 
 exports.getChangeRequests = async (req, res) => {
     try {
-        const reqs = await ChangeRequest.find({}).populate('currentRoomId').sort({ createdAt: -1 }).lean();
-        
+        const reqs = await ChangeRequest.find({ organizationId: req.currentUser.organizationId }).populate('currentRoomId').sort({ createdAt: -1 }).lean();
+
         for (let r of reqs) {
-             const actualRoom = await RoomAllocation.findOne({ members: r.studentId });
+             const actualRoom = await RoomAllocation.findOne({ members: r.studentId, organizationId: req.currentUser.organizationId });
              if (actualRoom) {
                  r.actualRoomNumber = actualRoom.room_number || actualRoom.allocation_run_id;
                  r.actualRoomId = actualRoom._id;
@@ -544,7 +560,11 @@ exports.handleRequestAction = async (req, res) => {
         if (!requestId || !status) {
             return res.status(400).json({ error: 'requestId and status are required' });
         }
-        const cReq = await ChangeRequest.findByIdAndUpdate(requestId, { status }, { new: true });
+        const cReq = await ChangeRequest.findOneAndUpdate(
+            { _id: requestId, organizationId: req.currentUser.organizationId },
+            { status },
+            { new: true }
+        );
         if (!cReq) {
             return res.status(404).json({ error: 'Request not found' });
         }

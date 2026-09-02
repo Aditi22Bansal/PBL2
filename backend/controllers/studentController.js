@@ -8,7 +8,7 @@ exports.getDashboardData = async (req, res) => {
         const email = req.currentUser.email;
 
         const dashboardService = require('../services/studentDashboardService');
-        const payload = await dashboardService.getDashboardDTO(email);
+        const payload = await dashboardService.getDashboardDTO(email, req.currentUser.organizationId);
         res.json(payload);
     } catch (error) {
         console.error(error);
@@ -21,7 +21,7 @@ exports.getProfile = async (req, res) => {
     try {
         const email = req.currentUser.email;
 
-        const profile = await Profile.findOne({ user_id: email });
+        const profile = await Profile.findOne({ user_id: email, organizationId: req.currentUser.organizationId });
         if (!profile) {
             return res.json({ user_id: email, profileCompleted: false });
         }
@@ -36,10 +36,12 @@ exports.getProfile = async (req, res) => {
 exports.saveProfile = async (req, res) => {
     try {
         const email = req.currentUser.email;
+        const organizationId = req.currentUser.organizationId;
 
         const updateData = {
             ...req.body,
             user_id: email,
+            organizationId,
             profileCompleted: false,
             lastEditedAt: new Date()
         };
@@ -48,7 +50,7 @@ exports.saveProfile = async (req, res) => {
         delete updateData.email;
 
         const profile = await Profile.findOneAndUpdate(
-            { user_id: email },
+            { user_id: email, organizationId },
             { $set: updateData },
             { new: true, upsert: true }
         );
@@ -63,10 +65,12 @@ exports.saveProfile = async (req, res) => {
 exports.submitProfile = async (req, res) => {
     try {
         const email = req.currentUser.email;
+        const organizationId = req.currentUser.organizationId;
 
         const updateData = {
             ...req.body,
             user_id: email,
+            organizationId,
             profileCompleted: true,
             submittedAt: new Date(),
             lastEditedAt: new Date()
@@ -76,7 +80,7 @@ exports.submitProfile = async (req, res) => {
         delete updateData.email;
 
         const profile = await Profile.findOneAndUpdate(
-            { user_id: email },
+            { user_id: email, organizationId },
             { $set: updateData },
             { new: true, upsert: true }
         );
@@ -116,6 +120,7 @@ exports.submitChangeRequest = async (req, res) => {
         const name = req.currentUser.name;
 
         const newReq = new ChangeRequest({
+            organizationId: req.currentUser.organizationId,
             studentId: email,
             studentName: name,
             currentRoomId: roomId,
