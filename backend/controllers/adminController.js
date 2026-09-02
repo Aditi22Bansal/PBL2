@@ -3,6 +3,7 @@ const csv = require('csv-parser');
 const Profile = require('../models/Profile');
 const RoomAllocation = require('../models/RoomAllocation');
 const ChangeRequest = require('../models/ChangeRequest');
+const Chat = require('../models/Chat');
 const { runPythonAllocation } = require('../services/allocationService');
 const analyticsService = require('../services/analyticsService');
 
@@ -280,18 +281,53 @@ exports.triggerAllocation = async (req, res) => {
             }
         }
 
-        // Delete all UNLOCKED previous allocations
-        const deletedAllocs = await RoomAllocation.find({ isLocked: { $ne: true } }).lean();
-        const deletedIds = deletedAllocs.map(a => a._id);
-        await RoomAllocation.deleteMany({ isLocked: { $ne: true } });
-
-        // Cascade delete orphaned chat messages and change requests
-        if (deletedIds.length > 0) {
-            await Chat.deleteMany({ room_id: { $in: deletedIds } });
-            await ChangeRequest.deleteMany({ currentRoomId: { $in: deletedIds } });
+        // Validate the freshly computed allocation BEFORE touching any existing
+        // data. Nothing destructive happens above this line.
+        if (!Array.isArray(newAllocations) || newAllocations.length === 0) {
+            throw new Error('Allocation engine returned no valid rooms to save — aborting before touching existing data.');
         }
 
-        await RoomAllocation.insertMany(newAllocations);
+        // Snapshot which unlocked allocations exist right now, for the cascade
+        // delete below. Pure read, not destructive.
+        const oldAllocs = await RoomAllocation.find({ isLocked: { $ne: true } }).lean();
+        const oldIds = oldAllocs.map(a => a._id);
+
+        // Safe swap: insert the new rooms FIRST, only delete the old ones after
+        // the insert has actually succeeded. This machine runs MongoDB as a
+        // standalone instance (confirmed via the `hello` command - no `setName`,
+        // so no replica set), which does not support multi-document
+        // transactions, so we can't wrap this in one. Insert-before-delete is
+        // the safer ordering without a transaction: if the insert fails, the
+        // catch below fires with nothing deleted yet and the old rooms are
+        // untouched. There's no unique index on room_number, so new/old rooms
+        // briefly coexisting during this window is harmless. The old failure
+        // mode (delete-then-insert with a crash in between, e.g. the
+        // previously-missing Chat import) could leave zero rooms in the DB;
+        // this ordering can't produce that outcome.
+        let insertedNewRooms = false;
+        try {
+            await RoomAllocation.insertMany(newAllocations);
+            insertedNewRooms = true;
+
+            await RoomAllocation.deleteMany({ _id: { $in: oldIds } });
+
+            // Cascade delete orphaned chat messages and change requests
+            if (oldIds.length > 0) {
+                await Chat.deleteMany({ room_id: { $in: oldIds } });
+                await ChangeRequest.deleteMany({ currentRoomId: { $in: oldIds } });
+            }
+        } catch (swapErr) {
+            console.error('[triggerAllocation] Mid-swap failure while replacing room allocations.', {
+                insertedNewRooms,
+                oldRoomIdsPendingCleanup: oldIds.map(id => id.toString()),
+                error: swapErr
+            });
+            throw new Error(
+                `Allocation swap failed partway (new rooms inserted: ${insertedNewRooms}). ` +
+                `${insertedNewRooms ? 'Old rooms may still be present alongside the new ones — manual cleanup may be required.' : 'No existing data was touched.'} ` +
+                `Root cause: ${swapErr.message}`
+            );
+        }
 
         const runId = result.run_id || `run_${Date.now().toString(16)}`;
 

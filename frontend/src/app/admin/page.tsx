@@ -198,7 +198,13 @@ export default function AdminDashboard() {
       fetchAllocations();
       fetchAnalytics();
     } catch (err: any) {
-      setMessage("Error: " + (err.response?.data?.message || err.message));
+      const data = err.response?.data;
+      let errMsg = data?.error || data?.message || err.message;
+      if (data?.capacityShortfall) {
+        const cs = data.capacityShortfall;
+        errMsg += ` (${cs.total_students} students, ${cs.total_beds} beds — short by ${cs.shortfall})`;
+      }
+      setMessage("Error: " + errMsg);
     } finally {
       setAllocating(false);
     }
