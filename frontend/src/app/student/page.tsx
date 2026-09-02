@@ -12,7 +12,7 @@ import {
 import { motion } from "framer-motion";
 import RoomChat from "@/components/RoomChat";
 import QuestionnaireWizard from "@/components/QuestionnaireWizard";
-import { API_URL } from "@/lib/api";
+import { PROXY_URL } from "@/lib/api";
 
 export default function StudentDashboard() {
   const { data: session, status } = useSession();
@@ -32,7 +32,7 @@ export default function StudentDashboard() {
           return;
       }
       
-      const res = await axios.get(`${API_URL}/api/student/dashboard/${email}`);
+      const res = await axios.get(`${PROXY_URL}/student/dashboard`);
       setDashboardData(res.data);
       
       // If student hasn't submitted questionnaire, auto-show wizard

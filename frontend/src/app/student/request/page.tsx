@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { ArrowLeft, Check, Loader2, Send, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
-import { API_URL } from "@/lib/api";
+import { PROXY_URL } from "@/lib/api";
 
 export default function StudentRequestPage() {
   const { data: session, status } = useSession();
@@ -22,7 +22,7 @@ export default function StudentRequestPage() {
     try {
       const email = session?.user?.email;
       if (!email) return;
-      const res = await axios.get(`${API_URL}/api/student/dashboard/${email}`);
+      const res = await axios.get(`${PROXY_URL}/student/dashboard`);
       if (res.data.status === 'ALLOCATED') {
           setAllocation(res.data.allocation);
       } else {
@@ -54,9 +54,9 @@ export default function StudentRequestPage() {
       
       setSubmitting(true);
       try {
-          await axios.post(`${API_URL}/api/student/change-request`, {
-              email,
-              name,
+          // email/name are derived server-side from the verified session by the
+          // proxy + backend now, not sent from the client.
+          await axios.post(`${PROXY_URL}/student/change-request`, {
               roomId: allocation.roomId,
               reason
           });

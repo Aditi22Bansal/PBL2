@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, Fragment } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { API_URL } from "@/lib/api";
+import { PROXY_URL } from "@/lib/api";
 import {
   LogOut, Home, Play, Upload, CheckCircle2, Database,
   Trash2, Plus, AlertTriangle, Download, FileText, Search, Filter, Sparkles,
@@ -87,7 +87,7 @@ export default function AdminDashboard() {
 
   const fetchAllocations = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/admin/allocations`);
+      const res = await axios.get(`${PROXY_URL}/admin/allocations`);
       setAllocations(res.data.allocations || []);
     } catch (error) {
       console.error("Failed to fetch allocations:", error);
@@ -96,7 +96,7 @@ export default function AdminDashboard() {
 
   const fetchConfigs = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/admin/hostel-configurations`);
+      const res = await axios.get(`${PROXY_URL}/admin/hostel-configurations`);
       setConfigs(res.data);
     } catch (error) {
       console.error("Failed to fetch configurations:", error);
@@ -105,7 +105,7 @@ export default function AdminDashboard() {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/admin/analytics`);
+      const res = await axios.get(`${PROXY_URL}/admin/analytics`);
       setAnalytics(res.data);
     } catch (error) {
       console.error("Failed to fetch analytics:", error);
@@ -126,9 +126,9 @@ export default function AdminDashboard() {
       };
 
       if (formConfigId) {
-        await axios.put(`${API_URL}/api/admin/hostel-configurations/${formConfigId}`, payload);
+        await axios.put(`${PROXY_URL}/admin/hostel-configurations/${formConfigId}`, payload);
       } else {
-        await axios.post(`${API_URL}/api/admin/hostel-configurations`, payload);
+        await axios.post(`${PROXY_URL}/admin/hostel-configurations`, payload);
       }
 
       setShowForm(false);
@@ -151,7 +151,7 @@ export default function AdminDashboard() {
 
   const handleActivateConfig = async (id: string) => {
     try {
-      await axios.patch(`${API_URL}/api/admin/hostel-configurations/${id}/activate`);
+      await axios.patch(`${PROXY_URL}/admin/hostel-configurations/${id}/activate`);
       fetchConfigs();
       fetchAnalytics();
     } catch (err: any) {
@@ -163,7 +163,7 @@ export default function AdminDashboard() {
   const handleDeleteConfig = async (id: string) => {
     if (!confirm("Are you sure you want to delete this configuration?")) return;
     try {
-      await axios.delete(`${API_URL}/api/admin/hostel-configurations/${id}`);
+      await axios.delete(`${PROXY_URL}/admin/hostel-configurations/${id}`);
       fetchConfigs();
       fetchAnalytics();
     } catch (err: any) {
@@ -177,7 +177,7 @@ export default function AdminDashboard() {
     setSyncing(true);
     setMessage("");
     try {
-      const res = await axios.post(`${API_URL}/api/admin/sync-csv`, { sheet_url: sheetUrl });
+      const res = await axios.post(`${PROXY_URL}/admin/sync-csv`, { sheet_url: sheetUrl });
       setMessage(res.data.message);
       fetchAllocations();
       fetchAnalytics();
@@ -192,7 +192,7 @@ export default function AdminDashboard() {
     setAllocating(true);
     setMessage("Running Similarity Matrix & Clustering... Please wait.");
     try {
-      const res = await axios.post(`${API_URL}/api/admin/trigger-allocation`);
+      const res = await axios.post(`${PROXY_URL}/admin/trigger-allocation`);
       setMessage(res.data.message + ` | Rooms Formed: ${res.data.total_rooms}`);
       if(res.data.metrics) setMetrics(res.data.metrics);
       fetchAllocations();

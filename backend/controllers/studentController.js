@@ -5,11 +5,8 @@ const User = require('../models/User');
 
 exports.getDashboardData = async (req, res) => {
     try {
-        const email = req.headers['x-user-email'] || req.params.email;
-        if (!email) {
-            return res.status(400).json({ error: 'Email parameter or X-User-Email header is required.' });
-        }
-        
+        const email = req.currentUser.email;
+
         const dashboardService = require('../services/studentDashboardService');
         const payload = await dashboardService.getDashboardDTO(email);
         res.json(payload);
@@ -22,10 +19,7 @@ exports.getDashboardData = async (req, res) => {
 // GET /api/student/profile
 exports.getProfile = async (req, res) => {
     try {
-        const email = req.headers['x-user-email'];
-        if (!email) {
-            return res.status(401).json({ error: 'Unauthorized: X-User-Email header missing' });
-        }
+        const email = req.currentUser.email;
 
         const profile = await Profile.findOne({ user_id: email });
         if (!profile) {
@@ -41,10 +35,7 @@ exports.getProfile = async (req, res) => {
 // PUT /api/student/profile
 exports.saveProfile = async (req, res) => {
     try {
-        const email = req.headers['x-user-email'];
-        if (!email) {
-            return res.status(401).json({ error: 'Unauthorized: X-User-Email header missing' });
-        }
+        const email = req.currentUser.email;
 
         const updateData = {
             ...req.body,
@@ -71,10 +62,7 @@ exports.saveProfile = async (req, res) => {
 // POST /api/student/profile/submit
 exports.submitProfile = async (req, res) => {
     try {
-        const email = req.headers['x-user-email'];
-        if (!email) {
-            return res.status(401).json({ error: 'Unauthorized: X-User-Email header missing' });
-        }
+        const email = req.currentUser.email;
 
         const updateData = {
             ...req.body,
@@ -123,8 +111,10 @@ exports.submitPreferences = async (req, res) => {
 
 exports.submitChangeRequest = async (req, res) => {
     try {
-        const { email, name, roomId, reason } = req.body;
-        
+        const { roomId, reason } = req.body;
+        const email = req.currentUser.email;
+        const name = req.currentUser.name;
+
         const newReq = new ChangeRequest({
             studentId: email,
             studentName: name,

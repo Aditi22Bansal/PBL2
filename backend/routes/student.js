@@ -1,9 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const studentController = require('../controllers/studentController');
+const { requireAuth } = require('../middleware/requireAuth');
 
-// Student Dashboard - Get own allocation
-router.get('/dashboard/:email', studentController.getDashboardData);
+// Every student route requires a real, server-verified identity.
+router.use(requireAuth);
+
+// Student Dashboard - Get own allocation. No :email param - always the
+// verified caller's own dashboard, never anyone else's.
+router.get('/dashboard', studentController.getDashboardData);
 
 // Profile management routes
 router.get('/profile', studentController.getProfile);

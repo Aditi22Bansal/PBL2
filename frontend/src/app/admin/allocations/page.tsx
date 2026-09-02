@@ -7,7 +7,7 @@ import axios from "axios";
 import { ArrowLeft, Database, Lock, Unlock, Shuffle, FileText, ShieldAlert } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { API_URL } from "@/lib/api";
+import { PROXY_URL } from "@/lib/api";
 
 export default function AdminAllocations() {
   const { data: session, status } = useSession();
@@ -34,7 +34,7 @@ export default function AdminAllocations() {
   const fetchAllocations = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_URL}/api/admin/allocations`);
+      const res = await axios.get(`${PROXY_URL}/admin/allocations`);
       if (res.data.allocations) {
          setAllocations(res.data.allocations);
          setUnassigned(res.data.unassigned || []);
@@ -56,7 +56,7 @@ export default function AdminAllocations() {
       ));
 
        try {
-           await axios.post(`${API_URL}/api/admin/allocations/toggle-lock`, {
+           await axios.post(`${PROXY_URL}/admin/allocations/toggle-lock`, {
                roomId: roomId,
                isLocked: newStatus
            });
@@ -75,7 +75,7 @@ export default function AdminAllocations() {
    const handleSwap = async (e: any) => {
       e.preventDefault();
       try {
-          await axios.post(`${API_URL}/api/admin/allocations/manual-swap`, swapData);
+          await axios.post(`${PROXY_URL}/admin/allocations/manual-swap`, swapData);
           setSwapping(false);
           setSwapData({ roomAId: '', memberA: '', roomBId: '', memberB: '' });
           alert("Swap completed successfully!");
@@ -89,7 +89,7 @@ export default function AdminAllocations() {
   const handleForceAllocate = async () => {
       setForceAllocating(true);
       try {
-          const res = await axios.post(`${API_URL}/api/admin/force-allocate`);
+          const res = await axios.post(`${PROXY_URL}/admin/force-allocate`);
           alert(res.data.message);
           fetchAllocations();
        // eslint-disable-next-line @typescript-eslint/no-explicit-any

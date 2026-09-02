@@ -5,11 +5,7 @@ const mongoose = require('mongoose');
 exports.getRoomChat = async (req, res) => {
     try {
         const { room_id } = req.params;
-        const { email } = req.query; // Sender's email to verify access
-
-        if (!email) {
-            return res.status(400).json({ error: 'Email is required to access chat' });
-        }
+        const email = req.currentUser.email;
 
         if (!mongoose.Types.ObjectId.isValid(room_id)) {
             return res.status(400).json({ error: 'Invalid room ID' });
@@ -39,10 +35,12 @@ exports.getRoomChat = async (req, res) => {
 exports.sendMessage = async (req, res) => {
     try {
         const { room_id } = req.params;
-        const { email, name, message } = req.body;
+        const { message } = req.body;
+        const email = req.currentUser.email;
+        const name = req.currentUser.name;
 
-        if (!email || !name || !message) {
-            return res.status(400).json({ error: 'Email, name, and message are required' });
+        if (!message) {
+            return res.status(400).json({ error: 'Message is required' });
         }
 
         if (!mongoose.Types.ObjectId.isValid(room_id)) {

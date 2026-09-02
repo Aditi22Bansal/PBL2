@@ -6,7 +6,7 @@ import { Send, MessageSquare, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { io, Socket } from "socket.io-client";
-import { API_URL } from "@/lib/api";
+import { API_URL, PROXY_URL } from "@/lib/api";
 
 interface RoomChatProps {
   roomId: string;
@@ -29,9 +29,9 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
     }
     
     try {
-      const res = await axios.get(
-        `${API_URL}/api/chat/${roomId}?email=${encodeURIComponent(currentUserEmail)}`
-      );
+      // Identity comes from the verified session via the proxy now, not a
+      // client-supplied email query param.
+      const res = await axios.get(`${PROXY_URL}/chat/${roomId}`);
       setMessages(res.data);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
@@ -105,9 +105,9 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
     socketRef.current?.emit("send_message", newMsgData);
 
     try {
-      await axios.post(`${API_URL}/api/chat/${roomId}`, {
-        email: currentUserEmail,
-        name: currentUserName,
+      // Identity comes from the verified session via the proxy now, not
+      // client-supplied email/name fields.
+      await axios.post(`${PROXY_URL}/chat/${roomId}`, {
         message: tempMessage,
       });
       // Silent fetch to ensure consistency
