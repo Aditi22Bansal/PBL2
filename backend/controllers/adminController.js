@@ -248,14 +248,14 @@ exports.triggerAllocation = async (req, res) => {
             return null; 
         };
 
-        const newAllocations = [];
+        const finalAllocations = [];
         
         const processResults = (result, allowedBlocks) => {
             if (!result || !result.allocations) return;
             for (let alloc of result.allocations) {
                 const roomData = assignRoom(allowedBlocks);
                 if (roomData) {
-                    newAllocations.push({
+                    finalAllocations.push({
                         allocation_run_id: result.run_id || 'manual_id',
                         gender_group: alloc.gender_group,
                         compatibility_score: alloc.compatibility_score,
@@ -277,7 +277,7 @@ exports.triggerAllocation = async (req, res) => {
 
         // Delete all UNLOCKED previous allocations
         await RoomAllocation.deleteMany({ isLocked: { $ne: true } });
-        await RoomAllocation.insertMany(newAllocations);
+        await RoomAllocation.insertMany(finalAllocations);
 
         res.json({
             message: 'Allocation completed successfully',

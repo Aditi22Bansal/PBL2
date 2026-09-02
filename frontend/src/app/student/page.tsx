@@ -21,18 +21,6 @@ export default function StudentDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/");
-    } else if (status === "authenticated") {
-      if (session.user?.role === "admin" || session.user?.role === "ADMIN") {
-        router.push("/admin");
-      } else {
-        fetchDashboardData();
-      }
-    }
-  }, [status, router, session, fetchDashboardData]);
-
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -60,8 +48,30 @@ export default function StudentDashboard() {
     }
   }, [session]);
 
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/");
+    } else if (status === "authenticated") {
+      if (session.user?.role === "admin" || session.user?.role === "ADMIN") {
+        router.push("/admin");
+      } else {
+        fetchDashboardData();
+      }
+    }
+  }, [status, router, session, fetchDashboardData]);
+
   const handleDownloadPDF = () => {
     window.print();
+  };
+
+  const getCapacityLabel = (capacity: number) => {
+    switch (capacity) {
+      case 1: return "Single";
+      case 2: return "Double";
+      case 3: return "Triple";
+      case 4: return "Quad";
+      default: return `${capacity}-Bed`;
+    }
   };
 
   if (status === "loading" || (status === "authenticated" && loading)) {
