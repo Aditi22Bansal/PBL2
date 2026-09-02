@@ -549,8 +549,12 @@ export default function AdminDashboard() {
                   <div className="text-md font-bold text-slate-800 mt-1.5">
                     {analytics.allocationQuality.highestCompatibilityRoom ? (
                       <>
-                        <span className="text-blue-600">{analytics.allocationQuality.highestCompatibilityRoom.room_number}</span> 
-                        <span className="text-xs text-slate-400 font-medium ml-1">({analytics.allocationQuality.highestCompatibilityRoom.compatibility_score}%)</span>
+                        <span className="text-blue-600">{analytics.allocationQuality.highestCompatibilityRoom.room_number}</span>
+                        <span className="text-xs text-slate-400 font-medium ml-1">
+                          {analytics.allocationQuality.highestCompatibilityRoom.raw_compatibility_score < 0
+                            ? '(Below Average Match)'
+                            : `(${analytics.allocationQuality.highestCompatibilityRoom.compatibility_score}%)`}
+                        </span>
                       </>
                     ) : "N/A"}
                   </div>
@@ -560,8 +564,12 @@ export default function AdminDashboard() {
                   <div className="text-md font-bold text-slate-800 mt-1.5">
                     {analytics.allocationQuality.lowestCompatibilityRoom ? (
                       <>
-                        <span className="text-red-500">{analytics.allocationQuality.lowestCompatibilityRoom.room_number}</span> 
-                        <span className="text-xs text-slate-400 font-medium ml-1">({analytics.allocationQuality.lowestCompatibilityRoom.compatibility_score}%)</span>
+                        <span className="text-red-500">{analytics.allocationQuality.lowestCompatibilityRoom.room_number}</span>
+                        <span className="text-xs text-slate-400 font-medium ml-1">
+                          {analytics.allocationQuality.lowestCompatibilityRoom.raw_compatibility_score < 0
+                            ? '(Below Average Match)'
+                            : `(${analytics.allocationQuality.lowestCompatibilityRoom.compatibility_score}%)`}
+                        </span>
                       </>
                     ) : "N/A"}
                   </div>
@@ -1262,7 +1270,14 @@ export default function AdminDashboard() {
                             (a.compatibility_score || 0) < 0.88 ? 'text-amber-500' :
                             'text-emerald-600'
                           }>
-                            {Math.round((a.compatibility_score || 0) * 100)}%
+                            {/* Raw score can be negative (rooms form even at very low
+                                compatibility rather than being rejected); floor the
+                                displayed percentage at 0 and use the same "Below
+                                Average Match" label as the student dashboard instead
+                                of a confusing negative number. */}
+                            {(a.compatibility_score || 0) < 0
+                              ? 'Below Average Match'
+                              : `${Math.round((a.compatibility_score || 0) * 100)}%`}
                           </span>
                         </td>
                         <td className="px-8 py-5 text-center">

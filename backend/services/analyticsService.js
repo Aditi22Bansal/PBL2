@@ -190,7 +190,10 @@ const calculateAnalytics = async () => {
 
     const emptyBeds = Math.max(0, totalBeds - occupiedBeds);
     const hostelUtilization = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
-    const averageCompatibility = totalRoomsGenerated > 0 ? Math.round((sumCompatibility / totalRoomsGenerated) * 100) : 0;
+    // sumCompatibility is the sum of raw (possibly negative) scores - kept as-is
+    // for an accurate average internally. Only the displayed percentage is
+    // floored at 0, same treatment as the student dashboard fix.
+    const averageCompatibility = totalRoomsGenerated > 0 ? Math.max(0, Math.round((sumCompatibility / totalRoomsGenerated) * 100)) : 0;
     const averageRoomSize = totalRoomsGenerated > 0 ? Number((occupiedBeds / totalRoomsGenerated).toFixed(1)) : 0;
 
     // Find completed profiles that are not assigned
@@ -224,10 +227,27 @@ const calculateAnalytics = async () => {
         hostelUtilization
     };
 
+    // Same treatment as the student dashboard fix (conflictPredictionService.js):
+    // expose the raw (possibly negative) percentage for admin-side sorting/
+    // debugging, and floor the displayed compatibility_score at 0. The frontend
+    // uses raw_compatibility_score < 0 (the same threshold as the student
+    // dashboard's "Below Average Match" label) to decide whether to show a
+    // qualitative label instead of the number.
+    const highestRawPercent = highestComp ? Math.round(highestComp.compatibility_score * 100) : null;
+    const lowestRawPercent = lowestComp ? Math.round(lowestComp.compatibility_score * 100) : null;
+
     const allocationQuality = {
         averageCompatibility,
-        highestCompatibilityRoom: highestComp ? { room_number: highestComp.room_number, compatibility_score: Math.round(highestComp.compatibility_score * 100) } : null,
-        lowestCompatibilityRoom: lowestComp ? { room_number: lowestComp.room_number, compatibility_score: Math.round(lowestComp.compatibility_score * 100) } : null,
+        highestCompatibilityRoom: highestComp ? {
+            room_number: highestComp.room_number,
+            compatibility_score: Math.max(0, highestRawPercent),
+            raw_compatibility_score: highestRawPercent
+        } : null,
+        lowestCompatibilityRoom: lowestComp ? {
+            room_number: lowestComp.room_number,
+            compatibility_score: Math.max(0, lowestRawPercent),
+            raw_compatibility_score: lowestRawPercent
+        } : null,
         averageRoomSize,
         unassignedStudents: unassignedStudentsCount,
         flexRooms: flexRoomsCount
