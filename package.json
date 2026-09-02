@@ -1,0 +1,12 @@
+{
+  "name": "roomsync",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RoomSync — Docker Compose orchestration scripts. See CLAUDE.md for full project context.",
+  "scripts": {
+    "dev": "docker compose up --build",
+    "dev:down": "docker compose down",
+    "dev:logs": "docker compose logs -f",
+    "dev:clean": "docker compose down -v"
+  }
+}

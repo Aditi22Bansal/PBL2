@@ -1,0 +1,22 @@
+# RoomSync — Python ML microservice (FastAPI). This is now the real, live-traffic-serving
+# allocation engine (POST /allocate/v2), called over HTTP by the Node backend — not the
+# legacy subprocess-spawned executor.py path.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Only copy what main.py actually imports: domain/, ml_engine/, repositories/, main.py.
+# Deliberately NOT `COPY . .` here - that would drag in node_modules, the Windows venv/
+# (whose compiled binaries wouldn't even run on this Linux image), data/*.csv, scripts/,
+# etc. from the shared backend/ build context.
+COPY domain ./domain
+COPY ml_engine ./ml_engine
+COPY repositories ./repositories
+COPY main.py ./
+
+EXPOSE 8000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -2,9 +2,9 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
-import { ArrowLeft, Loader2, Send, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Send, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { API_URL } from "@/lib/api";
 
@@ -12,10 +12,26 @@ export default function StudentRequestPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [allocation, setAllocation] = useState<any>(null);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  const fetchAllocation = useCallback(async () => {
+    try {
+      const email = session?.user?.email;
+      if (!email) return;
+      const res = await axios.get(`${API_URL}/api/student/dashboard/${email}`);
+      if (res.data.status === 'ALLOCATED') {
+          setAllocation(res.data.allocation);
+      } else {
+          router.push('/student');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [session, router]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -23,37 +39,29 @@ export default function StudentRequestPage() {
     } else if (status === "authenticated") {
       fetchAllocation();
     }
-  }, [status, router, session]);
-
-  const fetchAllocation = async () => {
-    try {
-      const email = session?.user?.email;
-      if (!email) return;
-      const res = await axios.get(`${API_URL}/api/student/dashboard/${email}`);
-      if (res.data.status === 'ALLOCATED') {
-          setAllocation(res.data);
-      } else {
-          router.push('/student');
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  }, [status, router, fetchAllocation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!reason.trim() || !allocation) return;
       
+      const email = session?.user?.email;
+      const name = session?.user?.name;
+      if (!email || !name) {
+          alert('Session expired. Please log in again.');
+          return;
+      }
+      
       setSubmitting(true);
       try {
           await axios.post(`${API_URL}/api/student/change-request`, {
-              email: session?.user?.email,
-              name: session?.user?.name,
-              roomId: allocation.room_id,
-              reason: reason
+              email,
+              name,
+              roomId: allocation.roomId,
+              reason
           });
           setSuccess(true);
-      } catch (err) {
+      } catch {
           alert('Failed to submit request');
       } finally {
           setSubmitting(false);
@@ -118,5 +126,4 @@ export default function StudentRequestPage() {
   );
 }
 
-// Inline fallback for Check
-const Check = ({className, size}: any) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"></polyline></svg>
+

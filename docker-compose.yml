@@ -1,0 +1,82 @@
+# RoomSync — full stack via Docker Compose (REST architecture: backend <-HTTP-> python-service,
+# not the legacy subprocess path - see backend/services/allocationService.js).
+#
+# Host ports default EXACTLY to what's normally used locally (3000/5000/8000/27017), via
+# ${VAR:-default} substitution. If those are already taken by manually-running dev servers,
+# override on invocation instead of editing this file, e.g.:
+#   FRONTEND_PORT=3001 BACKEND_PORT=5001 PYTHON_PORT=8001 MONGO_PORT=27018 docker compose up --build
+# Internal container-to-container traffic always uses the fixed internal ports/service
+# names (mongo:27017, python-service:8000, backend:5000) regardless of these overrides.
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: roomsync-mongo
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  python-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.python
+    container_name: roomsync-python-service
+    ports:
+      - "${PYTHON_PORT:-8000}:8000"
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: roomsync-backend
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    environment:
+      PORT: 5000
+      # Service name, not 127.0.0.1/localhost - resolved via Docker's internal DNS.
+      MONGO_URI: mongodb://mongo:27017/hostel_allocator
+      DEV_AUTH: "true"
+      PYTHON_SERVICE_URL: http://python-service:8000
+      USE_REST_ALLOCATION: "true"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      python-service:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Browser-facing URL - must resolve from the HOST, so it tracks whatever port
+        # the backend is actually published on (see the header comment above).
+        NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-5000}
+        NEXT_PUBLIC_DEV_AUTH: "true"
+    container_name: roomsync-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      # Server-side (NextAuth callbacks, API-route proxy) - runs inside this container,
+      # so it uses the compose service name, not localhost.
+      BACKEND_URL: http://backend:5000
+      NEXTAUTH_URL: http://localhost:${FRONTEND_PORT:-3000}
+      NEXTAUTH_SECRET: docker-compose-dev-secret-change-me
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
+    name: roomsync_mongo_data

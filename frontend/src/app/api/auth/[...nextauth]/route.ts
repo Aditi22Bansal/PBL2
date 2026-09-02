@@ -41,8 +41,10 @@ const ProdAuthProviders = [
       password: { label: "Demo Password", type: "password" },
     },
     async authorize(credentials) {
+      const demoPassword = process.env.DEMO_BYPASS_PASSWORD;
       if (
-        credentials?.password === "demo123" &&
+        demoPassword &&
+        credentials?.password === demoPassword &&
         credentials?.email?.endsWith("@sitpune.edu.in")
       ) {
         return {
@@ -76,6 +78,7 @@ export const authOptions = {
       try {
         const cookieStore = await cookies();
         const roleCookie =
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (user as any).role || cookieStore.get("selectedRole")?.value || "STUDENT";
 
         await fetch(`${BACKEND_URL}/api/auth/sync-user`, {
@@ -101,6 +104,7 @@ export const authOptions = {
       if (user) {
         const cookieStore = await cookies();
         const roleCookie =
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (user as any).role || cookieStore.get("selectedRole")?.value || "STUDENT";
         token.role = roleCookie.toUpperCase();
       }

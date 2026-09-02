@@ -400,7 +400,7 @@ export default function Landing() {
         <div>
           <div className="free-tag"><div className="free-dot"/>Early Access Program</div>
           <h2 className="free-h2">Completely free.<br/><em>No strings attached.</em></h2>
-          <p className="free-sub">We're in early research phase. We want institutions to run RoomSync on their real datasets — every new dataset makes the model smarter, more generalizable, and more proven. You get a world-class allocation system. We get richer validation.</p>
+          <p className="free-sub">We&apos;re in early research phase. We want institutions to run RoomSync on their real datasets — every new dataset makes the model smarter, more generalizable, and more proven. You get a world-class allocation system. We get richer validation.</p>
           <button className="btn-free" onClick={() => router.push("/register")}>Apply for early access →</button>
         </div>
         <div className="free-reasons">
@@ -459,11 +459,11 @@ export default function Landing() {
             <div className="bdesc">Transparent communication between assigned roommates. Messages stay private within room groups. Admin can see activity but not content — full privacy, zero toxicity blind spots.</div>
             <div className="chat-demo">
               <div className="csender">Meera K.</div>
-              <div className="cmsg cmsg-them">Hey! I'm Meera. Early riser, keep things tidy 🙂</div>
+              <div className="cmsg cmsg-them">Hey! I&apos;m Meera. Early riser, keep things tidy 🙂</div>
               <div className="csender" style={{textAlign:"right"}}>Aditi S.</div>
-              <div className="cmsg cmsg-me">Same here! What's your study schedule like?</div>
+              <div className="cmsg cmsg-me">Same here! What&apos;s your study schedule like?</div>
               <div className="csender">Meera K.</div>
-              <div className="cmsg cmsg-them">Usually 9–11pm. Rest of the time I'm pretty quiet</div>
+              <div className="cmsg cmsg-them">Usually 9–11pm. Rest of the time I&apos;m pretty quiet</div>
             </div>
           </div>
           <div className="bcard bcard-terra">
@@ -495,7 +495,7 @@ export default function Landing() {
       {/* RESULTS */}
       <section className="results-section" id="results">
         <div className="eyebrow">Research Results</div>
-        <h2 className="sec-h2">Numbers that<br/><em>don't lie.</em></h2>
+          <h2 className="sec-h2">Numbers that<br/><em>don&apos;t lie.</em></h2>
         <p className="sec-sub">Tested against three baseline methods across 48 independent experimental runs using real student survey data from SIT Pune.</p>
         <div className="mstrip">
           {[{n:"0.966",u:"",l:"Avg. compatibility score\nacross all 48 runs"},{n:"98.82",u:"%",l:"Room coverage rate\n— near-complete allocation"},{n:"48",u:"/48",l:"Runs where hybrid model\noutperformed every baseline"},{n:"0–2",u:"",l:"Students left unassigned\nper full semester run"}].map(m=>(
@@ -528,7 +528,7 @@ export default function Landing() {
       <section className="testi-section">
         <div className="eyebrow">Early Feedback</div>
         <h2 className="sec-h2">What people are<br/><em>saying.</em></h2>
-        <p className="sec-sub">From the research team and early hostel staff who've seen the system in action.</p>
+          <p className="sec-sub">From the research team and early hostel staff who&apos;ve seen the system in action.</p>
         <div className="tgrid">
           {[
             {feat:true,stars:"★★★★★",q:"The hybrid approach consistently achieved superior average compatibility and coverage — without ever being beaten by a baseline across all 48 experimental runs.",name:"Amol Dhumane",role:"Lead Researcher · SIT Pune",av:"AD",avBg:"rgba(196,97,58,0.3)",avC:"white"},
@@ -538,7 +538,7 @@ export default function Landing() {
           ].map(t=>(
             <div className={`tcard${t.feat?" tcard-feat":""}`} key={t.name}>
               <div className="tstars">{t.stars}</div>
-              <div className="tquote">"{t.q}"</div>
+              <div className="tquote">&quot;{t.q}&quot;</div>
               <div className="tauthor">
                 <div className="tav" style={{background:t.avBg,color:t.avC}}>{t.av}</div>
                 <div><div className="tname">{t.name}</div><div className="trole">{t.role}</div></div>
@@ -551,8 +551,8 @@ export default function Landing() {
       {/* ROADMAP */}
       <section className="rm-section" id="roadmap">
         <div className="eyebrow">Roadmap</div>
-        <h2 className="sec-h2">Where we're going.<br/><em>Transparently.</em></h2>
-        <p className="sec-sub">We build in the open. Here's exactly what's shipped, what's in progress, and what's coming — no vague promises.</p>
+          <h2 className="sec-h2">Where we&apos;re going.<br/><em>Transparently.</em></h2>
+          <p className="sec-sub">We build in the open. Here&apos;s exactly what&apos;s shipped, what&apos;s in progress, and what&apos;s coming — no vague promises.</p>
         <div className="rmlist">
           {ROADMAP_ITEMS.map(r=>(
             <div className="rm-item" key={r.title}>

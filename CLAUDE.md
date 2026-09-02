@@ -1,0 +1,65 @@
+# RoomSync — Project Context for Claude Code
+
+## What this is
+RoomSync (GitHub: PBL2) — hostel roommate-allocation platform. BTech final year project, 
+being evolved into a generalized B2B SaaS while also satisfying a DevOps course rubric 
+(CI/CD, IaC, containers/K8s, monitoring, reflection report).
+
+## Critical workflow rules — ALWAYS FOLLOW
+- NEVER run git commit, push, stash, checkout, reset, or any command that discards/rewrites 
+  the working tree — UNLESS explicitly instructed in the current prompt. Default is 
+  local-only, no git operations.
+- Windows machine, PowerShell. Real project root: E:\pbl_hostel\PBL2 (not the outer 
+  E:\pbl_hostel, which has its own separate, unused, empty git repo — ignore it)
+- Real repo remote: github.com/Aditi22Bansal/PBL2, branch feature/microservices
+- When editing a file that already has unrelated pre-existing uncommitted changes, only 
+  touch what the current task asks for — leave other in-flight changes alone, and say so 
+  in your report.
+
+## Architecture (current, as of 2026-09-02)
+Real REST-based microservices — NOT subprocess-spawn anymore (that was refactored out):
+- frontend/ — Next.js 16.2 (App Router), React 19.2, NextAuth (dev-auth mode via 
+  DEV_AUTH=true / NEXT_PUBLIC_DEV_AUTH=true, no real passwords needed locally), port 3000
+- backend/ — Node/Express 5, Mongoose 9, Socket.IO, port 5000. Calls the Python service 
+  over HTTP when USE_REST_ALLOCATION=true (this is now the default)
+- Python service — FastAPI (main.py), port 8000. POST /allocate/v2 is the live endpoint 
+  (wraps ml_engine/executor.py's compute_allocation()). The old CLI/subprocess path and 
+  legacy /api/allocate route still exist as fallback but are not the live path.
+- MongoDB — system of record, port 27017
+
+## Docker
+docker-compose.yml at PBL2/ root runs all 4 services. Dockerfiles: backend/Dockerfile 
+(Node), backend/Dockerfile.python (FastAPI), frontend/Dockerfile (Next.js, production 
+build, not dev mode). Known gotcha: NEXT_PUBLIC_API_URL must stay host-reachable 
+(localhost) since it's baked into the client bundle at build time; BACKEND_URL (server-side) 
+correctly uses the backend's Docker service name. If `docker compose up --build` fails 
+resolving registry-1.docker.io, that's a known local BuildKit DNS quirk — retry with 
+DOCKER_BUILDKIT=0.
+IMPORTANT: the Compose stack's Mongo is a fresh container/volume, separate from any 
+locally-running Mongo Windows service. Real demo data (if any) living in a local Mongo 
+install will NOT appear inside the Compose stack unless deliberately migrated.
+
+## Ports & conflicts
+Manual dev servers (node server.js, npm run dev, uvicorn) commonly already occupy 
+3000/5000/8000/27017 locally. Don't kill processes on these ports without asking — report 
+conflicts and let the user decide.
+
+## Product direction (in progress, not yet built)
+Target: multi-tenant B2B SaaS. Hard constraints the allocation engine must NEVER violate: 
+no mixed-gender rooms, no smoking/alcohol incompatibility, 100% of students must be 
+allocated a room (nobody left unassigned). Compatibility score is maximized WITHIN those 
+constraints, not traded off against them. NOT yet implemented — current engine treats 
+compatibility as primary without a hard-constraint layer.
+
+## DevOps rubric being satisfied alongside this project
+CI/CD pipeline (GitHub Actions), config management (Ansible/Puppet), containers + 
+Kubernetes (rolling update/rollback demo), monitoring (Prometheus+Grafana), reflection 
+report. No fixed deadline. Sequencing so far: REST refactor (done) → Docker (done) → 
+CI/CD (next) → K8s → Ansible → monitoring → report.
+
+## Known pre-existing minor bugs (not yet fixed, low priority)
+- Dashboard greets allocated-but-unnamed users as "Welcome back, Unknown" 
+  (Profile.name defaults to "Unknown Name" instead of falling back to session.user.name)
+- /admin/requests shows "Original Assigned Room: Unknown (ID: )" for one stale test record
+- "Things to discuss together" can show a duplicate bullet (conflict reasons aren't 
+  de-duplicated, unlike recommendations which does use a Set)

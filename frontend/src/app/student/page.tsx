@@ -12,6 +12,7 @@ import {
 import { motion } from "framer-motion";
 import RoomChat from "@/components/RoomChat";
 import QuestionnaireWizard from "@/components/QuestionnaireWizard";
+import { API_URL } from "@/lib/api";
 
 export default function StudentDashboard() {
   const { data: session, status } = useSession();
@@ -20,18 +21,6 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/");
-    } else if (status === "authenticated") {
-      if (session.user?.role === "admin" || session.user?.role === "ADMIN") {
-        router.push("/admin");
-      } else {
-        fetchDashboardData();
-      }
-    }
-  }, [status, router, session, fetchDashboardData]);
 
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
@@ -43,7 +32,7 @@ export default function StudentDashboard() {
           return;
       }
       
-      const res = await axios.get(`http://localhost:5000/api/student/dashboard/${email}`);
+      const res = await axios.get(`${API_URL}/api/student/dashboard/${email}`);
       setDashboardData(res.data);
       
       // If student hasn't submitted questionnaire, auto-show wizard
@@ -59,6 +48,18 @@ export default function StudentDashboard() {
       setLoading(false);
     }
   }, [session]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/");
+    } else if (status === "authenticated") {
+      if (session.user?.role === "admin" || session.user?.role === "ADMIN") {
+        router.push("/admin");
+      } else {
+        fetchDashboardData();
+      }
+    }
+  }, [status, router, session, fetchDashboardData]);
 
   const handleDownloadPDF = () => {
     window.print();
@@ -95,6 +96,16 @@ export default function StudentDashboard() {
       </div>
     );
   }
+
+  const getCapacityLabel = (capacity: number) => {
+    switch (capacity) {
+      case 1: return "Single";
+      case 2: return "Double";
+      case 3: return "Triple";
+      case 4: return "Quad";
+      default: return `${capacity}-Bed`;
+    }
+  };
 
   const profile = dashboardData?.profile;
   const allocation = dashboardData?.allocation;
@@ -411,11 +422,14 @@ export default function StudentDashboard() {
                   <span className="text-xs font-bold text-slate-800">Print Assignment Ticket</span>
                   <span className="text-[10px] text-slate-400">Save a physical PDF copy of your matching placement.</span>
                 </button>
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-start gap-2 text-left opacity-60">
+                <button
+                  onClick={() => router.push('/student/request')}
+                  className="p-4 bg-slate-50 border border-slate-200 hover:border-red-300 rounded-2xl flex flex-col items-start gap-2 text-left transition-all"
+                >
                   <ShieldAlert className="w-6 h-6 text-red-500" />
-                  <span className="text-xs font-bold text-slate-800">Report Allocation Issue (Placeholder)</span>
+                  <span className="text-xs font-bold text-slate-800">Report Allocation Issue</span>
                   <span className="text-[10px] text-slate-400">Request review or schedule swap negotiations.</span>
-                </div>
+                </button>
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-start gap-2 text-left opacity-60">
                   <MessageSquare className="w-6 h-6 text-blue-500" />
                   <span className="text-xs font-bold text-slate-800">Room Swap Board (Coming Soon)</span>
@@ -425,13 +439,15 @@ export default function StudentDashboard() {
             </div>
 
             {/* Roommate Chat Area - Keep Chat active (Section 9) */}
+            {session?.user?.email && session?.user?.name && (
             <div className="pt-6 border-t border-slate-200 chat-section">
               <RoomChat 
                 roomId={allocation.roomId} 
-                currentUserEmail={session?.user?.email as string} 
-                currentUserName={session?.user?.name as string} 
+                currentUserEmail={session.user.email}
+                currentUserName={session.user.name}
               />
             </div>
+            )}
 
           </div>
         )}

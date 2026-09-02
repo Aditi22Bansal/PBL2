@@ -96,12 +96,27 @@ class CSVRepository(DataRepository):
             
             # Fill missing numeric info with defaults
             try:
+                gender_val = str(g("gender", "Male")).strip().lower()
+                gender = "Female" if gender_val.startswith("f") else ("Male" if gender_val.startswith("m") else "Other")
+
+                year_val = str(g("year_of_study", "1")).strip().lower()
+                if year_val.startswith("1") or "first" in year_val:
+                    year_of_study = "1st Year"
+                elif year_val.startswith("2") or "second" in year_val:
+                    year_of_study = "2nd Year"
+                elif year_val.startswith("3") or "third" in year_val:
+                    year_of_study = "3rd Year"
+                elif year_val.startswith("4") or "fourth" in year_val:
+                    year_of_study = "4th Year"
+                else:
+                    year_of_study = "1st Year"
+
                 profile = StudentProfile(
                     user_id=str(user_id),
                     name=str(g("name", "Unknown Name")),
                     age=int(float(g("age", 18))),
-                    gender=str(g("gender", "Male")),
-                    year_of_study=str(g("year_of_study", "1")),
+                    gender=gender,
+                    year_of_study=year_of_study,
                     branch=str(g("branch", "Unknown")),
                     sleep_time=str(g("sleep_time", "Unknown")),
                     wake_time=str(g("wake_time", "Unknown")),

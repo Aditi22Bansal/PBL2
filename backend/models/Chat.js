@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const chatSchema = new mongoose.Schema({
-  room_id: { type: mongoose.Schema.Types.ObjectId, ref: 'RoomAllocation', required: true },
+  room_id: { type: mongoose.Schema.Types.ObjectId, ref: 'RoomAllocation', required: true, index: true },
   sender_email: { type: String, required: true },
   sender_name: { type: String, required: true },
   message: { type: String, required: true },
