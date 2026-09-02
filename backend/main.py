@@ -469,9 +469,22 @@ def engine_allocate_v2(request: AllocateV2Request):
     the correct target for allocationService.js's config-aware allocation calls.
     Kept as a new route (v2) rather than changing /api/allocate so the legacy path
     is undisturbed.
+
+    Success path returns needsManualPlacement (students Phase 1 + Phase 2 could
+    not place under the hard constraints) instead of a plain unassigned_ids list.
+    capacityShortfall only ever appears on the pre-flight-reject path below - a
+    422 means matching never started because configured bed capacity is short.
     """
     try:
-        return compute_allocation(request.profiles, request.config)
+        result = compute_allocation(request.profiles, request.config)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    if result.get("status") == "REJECTED":
+        raise HTTPException(status_code=422, detail={
+            "error": "Insufficient bed capacity for submitted students.",
+            "capacityShortfall": result["capacityShortfall"]
+        })
+
+    return result
 

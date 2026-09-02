@@ -150,22 +150,45 @@ def fallback_assign_unassigned(allocations, unassigned_ids, profiles, sim_matrix
 
 # ================== FLEX ROOMS ==================
 
-def create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms):
+def create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms, sim_matrix):
+    """
+    Groups unassigned students into whatever unused room inventory remains.
+    Unlike a plain shuffle-and-chunk, this respects hard conflicts: a student is
+    only added to a forming group if they have zero hard conflict (sim_matrix
+    entry != -9999.0) with every member already placed in it. Students who can't
+    be grouped without violating a hard constraint are left unassigned rather
+    than being forced into an incompatible room.
+    """
     import random
-    random.shuffle(unassigned_ids)
+    id_to_index = {p.user_id: i for i, p in enumerate(profiles)}
+
+    shuffled = list(unassigned_ids)
+    random.shuffle(shuffled)
+    remaining = shuffled
 
     flex_allocations = []
-    current_idx = 0
 
     for room_def in unused_rooms:
-        if current_idx >= len(unassigned_ids):
+        if not remaining:
             break
 
         cap = room_def["capacity"]
-        group_ids = unassigned_ids[current_idx : current_idx + cap]
+        group_ids = []
+        group_idxs = []
+
+        for uid in remaining:
+            if len(group_ids) >= cap:
+                break
+            u_idx = id_to_index[uid]
+            if any(sim_matrix[u_idx, gi] == -9999.0 for gi in group_idxs):
+                continue
+            group_ids.append(uid)
+            group_idxs.append(u_idx)
+
         if not group_ids:
-            break
-        current_idx += len(group_ids)
+            continue
+
+        remaining = [uid for uid in remaining if uid not in group_ids]
 
         # Find gender from the first member profile
         gender = "Other"
@@ -173,13 +196,24 @@ def create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms):
         if first_prof:
             gender = first_prof.gender
 
+        if len(group_idxs) > 1:
+            sum_val = 0.0
+            count = 0
+            for x in range(len(group_idxs)):
+                for y in range(x + 1, len(group_idxs)):
+                    sum_val += sim_matrix[group_idxs[x], group_idxs[y]]
+                    count += 1
+            score = round(sum_val / count, 4) if count > 0 else 0.65
+        else:
+            score = 0.65
+
         flex_allocations.append({
             "id": room_def["id"],
             "allocation_run_id": run_id,
             "gender_group": gender,
             "members": group_ids,
             "room_number": None,
-            "compatibility_score": 0.65
+            "compatibility_score": score
         })
 
     return flex_allocations
@@ -188,7 +222,8 @@ def create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms):
 # ================== MAIN ==================
 
 def run_greedy_allocation_for_gender(
-    profiles: List[StudentProfile], run_id: str, config_or_rooms: any = None
+    profiles: List[StudentProfile], run_id: str, config_or_rooms: any = None,
+    enable_fallback_and_flex: bool = True
 ) -> Tuple[List[dict], List[str]]:
 
     if isinstance(config_or_rooms, list):
@@ -320,9 +355,6 @@ def run_greedy_allocation_for_gender(
                     count += 1
             avg_score = sum_val / count if count > 0 else 1.0
 
-            if avg_score < 0.70:
-                continue
-
             for m in members:
                 assigned[m] = True
 
@@ -342,30 +374,36 @@ def run_greedy_allocation_for_gender(
 
     unassigned_ids = [profiles[i].user_id for i in range(n) if not assigned[i]]
 
-    allocations = fallback_assign_unassigned(allocations, unassigned_ids, profiles, sim_matrix)
+    if enable_fallback_and_flex:
+        allocations = fallback_assign_unassigned(allocations, unassigned_ids, profiles, sim_matrix)
 
-    assigned_ids = set()
-    for room in allocations:
-        for m in room["members"]:
-            assigned_ids.add(m)
+        assigned_ids = set()
+        for room in allocations:
+            for m in room["members"]:
+                assigned_ids.add(m)
 
-    unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
+        unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
 
-    # Find unused rooms in the claimed inventory for flex rooms
-    unused_rooms = [r for r in bucket_rooms if r["id"] not in allocated_room_ids]
-    unused_rooms.sort(key=lambda x: x["capacity"], reverse=True)
+        # Find unused rooms in the claimed inventory for flex rooms
+        unused_rooms = [r for r in bucket_rooms if r["id"] not in allocated_room_ids]
+        unused_rooms.sort(key=lambda x: x["capacity"], reverse=True)
 
-    flex_rooms = create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms)
-    allocations.extend(flex_rooms)
+        flex_rooms = create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms, sim_matrix)
+        allocations.extend(flex_rooms)
 
-    assigned_ids = set()
-    for room in allocations:
-        for m in room["members"]:
-            assigned_ids.add(m)
+        assigned_ids = set()
+        for room in allocations:
+            for m in room["members"]:
+                assigned_ids.add(m)
 
-    unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
+        unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
 
     allocations.sort(key=lambda x: x["compatibility_score"], reverse=True)
+
+    assigned_ids = set()
+    for room in allocations:
+        for m in room["members"]:
+            assigned_ids.add(m)
 
     avg_score = np.mean([a["compatibility_score"] for a in allocations]) if allocations else 0
     coverage = len(assigned_ids) / len(profiles) if len(profiles) > 0 else 0
@@ -453,10 +491,6 @@ def run_relaxed_allocation(
             sim_matrix[A, C] +
             sim_matrix[B, C]
         ) / 3
-
-        # Much lower threshold — accept weak matches
-        if avg_score < 0.30:
-            continue
 
         assigned[A] = True
         assigned[B] = True

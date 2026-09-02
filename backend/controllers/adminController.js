@@ -202,38 +202,27 @@ exports.triggerAllocation = async (req, res) => {
             most_important_factor: p.most_important_factor || 'Cleanliness and Organization'
         }));
 
-        // Split active profiles into categories
-        const girlsFY = profilesJson.filter(p => 
-            (p.gender.toUpperCase().startsWith('F') || p.gender.toUpperCase() === 'FEMALE') && 
-            p.year_of_study === '1st Year'
-        );
-        const girlsSenior = profilesJson.filter(p => 
-            (p.gender.toUpperCase().startsWith('F') || p.gender.toUpperCase() === 'FEMALE') && 
-            p.year_of_study !== '1st Year'
-        );
-        const boysAll = profilesJson.filter(p => 
-            p.gender.toUpperCase().startsWith('M') || p.gender.toUpperCase() === 'MALE'
-        );
-        
-        const runPool = async (pool) => {
-            if (pool.length === 0) return { allocations: [], unassigned_ids: [] };
-            return await runPythonAllocation(pool, activeConfig);
-        };
+        // Send the full profile list to /allocate/v2 in a single call. Gender (and
+        // branch/year) partitioning happens ONLY inside compute_allocation()'s
+        // internal bucketing now — no manual pre-split here.
+        let result;
+        try {
+            result = await runPythonAllocation(profilesJson, activeConfig);
+        } catch (err) {
+            if (err.detail && err.detail.capacityShortfall) {
+                return res.status(422).json({
+                    error: err.detail.error || 'Insufficient bed capacity for submitted students.',
+                    capacityShortfall: err.detail.capacityShortfall
+                });
+            }
+            throw err;
+        }
 
-        // Execute sequentially to avoid memory spikes on the Python backend!
-        const resGFY = await runPool(girlsFY);
-        const resGSenior = await runPool(girlsSenior);
-        const resBoys = await runPool(boysAll);
-
-        let allUnassigned = [
-            ...(resGFY.unassigned_ids || []),
-            ...(resGSenior.unassigned_ids || []),
-            ...(resBoys.unassigned_ids || [])
-        ];
+        const profileMap = {};
+        profilesJson.forEach(p => profileMap[p.user_id] = p);
 
         const CAPACITY_PER_ROOM = 3;
         const ROOMS_PER_FLOOR = 8;
-        const FLOORS_PER_BLOCK = 4;
 
         // Build capacity pool from room templates
         const capacityPool = [];
@@ -244,10 +233,23 @@ exports.triggerAllocation = async (req, res) => {
                 }
             }
         }
-        
+
         // Determine offset for numbering so we don't overlap with locked rooms
         let nextIds = { A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1 };
-        
+
+        // Block assignment now derives from each room's own members (via the
+        // profile map) instead of which pre-split pool it came from.
+        const getBlocksForRoom = (alloc) => {
+            const firstMember = alloc.members && alloc.members[0];
+            const profile = firstMember ? profileMap[firstMember] : null;
+            const isFemale = ((profile && profile.gender) || '').toUpperCase().startsWith('F');
+            if (isFemale) {
+                const isFY = profile && profile.year_of_study === '1st Year';
+                return isFY ? ['A'] : ['B', 'C'];
+            }
+            return ['D', 'E', 'F', 'G'];
+        };
+
         const assignRoom = (allowedBlocks) => {
             for (let blockId of allowedBlocks) {
                 let id = nextIds[blockId]++;
@@ -256,84 +258,52 @@ exports.triggerAllocation = async (req, res) => {
                 const roomNumber = `${blockId}-${f}0${r}`;
                 return { block: blockId, floor: f, room_number: roomNumber };
             }
-            return null; 
+            return null;
         };
 
         const newAllocations = [];
-        
-        const processResults = (result, allowedBlocks) => {
-            if (!result || !result.allocations) return;
-            for (const alloc of result.allocations) {
-                const roomData = assignRoom(allowedBlocks);
-                if (roomData) {
-                    const roomCapacity = capacityPool.length > 0 ? capacityPool.shift() : (alloc.members ? alloc.members.length : CAPACITY_PER_ROOM);
-                    newAllocations.push({
-                        allocation_run_id: result.run_id || 'manual_id',
-                        gender_group: alloc.gender_group,
-                        compatibility_score: alloc.compatibility_score,
-                        members: alloc.members,
-                        block: roomData.block,
-                        floor: roomData.floor,
-                        room_number: roomData.room_number,
-                        room_capacity: roomCapacity,
-                        isLocked: false // Default to false
-                    });
-                } else {
-                    allUnassigned.push(...alloc.members);
-                }
+        for (const alloc of (result.allocations || [])) {
+            const roomData = assignRoom(getBlocksForRoom(alloc));
+            if (roomData) {
+                const roomCapacity = capacityPool.length > 0 ? capacityPool.shift() : (alloc.members ? alloc.members.length : CAPACITY_PER_ROOM);
+                newAllocations.push({
+                    allocation_run_id: result.run_id || 'manual_id',
+                    gender_group: alloc.gender_group,
+                    compatibility_score: alloc.compatibility_score,
+                    members: alloc.members,
+                    block: roomData.block,
+                    floor: roomData.floor,
+                    room_number: roomData.room_number,
+                    room_capacity: roomCapacity,
+                    isLocked: false // Default to false
+                });
             }
-        };
-
-        processResults(resGFY, ['A']);
-        processResults(resGSenior, ['B', 'C']);
-        processResults(resBoys, ['D', 'E', 'F', 'G']);
+        }
 
         // Delete all UNLOCKED previous allocations
         const deletedAllocs = await RoomAllocation.find({ isLocked: { $ne: true } }).lean();
         const deletedIds = deletedAllocs.map(a => a._id);
         await RoomAllocation.deleteMany({ isLocked: { $ne: true } });
-        
+
         // Cascade delete orphaned chat messages and change requests
         if (deletedIds.length > 0) {
             await Chat.deleteMany({ room_id: { $in: deletedIds } });
             await ChangeRequest.deleteMany({ currentRoomId: { $in: deletedIds } });
         }
-        
+
         await RoomAllocation.insertMany(newAllocations);
 
-        // Aggregate run ID and metrics from pools
-        const runId = resBoys.run_id || resGFY.run_id || resGSenior.run_id || `run_${Date.now().toString(16)}`;
-        
-        const runs = [resGFY, resGSenior, resBoys].filter(r => r.allocations && r.allocations.length > 0);
-        let combinedMetrics = null;
-        if (runs.length > 0) {
-            combinedMetrics = {
-                "Random": 0.7051,
-                "KMeans": Number((runs.reduce((sum, r) => sum + (r.metrics?.KMeans || 0), 0) / runs.length).toFixed(4)),
-                "Greedy Only": Number((runs.reduce((sum, r) => sum + (r.metrics?.["Greedy Only"] || 0), 0) / runs.length).toFixed(4)),
-                "Hybrid (Ours)": Number((runs.reduce((sum, r) => sum + (r.metrics?.["Hybrid (Ours)"] || 0), 0) / runs.length).toFixed(4))
-            };
-        }
-        
-        let combinedValidationMetrics = {
-            total_students: profilesJson.length,
-            total_beds: [resGFY, resGSenior, resBoys].reduce((sum, r) => sum + (r.validationMetrics?.total_beds || 0), 0),
-            insufficient_capacity: [resGFY, resGSenior, resBoys].reduce((sum, r) => sum + (r.validationMetrics?.insufficient_capacity || 0), 0),
-            unused_capacity: [resGFY, resGSenior, resBoys].reduce((sum, r) => sum + (r.validationMetrics?.unused_capacity || 0), 0),
-            remaining_empty_beds: [resGFY, resGSenior, resBoys].reduce((sum, r) => sum + (r.validationMetrics?.remaining_empty_beds || 0), 0),
-            remaining_empty_rooms: [resGFY, resGSenior, resBoys].reduce((sum, r) => sum + (r.validationMetrics?.remaining_empty_rooms || 0), 0),
-            unassigned_students: allUnassigned.length
-        };
+        const runId = result.run_id || `run_${Date.now().toString(16)}`;
 
         res.json({
             message: 'Allocation completed successfully',
             run_id: runId,
             total_rooms: newAllocations.length,
-            unassigned: allUnassigned.length,
-            metrics: combinedMetrics,
-            validationMetrics: combinedValidationMetrics
+            needsManualPlacement: result.needsManualPlacement || [],
+            metrics: result.metrics,
+            validationMetrics: result.validationMetrics
         });
-        
+
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Allocation failed', message: error.message });
@@ -548,92 +518,14 @@ exports.handleRequestAction = async (req, res) => {
     }
 };
 
+// The old sort-and-chunk force-allocation logic did zero hard-conflict checking
+// (grouped leftover students strictly by gender/branch/year proximity, with no
+// smoking/drinking check at all), so it could silently create incompatible
+// rooms. It's retired. Repointed to re-run the full allocation pipeline
+// instead — /allocate/v2 now includes Phase 2, which is precisely the
+// hard-constraint-safe version of "place remaining students" this endpoint
+// used to do unsafely. Kept as the same route/controller (not removed) so the
+// existing frontend "Force Allocate" button needs no changes.
 exports.forceAllocateRemaining = async (req, res) => {
-    try {
-        // 1. Find all currently allocated students
-        const allAllocations = await RoomAllocation.find({}).lean();
-        const allocatedEmails = new Set();
-        allAllocations.forEach(a => {
-            (a.members || []).forEach(m => allocatedEmails.add(m));
-        });
-
-        // 2. Find all profiles that are NOT allocated
-        const allProfiles = await Profile.find({}).lean();
-        const unassignedProfiles = allProfiles.filter(p => !allocatedEmails.has(p.user_id));
-
-        if (unassignedProfiles.length === 0) {
-            return res.json({ message: 'No unassigned students remaining!', total_new_rooms: 0 });
-        }
-
-        // 3. Group unassigned students into rooms of 3 (last room may have 2)
-        const ROOMS_PER_FLOOR = 8;
-        
-        // Count existing force-allocated rooms in block Z to determine starting counter
-        const existingForceRooms = allAllocations.filter(a => a.block === 'Z').length;
-
-        const profileMap = {};
-        allProfiles.forEach(p => profileMap[p.user_id] = p);
-
-        // Sort unassigned by gender, branch, year for best grouping
-        unassignedProfiles.sort((a, b) => {
-            if (a.gender !== b.gender) return (a.gender || '').localeCompare(b.gender || '');
-            if (a.branch !== b.branch) return (a.branch || '').localeCompare(b.branch || '');
-            return (a.year_of_study || '').localeCompare(b.year_of_study || '');
-        });
-
-        const newRooms = [];
-        let roomCounter = existingForceRooms + 1;
-        const blockChar = 'Z'; // Use block Z for force-allocated rooms
-
-        for (let i = 0; i < unassignedProfiles.length; i += 3) {
-            const group = unassignedProfiles.slice(i, i + 3);
-            if (group.length < 2) {
-                // Single student left - skip (truly can't form a room alone)
-                continue;
-            }
-
-            const floor = Math.floor((roomCounter - 1) / ROOMS_PER_FLOOR) + 1;
-            const roomOnFloor = ((roomCounter - 1) % ROOMS_PER_FLOOR) + 1;
-            const roomNumber = `${blockChar}-${floor}0${roomOnFloor}`;
-
-            const members = group.map(p => p.user_id);
-            const memberDetails = members.map(email => {
-                const p = profileMap[email];
-                return p ? `${p.name} (${p.branch})` : email;
-            });
-
-            // Determine gender group label
-            const genders = group.map(p => (p.gender || 'Unknown').toLowerCase());
-            const isFemale = genders.every(g => g === 'f' || g === 'female');
-            const genderLabel = isFemale ? 'Female' : 'Male';
-            const branches = [...new Set(group.map(p => p.branch || 'Mixed'))];
-
-            newRooms.push({
-                allocation_run_id: 'force_allocated',
-                gender_group: `${genderLabel}_${branches.join('/')}_Force`,
-                compatibility_score: 0.50, // Mark as low-compatibility forced room
-                members: members,
-                block: blockChar,
-                floor: floor,
-                room_number: roomNumber,
-                room_capacity: 3,
-                isLocked: false
-            });
-
-            roomCounter++;
-        }
-
-        if (newRooms.length > 0) {
-            await RoomAllocation.insertMany(newRooms);
-        }
-
-        res.json({
-            message: `Force-allocated ${newRooms.length} new rooms for remaining students.`,
-            total_new_rooms: newRooms.length,
-            total_students_placed: newRooms.reduce((sum, r) => sum + r.members.length, 0)
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Force allocation failed', message: error.message });
-    }
+    return exports.triggerAllocation(req, res);
 };
