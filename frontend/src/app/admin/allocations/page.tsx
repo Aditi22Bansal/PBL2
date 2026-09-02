@@ -267,19 +267,19 @@ export default function AdminAllocations() {
                 <motion.form initial={{opacity:0, y:-10}} animate={{opacity:1, y:0}} onSubmit={handleSwap} className="bg-white p-8 rounded-[20px] border border-[#1A3A2A]/10 shadow-[0_8px_40px_rgba(26,56,42,0.07)] mb-10 grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
                     <div>
                         <label className="text-[12px] font-semibold text-[#7A9088] uppercase tracking-[0.5px] block mb-2">Room A ID (_id)</label>
-                        <input className="w-full bg-[#fcfbfa] border border-[#1A3A2A]/10 rounded-xl p-3 text-[14px] outline-none focus:border-[#7BAE94] focus:ring-1 focus:ring-[#7BAE94] transition-all" required value={swapData.roomAId} onChange={e=>setSwapData({...swapData, roomAId: e.target.value})} placeholder="Room A ID" />
+                        <input className="w-full bg-[#fcfbfa] border border-[#1A3A2A]/10 rounded-xl p-3 text-[14px] text-[#1A2820] outline-none focus:border-[#7BAE94] focus:ring-1 focus:ring-[#7BAE94] transition-all" required value={swapData.roomAId} onChange={e=>setSwapData({...swapData, roomAId: e.target.value})} placeholder="Room A ID" />
                     </div>
                     <div>
                         <label className="text-[12px] font-semibold text-[#7A9088] uppercase tracking-[0.5px] block mb-2">Member A Email</label>
-                        <input className="w-full bg-[#fcfbfa] border border-[#1A3A2A]/10 rounded-xl p-3 text-[14px] outline-none focus:border-[#7BAE94] focus:ring-1 focus:ring-[#7BAE94] transition-all" required value={swapData.memberA} onChange={e=>setSwapData({...swapData, memberA: e.target.value})} placeholder="Email to move"/>
+                        <input className="w-full bg-[#fcfbfa] border border-[#1A3A2A]/10 rounded-xl p-3 text-[14px] text-[#1A2820] outline-none focus:border-[#7BAE94] focus:ring-1 focus:ring-[#7BAE94] transition-all" required value={swapData.memberA} onChange={e=>setSwapData({...swapData, memberA: e.target.value})} placeholder="Email to move"/>
                     </div>
                     <div>
                         <label className="text-[12px] font-semibold text-[#7A9088] uppercase tracking-[0.5px] block mb-2">Room B ID (_id)</label>
-                        <input className="w-full bg-[#fcfbfa] border border-[#1A3A2A]/10 rounded-xl p-3 text-[14px] outline-none focus:border-[#7BAE94] focus:ring-1 focus:ring-[#7BAE94] transition-all" required value={swapData.roomBId} onChange={e=>setSwapData({...swapData, roomBId: e.target.value})} placeholder="Room B ID"/>
+                        <input className="w-full bg-[#fcfbfa] border border-[#1A3A2A]/10 rounded-xl p-3 text-[14px] text-[#1A2820] outline-none focus:border-[#7BAE94] focus:ring-1 focus:ring-[#7BAE94] transition-all" required value={swapData.roomBId} onChange={e=>setSwapData({...swapData, roomBId: e.target.value})} placeholder="Room B ID"/>
                     </div>
                     <div>
                         <label className="text-[12px] font-semibold text-[#7A9088] uppercase tracking-[0.5px] block mb-2">Member B Email</label>
-                        <input className="w-full bg-[#fcfbfa] border border-[#1A3A2A]/10 rounded-xl p-3 text-[14px] outline-none focus:border-[#7BAE94] focus:ring-1 focus:ring-[#7BAE94] transition-all" required value={swapData.memberB} onChange={e=>setSwapData({...swapData, memberB: e.target.value})} placeholder="Email to replace"/>
+                        <input className="w-full bg-[#fcfbfa] border border-[#1A3A2A]/10 rounded-xl p-3 text-[14px] text-[#1A2820] outline-none focus:border-[#7BAE94] focus:ring-1 focus:ring-[#7BAE94] transition-all" required value={swapData.memberB} onChange={e=>setSwapData({...swapData, memberB: e.target.value})} placeholder="Email to replace"/>
                     </div>
                     <button type="submit" className="w-full bg-[#1A3A2A] hover:bg-[#234D38] text-white rounded-xl p-3.5 font-medium transition-colors text-[14px]">Execute Swap</button>
                 </motion.form>

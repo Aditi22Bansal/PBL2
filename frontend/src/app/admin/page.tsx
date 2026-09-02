@@ -10,7 +10,8 @@ import { API_URL } from "@/lib/api";
 import {
   LogOut, Home, Play, Upload, CheckCircle2, Database,
   Trash2, Plus, AlertTriangle, Download, FileText, Search, Filter, Sparkles,
-  ChevronDown, ChevronUp, User, ShieldAlert, Award, Smile, HelpCircle
+  ChevronDown, ChevronUp, User, ShieldAlert, Award, Smile, HelpCircle,
+  Save, Building2, LayoutGrid, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -891,142 +892,177 @@ export default function AdminDashboard() {
           </div>
 
           {showForm ? (
-            /* Create/Edit Form */
-            <div className="space-y-6 bg-slate-50/50 p-6 rounded-3xl border border-slate-150">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Hostel Name</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. boys hostel 1"
-                    value={formHostelName}
-                    onChange={(e) => setFormHostelName(e.target.value)}
-                    className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all placeholder:text-slate-400"
-                  />
+            /* Create/Edit Form — design system pilot: primary and neutral color tokens,
+               defined labels, grouped sections, consistent spacing (see globals.css) */
+            <div className="bg-neutral-50 rounded-3xl border border-neutral-200 overflow-hidden">
+              {/* Form header */}
+              <div className="flex items-center justify-between gap-4 px-8 py-6 border-b border-neutral-200 bg-white">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center shrink-0">
+                    <Building2 className="w-5 h-5 text-primary-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-neutral-800">
+                      {formConfigId ? "Edit Hostel Configuration" : "New Hostel Configuration"}
+                    </h3>
+                    <p className="text-xs text-neutral-500 mt-0.5">Define the hostel&apos;s identity and its room capacity inventory.</p>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Hostel Code</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. bh1"
-                    value={formHostelCode}
-                    onChange={(e) => setFormHostelCode(e.target.value)}
-                    className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all placeholder:text-slate-400"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Gender Classification</label>
-                  <select 
-                    value={formGender}
-                    onChange={(e) => setFormGender(e.target.value as any)}
-                    className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Mixed">Mixed</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Room templates table */}
-              <div className="space-y-3">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block">Room Capacity Layout Templates</label>
-                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase border-b border-slate-200">
-                      <tr>
-                        <th className="px-6 py-4">Room Bed Capacity</th>
-                        <th className="px-6 py-4">Number of Rooms Available</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {formTemplates.map((t, idx) => (
-                        <tr key={idx}>
-                          <td className="px-6 py-3">
-                            <input 
-                              type="number" 
-                              placeholder="e.g. 3 (triple)"
-                              value={t.capacity}
-                              onChange={(e) => {
-                                const val = e.target.value === "" ? "" : Number(e.target.value);
-                                const updated = [...formTemplates];
-                                updated[idx].capacity = val;
-                                setFormTemplates(updated);
-                              }}
-                              className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all"
-                            />
-                          </td>
-                          <td className="px-6 py-3">
-                            <input 
-                              type="number" 
-                              placeholder="e.g. 10 (rooms count)"
-                              value={t.count}
-                              onChange={(e) => {
-                                const val = e.target.value === "" ? "" : Number(e.target.value);
-                                const updated = [...formTemplates];
-                                updated[idx].count = val;
-                                setFormTemplates(updated);
-                              }}
-                              className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all"
-                            />
-                          </td>
-                          <td className="px-6 py-3 text-right">
-                            <button 
-                              onClick={() => {
-                                const updated = formTemplates.filter((_, i) => i !== idx);
-                                setFormTemplates(updated);
-                              }}
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-xl transition-all inline-flex items-center gap-1 border border-transparent font-medium"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Remove</span>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-                <button 
-                  onClick={() => setFormTemplates([...formTemplates, { capacity: "", count: "" }])}
-                  className="px-4 py-2.5 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 self-start"
+                <button
+                  onClick={() => { setShowForm(false); setFormConfigId(null); }}
+                  aria-label="Close form"
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-all shrink-0"
                 >
-                  <Plus className="w-4 h-4 text-slate-500" />
-                  Add Room Type
+                  <X className="w-5 h-5" />
                 </button>
-                
-                <div className="bg-white border border-slate-200 rounded-2xl p-4 flex gap-6 text-xs font-bold text-slate-500 shadow-sm">
-                  <div>Total Rooms: <span className="text-violet-600 font-black">{formTotalRooms}</span></div>
-                  <div className="border-l border-slate-200 pl-6">Total Beds: <span className="text-violet-600 font-black">{formTotalBeds}</span></div>
-                </div>
               </div>
 
-              {formValidationError && (
-                <div className="text-red-600 text-xs font-semibold bg-red-50 border border-red-200 p-3 rounded-2xl">
-                  ⚠️ {formValidationError}
-                </div>
-              )}
+              <div className="p-8 space-y-6">
+                {/* Section: Basic Details */}
+                <section className="bg-white border border-neutral-200 rounded-2xl p-6">
+                  <h4 className="text-sm font-bold text-neutral-700 mb-5 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary-500" /> Basic Details
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-bold text-neutral-500 uppercase tracking-wide">Hostel Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Boys Hostel 1"
+                        value={formHostelName}
+                        onChange={(e) => setFormHostelName(e.target.value)}
+                        className="bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all placeholder:text-neutral-400"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-bold text-neutral-500 uppercase tracking-wide">Hostel Code</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. BH1"
+                        value={formHostelCode}
+                        onChange={(e) => setFormHostelCode(e.target.value)}
+                        className="bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all placeholder:text-neutral-400"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-bold text-neutral-500 uppercase tracking-wide">Gender Classification</label>
+                      <select
+                        value={formGender}
+                        onChange={(e) => setFormGender(e.target.value as any)}
+                        className="bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all"
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Mixed">Mixed</option>
+                      </select>
+                    </div>
+                  </div>
+                </section>
 
-              <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-5">
-                <button 
+                {/* Section: Room Templates */}
+                <section className="bg-white border border-neutral-200 rounded-2xl p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                    <h4 className="text-sm font-bold text-neutral-700 flex items-center gap-2">
+                      <LayoutGrid className="w-4 h-4 text-primary-500" /> Room Capacity Layout
+                    </h4>
+                    <div className="flex items-center gap-4 text-xs font-bold text-neutral-500">
+                      <span>Total Rooms: <span className="text-primary-600 font-black">{formTotalRooms}</span></span>
+                      <span className="w-px h-4 bg-neutral-200" />
+                      <span>Total Beds: <span className="text-primary-600 font-black">{formTotalBeds}</span></span>
+                    </div>
+                  </div>
+
+                  <div className="border border-neutral-200 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-neutral-50 text-neutral-500 font-bold uppercase border-b border-neutral-200">
+                        <tr>
+                          <th className="px-6 py-4">Room Bed Capacity</th>
+                          <th className="px-6 py-4">Number of Rooms Available</th>
+                          <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-100">
+                        {formTemplates.map((t, idx) => (
+                          <tr key={idx}>
+                            <td className="px-6 py-3">
+                              <input
+                                type="number"
+                                placeholder="e.g. 3 (triple)"
+                                value={t.capacity}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? "" : Number(e.target.value);
+                                  const updated = [...formTemplates];
+                                  updated[idx].capacity = val;
+                                  setFormTemplates(updated);
+                                }}
+                                className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all"
+                              />
+                            </td>
+                            <td className="px-6 py-3">
+                              <input
+                                type="number"
+                                placeholder="e.g. 10 (rooms count)"
+                                value={t.count}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? "" : Number(e.target.value);
+                                  const updated = [...formTemplates];
+                                  updated[idx].count = val;
+                                  setFormTemplates(updated);
+                                }}
+                                className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all"
+                              />
+                            </td>
+                            <td className="px-6 py-3 text-right">
+                              <button
+                                onClick={() => {
+                                  const updated = formTemplates.filter((_, i) => i !== idx);
+                                  setFormTemplates(updated);
+                                }}
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-xl transition-all inline-flex items-center gap-1 border border-transparent font-medium"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Remove</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <button
+                    onClick={() => setFormTemplates([...formTemplates, { capacity: "", count: "" }])}
+                    className="mt-4 px-4 py-2.5 border border-neutral-200 hover:border-primary-300 hover:bg-primary-50 text-neutral-600 hover:text-primary-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Room Type
+                  </button>
+                </section>
+
+                {formValidationError && (
+                  <div className="text-red-600 text-xs font-semibold bg-red-50 border border-red-200 p-4 rounded-2xl flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" /> {formValidationError}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer actions */}
+              <div className="flex items-center justify-end gap-3 px-8 py-6 border-t border-neutral-200 bg-white">
+                <button
                   onClick={() => {
                     setShowForm(false);
                     setFormConfigId(null);
                   }}
-                  className="px-5 py-2.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-sm font-semibold transition-all"
+                  className="px-5 py-3 border border-neutral-200 hover:bg-neutral-100 text-neutral-600 rounded-xl text-sm font-semibold transition-all"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   onClick={handleCreateOrUpdate}
                   disabled={!!formValidationError}
-                  className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                  className="px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:hover:bg-primary-600 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center gap-2 shadow-md shadow-primary-600/20 hover:shadow-lg hover:shadow-primary-600/30 hover:-translate-y-0.5"
                 >
-                  Save Configuration
+                  <Save className="w-4 h-4" /> Save Configuration
                 </button>
               </div>
             </div>
@@ -1141,7 +1177,7 @@ export default function AdminDashboard() {
                 placeholder="Search Room #, Student Email, or Name..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-xs focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all placeholder:text-slate-400 font-medium"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all placeholder:text-slate-400 font-medium"
               />
             </div>
 

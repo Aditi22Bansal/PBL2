@@ -4,6 +4,74 @@ A cutting-edge, machine learning-driven web platform designed to seamlessly orch
 
 ---
 
+## ▶️ How to run this project
+
+There are exactly two ways to run RoomSync. Pick one — don't mix them.
+
+### Option A — Docker (one command, recommended for a quick look)
+
+Use this if you just want the app running with **its own fresh demo dataset** — its
+MongoDB is a separate container with its own data volume, independent of any MongoDB
+you have installed locally. It does **not** see your local install's data, and your
+local install's MongoDB (if any) does not see it either.
+
+**Requires:** [Docker Desktop](https://www.docker.com/products/docker-desktop/), running
+(check the whale icon in your system tray — `docker info` should show both a `Client`
+*and* a `Server` section with no errors before you proceed).
+
+```bash
+cd PBL2
+npm install
+npm run dev
+```
+(Windows convenience alternative: `.\start.ps1` — same result, but first checks Docker
+Desktop is actually running and that ports 3000/5000/8000/27017 aren't already held by
+some other non-Docker process, and tells you clearly instead of failing confusingly.)
+
+First run builds all 3 images and takes a few minutes; every run after that reuses the
+build cache and comes up in seconds.
+
+**Success looks like:** open **http://localhost:3000** — you should see the RoomSync
+landing page, and be able to log in via the dev-login role picker (no password) and
+reach `/student` or `/admin`. `npm run dev:logs` tails all 4 services' logs if you want
+to watch it start; `npm run dev:down` stops everything, `npm run dev:clean` also wipes
+the container Mongo's data volume.
+
+### Option B — Manual, 4 terminals (use your existing local Mongo + real dataset)
+
+Use this if you want to work against **your actual local MongoDB install** — the one
+with the real accumulated demo data (students, submitted profiles, generated room
+allocations), not a fresh empty database.
+
+**Requires:** Node.js 18+, Python 3.9+, and a local MongoDB Community Server already
+running on `localhost:27017`.
+
+```bash
+# Terminal 1 — MongoDB: make sure your local instance is running, nothing to start here
+# if it's already installed as a service.
+
+# Terminal 2 — Node backend
+cd backend
+npm install
+node server.js
+
+# Terminal 3 — Python allocation service
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+
+# Terminal 4 — Frontend
+cd frontend
+npm install
+npm run dev
+```
+
+**Success looks like:** the same **http://localhost:3000** landing page, but any data
+you see (submitted profiles, generated allocations) is whatever's actually in your local
+`hostel_allocator` database — not a fresh one.
+
+---
+
 ## ✨ Core Features
 
 ### 🎓 **Student Portal**
