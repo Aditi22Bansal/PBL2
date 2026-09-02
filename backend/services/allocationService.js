@@ -1,6 +1,51 @@
 const axios = require('axios');
+const { spawn } = require('child_process');
+const path = require('path');
 
+const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
+const USE_REST_ALLOCATION = process.env.USE_REST_ALLOCATION === 'true';
+
+const runRelaxedPythonAllocation = async (profiles, config = null) => {
+    return runPythonAllocation(profiles, config);
+};
+
+// Dispatcher: routes to the REST microservice or the legacy subprocess,
+// depending on USE_REST_ALLOCATION. Both paths accept/return the identical
+// schema, so callers (adminController.js) never need to know which is active.
 const runPythonAllocation = async (profiles, config = null) => {
+    if (USE_REST_ALLOCATION) {
+        return runPythonAllocationViaHTTP(profiles, config);
+    }
+    return runPythonAllocationViaSubprocess(profiles, config);
+};
+
+// --- REST path: calls the FastAPI microservice (POST /allocate/v2) over HTTP ---
+const runPythonAllocationViaHTTP = async (profiles, config = null) => {
+    const payload = { profiles };
+    if (config) {
+        payload.config = config;
+    }
+
+    try {
+        const response = await axios.post(`${PYTHON_SERVICE_URL}/allocate/v2`, payload);
+        const result = response.data;
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        return result;
+    } catch (err) {
+        if (err.response) {
+            // FastAPI HTTPException surfaces as { detail: "..." }
+            const detail = err.response.data && err.response.data.detail;
+            throw new Error(`Allocation service returned ${err.response.status}: ${detail || err.message}`);
+        }
+        throw err;
+    }
+};
+
+// --- Legacy path: spawns executor.py as a child process (stdin/stdout JSON) ---
+// Kept as a fallback behind USE_REST_ALLOCATION until the REST path is proven solid.
+const runPythonAllocationViaSubprocess = async (profiles, config = null) => {
     return new Promise((resolve, reject) => {
         const scriptPath = path.join(__dirname, '..', 'ml_engine', 'executor.py');
         

@@ -81,7 +81,7 @@ export default function RegisterPage() {
               Admin Registration
             </h1>
             <p className="text-slate-500 text-sm text-center leading-relaxed mb-8 px-2">
-              Register as a hostel administrator using your official SIT Google account. Once verified, you'll have full access to the management dashboard.
+              Register as a hostel administrator using your official SIT Google account. Once verified, you&apos;ll have full access to the management dashboard.
             </p>
 
             {/* What you get */}

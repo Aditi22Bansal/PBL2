@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { ArrowLeft, Check, X, HelpCircle } from "lucide-react";
 import { motion } from "framer-motion";
@@ -14,24 +14,25 @@ export default function AdminRequests() {
   const router = useRouter();
   const [requests, setRequests] = useState([]);
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/");
-    } else if (status === "authenticated" && session.user?.role !== "admin" && session.user?.role !== "ADMIN") {
-      router.push("/unauthorized");
-    } else if (status === "authenticated") {
-      fetchRequests();
-    }
-  }, [status, router, session]);
-
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/api/admin/requests`);
       setRequests(res.data);
     } catch (error) {
       console.error(error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/");
+    } else if (status === "authenticated" && session.user?.role !== "admin" && session.user?.role !== "ADMIN") {
+      router.push("/unauthorized");
+    } else if (status === "authenticated") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchRequests();
+    }
+  }, [status, router, session, fetchRequests]);
 
   const handleAction = async (requestId: string, actionStatus: string) => {
       try {
@@ -40,7 +41,7 @@ export default function AdminRequests() {
               status: actionStatus
           });
           fetchRequests();
-      } catch (err) {
+      } catch {
           alert('Failed to update request status');
       }
   }
@@ -69,7 +70,8 @@ export default function AdminRequests() {
                         <h3 className="text-xl font-semibold text-[#1A3A2A] mb-1">No requests</h3>
                         <p className="font-light">All students are happy with their assignment.</p>
                     </div>
-                ) : requests.map((req: any, i: number) => (
+                ) : requests.map(// eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (req: any, i: number) => (
                     <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} transition={{delay: i * 0.1}} key={req._id} className="bg-white p-8 rounded-[20px] border border-[#1A3A2A]/10 shadow-[0_8px_40px_rgba(26,56,42,0.06)] flex flex-col md:flex-row gap-8 justify-between group flex-wrap">
                         <div className="flex-1">
                             <div className="flex items-center gap-4 mb-2.5">
@@ -88,7 +90,7 @@ export default function AdminRequests() {
                                 )}
                             </div>
                             <div className="bg-[#F7F4EE] p-5 rounded-2xl border border-[#1A3A2A]/5 text-[14px] text-[#3A4F44] leading-[1.7] italic font-light">
-                                "{req.reason}"
+                                &quot;{req.reason}&quot;
                             </div>
                             <div className="text-[11px] text-[#7A9088] mt-3 font-medium">Submitted {new Date(req.createdAt).toLocaleString()}</div>
                         </div>

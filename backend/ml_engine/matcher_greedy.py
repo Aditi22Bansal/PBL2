@@ -227,6 +227,12 @@ def run_greedy_allocation_for_gender(
     sim_matrix -= (branches[:, None] != branches[None, :]) * 5
     sim_matrix -= (years[:, None] != years[None, :]) * 5
 
+    # Apply hard conflict penalties (dealbreakers)
+    for i in range(n):
+        for j in range(n):
+            if i != j and has_hard_conflict(profiles[i], profiles[j]):
+                sim_matrix[i, j] = -9999.0
+
     np.fill_diagonal(sim_matrix, -np.inf)
 
     i_idx, j_idx = np.triu_indices(n, k=1)
@@ -275,6 +281,10 @@ def run_greedy_allocation_for_gender(
             if assigned[A] or assigned[B]:
                 continue
 
+            # Skip pairs with hard conflicts
+            if sim_matrix[A, B] == -9999.0:
+                continue
+
             # Start a candidate group of size `cap` around pair A and B
             members = [A, B]
             unassigned_mask = ~assigned.copy()
@@ -289,7 +299,8 @@ def run_greedy_allocation_for_gender(
                 c_sims[members] = -np.inf
 
                 best_X = int(np.argmax(c_sims))
-                if c_sims[best_X] == -np.inf:
+                # Check for hard conflict with existing members in the room
+                if c_sims[best_X] == -np.inf or any(sim_matrix[m, best_X] == -9999.0 for m in members):
                     valid_group = False
                     break
 
@@ -386,6 +397,12 @@ def run_relaxed_allocation(
     sim_matrix = cosine_similarity(encoded_matrix)
 
     # NO branch/year penalties — purely lifestyle-based matching
+    
+    # Apply hard conflicts even in relaxed mode to honor smoking/drinking dealbreakers
+    for i in range(n):
+        for j in range(n):
+            if i != j and has_hard_conflict(profiles[i], profiles[j]):
+                sim_matrix[i, j] = -9999.0
 
     np.fill_diagonal(sim_matrix, -np.inf)
 
@@ -411,6 +428,10 @@ def run_relaxed_allocation(
         if assigned[A] or assigned[B]:
             continue
 
+        # Skip pair if they have hard conflicts
+        if sim_matrix[A, B] == -9999.0:
+            continue
+
         valid_k = ~assigned.copy()
         valid_k[A] = False
         valid_k[B] = False
@@ -422,6 +443,10 @@ def run_relaxed_allocation(
         c_sims[~valid_k] = -np.inf
 
         C = int(np.argmax(c_sims))
+
+        # Check for hard conflicts in candidate triplet
+        if sim_matrix[A, C] == -9999.0 or sim_matrix[B, C] == -9999.0:
+            continue
 
         avg_score = (
             sim_matrix[A, B] +

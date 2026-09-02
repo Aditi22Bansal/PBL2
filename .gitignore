@@ -39,6 +39,9 @@ venv.bak/
 .env.development.local
 .env.test.local
 .env.production.local
+# (frontend/.env.local and similar are also caught by the broader *.local rule
+# below, but listed explicitly here too so this exclusion doesn't silently
+# depend on that unrelated-looking catch-all pattern.)
 .vs/
 *.suo
 *.ntvs*
@@ -86,3 +89,7 @@ backend/ml_engine/__pycache__/
 
 *.png
 backend/data/*.csv
+
+# Docker - local-only overrides (may carry machine-specific ports/secrets)
+docker-compose.override.yml
+docker-compose.override.yaml

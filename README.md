@@ -45,7 +45,42 @@ This application is powered by a robust microservice-oriented architecture.
 
 ---
 
-## 🚀 Local Development Setup
+## 🏗️ Architecture
+
+Four services, wired together via `docker-compose.yml` (see Quick Start below):
+
+1. **`frontend/`** — Next.js 16 (App Router) + NextAuth. Talks to the backend over HTTP
+   (browser → `NEXT_PUBLIC_API_URL`; this app's own server-side code, e.g. NextAuth
+   callbacks → `BACKEND_URL`).
+2. **`backend/`** (Node/Express + Socket.IO) — the system of record. Owns MongoDB,
+   authentication, and all REST endpoints the frontend calls.
+3. **Python allocation service** (`backend/main.py`, FastAPI) — a genuinely separate
+   microservice. The backend calls it over **real HTTP** (`POST /allocate/v2`, via
+   `PYTHON_SERVICE_URL`) when `USE_REST_ALLOCATION=true` (the current default) — **not**
+   by spawning a subprocess. `POST /allocate/v2` wraps `ml_engine/executor.py`'s actual
+   matching logic directly. The old `child_process.spawn(executor.py)` path and the
+   legacy `/api/allocate` route still exist in the code as a fallback, but they are not
+   the live path.
+4. **MongoDB** — the shared database, reached by the backend at `MONGO_URI`.
+
+---
+
+## ⚡ Quick Start (Docker)
+
+Requires Docker Desktop. Run `npm install && npm run dev` from the `PBL2/` root (or `.\start.ps1` on Windows) — this brings up all 4 services (frontend, backend, Python allocation service, and MongoDB). First run builds images and takes longer; subsequent runs are fast.
+
+> **Note:** The Compose stack's MongoDB is a fresh container with its own data volume, separate from any MongoDB you may already be running locally. Existing local demo data will **not** appear inside the Compose stack unless it's deliberately migrated.
+
+Other scripts (from `PBL2/`):
+- `npm run dev:down` — stop the stack
+- `npm run dev:logs` — tail logs from all services
+- `npm run dev:clean` — stop the stack and remove its data volume
+
+See [CLAUDE.md](CLAUDE.md) for full architecture/context notes.
+
+---
+
+## 🚀 Local Development Setup (manual, without Docker)
 
 ### Prerequisites
 - Node.js (v18+)
@@ -83,6 +118,35 @@ npm run dev
 
 ---
 
+## ⚙️ Configuration
+
+Every environment variable either service actually reads is documented in-line in:
+- [`backend/.env.example`](backend/.env.example) — copy to `backend/.env`
+- [`frontend/.env.local.example`](frontend/.env.local.example) — copy to `frontend/.env.local`
+
+Both are safe to read (placeholder values only) and are the source of truth for
+configuration — not this README.
+
+---
+
 ## 🔒 Security & Roles
 - **Admin Access**: Navigate to `/admin` to access the protected synchronization tools and allocation workflows.
 - **Student Access**: Navigate to `/student` for the end-user dashboard. Unauthorized access to admin panels is aggressively blocked by session tracking.
+
+---
+
+## ⚠️ Known Limitations
+
+Minor, low-priority pre-existing issues, tracked here rather than silently fixed:
+
+- **"Welcome back, Unknown" greeting**: The student dashboard can greet an allocated
+  student as "Welcome back, Unknown" instead of their real name. `Profile.name` defaults
+  to `"Unknown Name"` (the questionnaire never actually collects a name field) instead of
+  falling back to `session.user.name`, which is already available.
+- **Stale "Original Assigned Room: Unknown" display**: `/admin/requests` can show
+  `Original Assigned Room: Unknown (ID: )` for older change-request records whose
+  `currentRoomId` reference no longer resolves via `.populate()`.
+- **Duplicate conflict-reason bullets**: The student dashboard's "Things to discuss
+  together" list can show the same bullet twice (e.g. a guest-frequency mismatch) for a
+  3-person room, because conflict reasons aren't de-duplicated the way `recommendations`
+  is (which uses a `Set`).

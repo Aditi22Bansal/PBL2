@@ -15,6 +15,7 @@ interface RoomChatProps {
 }
 
 export default function RoomChat({ roomId, currentUserEmail, currentUserName }: RoomChatProps) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -32,6 +33,7 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
         `${API_URL}/api/chat/${roomId}?email=${encodeURIComponent(currentUserEmail)}`
       );
       setMessages(res.data);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       if (err.response?.status === 404) {
         console.warn("Room not found or no longer exists.");
@@ -109,6 +111,7 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
         message: tempMessage,
       });
       // Silent fetch to ensure consistency
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       if (err.response?.status === 404) {
         console.warn("Room not found or no longer exists.");

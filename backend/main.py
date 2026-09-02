@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Dict, Optional
 import uuid
 from datetime import datetime
 import pandas as pd
@@ -11,6 +11,7 @@ import io
 from domain.schemas import StudentProfile, RoomAllocation, AllocationRun, User
 from repositories.csv_repo import CSVRepository
 from ml_engine.matcher_greedy import run_greedy_allocation_for_gender, run_ablation_study, run_relaxed_allocation
+from ml_engine.executor import compute_allocation
 
 app = FastAPI(title="SIT Pune Hostel Allocator")
 
@@ -447,6 +448,30 @@ def engine_allocate_relaxed(profiles_dict: List[Dict]):
             "run_id": run_id,
             "status": "COMPLETED"
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class AllocateV2Request(BaseModel):
+    profiles: List[Dict]
+    config: Optional[Dict] = None
+
+
+@app.post("/allocate/v2")
+def engine_allocate_v2(request: AllocateV2Request):
+    """
+    REST equivalent of ml_engine/executor.py's stdin/stdout CLI entrypoint.
+    Wraps compute_allocation() directly (imported, not reimplemented) so this
+    route and the subprocess path in executor.py always run identical logic.
+
+    Unlike the legacy /api/allocate above, this route honors `config.roomTemplates`
+    via the same global room-inventory bucketing executor.py performs - so it is
+    the correct target for allocationService.js's config-aware allocation calls.
+    Kept as a new route (v2) rather than changing /api/allocate so the legacy path
+    is undisturbed.
+    """
+    try:
+        return compute_allocation(request.profiles, request.config)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

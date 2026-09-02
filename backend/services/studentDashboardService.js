@@ -113,6 +113,8 @@ const getDashboardDTO = async (email) => {
         allocation: {
             roomId: allocation._id.toString(),
             room_number: allocation.room_number,
+            block: allocation.block,
+            floor: allocation.floor,
             hostelName: allocation.gender_group ? `${allocation.gender_group} Wing` : 'Main Campus Hostel',
             room_capacity: allocation.room_capacity || allocation.members.length,
             room_occupancy: allocation.members.length,

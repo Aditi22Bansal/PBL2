@@ -1,0 +1,18 @@
+node_modules
+.next
+out
+build
+dist
+
+# Local dev secrets/config - compose supplies real env vars explicitly.
+.env
+.env.local
+.env.*.local
+
+.git
+.gitignore
+
+# Editor/OS cruft
+.vscode
+.idea
+Thumbs.db

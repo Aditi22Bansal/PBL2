@@ -5,17 +5,19 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, Fragment } from "react";
 import axios from "axios";
-import { 
-  LogOut, Home, Play, Upload, CheckCircle2, Database, 
+import Link from "next/link";
+import { API_URL } from "@/lib/api";
+import {
+  LogOut, Home, Play, Upload, CheckCircle2, Database,
   Trash2, Plus, AlertTriangle, Download, FileText, Search, Filter, Sparkles,
-  ChevronDown, ChevronUp, User, ShieldAlert, Award, Smile
+  ChevronDown, ChevronUp, User, ShieldAlert, Award, Smile, HelpCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [sheetUrl, setSheetUrl] = useState("");
+  const [sheetUrl, setSheetUrl] = useState("https://docs.google.com/spreadsheets/d/e/2PACX-1vTzPOiW7s1jbwfQlBcKpIuEDCmFqsI3uWZUNr3shrXuRlpsd6N_Jgdb34O3_pzgG_xCxn4cIBKbaNDr/pubhtml");
   const [syncing, setSyncing] = useState(false);
   const [allocating, setAllocating] = useState(false);
   const [allocations, setAllocations] = useState<any[]>([]);
@@ -70,8 +72,6 @@ export default function AdminDashboard() {
     setFormValidationError(err);
   }, [formTemplates, formHostelName, showForm]);
 
-  const [stats, setStats] = useState({ rooms: 0, unassigned: 0, pendingRequests: 0 });
-
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -86,8 +86,8 @@ export default function AdminDashboard() {
 
   const fetchAllocations = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/admin/allocations");
-      setAllocations(res.data);
+      const res = await axios.get(`${API_URL}/api/admin/allocations`);
+      setAllocations(res.data.allocations || []);
     } catch (error) {
       console.error("Failed to fetch allocations:", error);
     }
@@ -95,7 +95,7 @@ export default function AdminDashboard() {
 
   const fetchConfigs = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/admin/hostel-configurations");
+      const res = await axios.get(`${API_URL}/api/admin/hostel-configurations`);
       setConfigs(res.data);
     } catch (error) {
       console.error("Failed to fetch configurations:", error);
@@ -104,7 +104,7 @@ export default function AdminDashboard() {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/admin/analytics");
+      const res = await axios.get(`${API_URL}/api/admin/analytics`);
       setAnalytics(res.data);
     } catch (error) {
       console.error("Failed to fetch analytics:", error);
@@ -125,9 +125,9 @@ export default function AdminDashboard() {
       };
 
       if (formConfigId) {
-        await axios.put(`http://localhost:5000/api/admin/hostel-configurations/${formConfigId}`, payload);
+        await axios.put(`${API_URL}/api/admin/hostel-configurations/${formConfigId}`, payload);
       } else {
-        await axios.post("http://localhost:5000/api/admin/hostel-configurations", payload);
+        await axios.post(`${API_URL}/api/admin/hostel-configurations`, payload);
       }
 
       setShowForm(false);
@@ -150,7 +150,7 @@ export default function AdminDashboard() {
 
   const handleActivateConfig = async (id: string) => {
     try {
-      await axios.patch(`http://localhost:5000/api/admin/hostel-configurations/${id}/activate`);
+      await axios.patch(`${API_URL}/api/admin/hostel-configurations/${id}/activate`);
       fetchConfigs();
       fetchAnalytics();
     } catch (err: any) {
@@ -162,7 +162,7 @@ export default function AdminDashboard() {
   const handleDeleteConfig = async (id: string) => {
     if (!confirm("Are you sure you want to delete this configuration?")) return;
     try {
-      await axios.delete(`http://localhost:5000/api/admin/hostel-configurations/${id}`);
+      await axios.delete(`${API_URL}/api/admin/hostel-configurations/${id}`);
       fetchConfigs();
       fetchAnalytics();
     } catch (err: any) {
@@ -191,7 +191,7 @@ export default function AdminDashboard() {
     setAllocating(true);
     setMessage("Running Similarity Matrix & Clustering... Please wait.");
     try {
-      const res = await axios.post("http://localhost:5000/api/admin/trigger-allocation");
+      const res = await axios.post(`${API_URL}/api/admin/trigger-allocation`);
       setMessage(res.data.message + ` | Rooms Formed: ${res.data.total_rooms}`);
       if(res.data.metrics) setMetrics(res.data.metrics);
       fetchAllocations();
@@ -210,11 +210,11 @@ export default function AdminDashboard() {
       a.room_number,
       a.gender_group || "N/A",
       `${Math.round((a.compatibility_score || 0) * 100)}%`,
-      a.room_capacity || a.members.length,
+      a.room_capacity || (a.members || []).length,
       a.occupancy_status || "Full",
       a.conflict_analysis?.conflictRisk || "Low",
-      a.conflict_analysis?.conflictReasons.map((r: any) => r.text).join("; ") || "None",
-      a.members.join("; ")
+      (a.conflict_analysis?.conflictReasons || []).map((r: any) => r.text).join("; ") || "None",
+      (a.members || []).join("; ")
     ]);
     const csvContent = [headers, ...rows].map(e => e.map(val => `"${val}"`).join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -249,7 +249,7 @@ export default function AdminDashboard() {
     .filter((a: any) => {
       const matchQuery = 
         a.room_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.members.some((m: string) => m.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (a.members || []).some((m: string) => m.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (a.memberDetails && a.memberDetails.some((d: string) => d.toLowerCase().includes(searchQuery.toLowerCase())));
       
       const matchRisk = riskFilter === "All" || (a.conflict_analysis?.conflictRisk === riskFilter);
@@ -309,12 +309,27 @@ export default function AdminDashboard() {
         </div>
         
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1">
+            <Link
+              href="/admin/allocations"
+              className="flex items-center gap-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 font-semibold text-xs px-4 py-2.5 rounded-xl transition-all"
+            >
+              <Database className="w-4 h-4" /> Allocations
+            </Link>
+            <Link
+              href="/admin/requests"
+              className="flex items-center gap-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 font-semibold text-xs px-4 py-2.5 rounded-xl transition-all"
+            >
+              <HelpCircle className="w-4 h-4" /> Requests
+            </Link>
+          </div>
+
           <div className="bg-slate-100 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
             Administrator Mode
           </div>
-          
-          <button 
+
+          <button
             onClick={() => signOut({ callbackUrl: "/" })}
             className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2.5 px-5 rounded-xl text-xs transition-all shadow-sm"
           >

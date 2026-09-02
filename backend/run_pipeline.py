@@ -12,8 +12,12 @@ import requests
 import io
 import re
 
-excel_path = r"d:\projects\pbl2\backend\Roommate Preferences (Responses).xlsx"
-url = "https://docs.google.com/spreadsheets/d/1SBbYmHlOJeUd0qFOMovVG6IDzE55x9XUI2lPf6QzlOQ/edit?gid=688168951#gid=688168951"
+# Relative path for local responses file if it exists, otherwise fall back to download
+excel_path = "Roommate Preferences (Responses).xlsx"
+# Default is now the 108-response dataset for stabilization phase
+url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTzPOiW7s1jbwfQlBcKpIuEDCmFqsI3uWZUNr3shrXuRlpsd6N_Jgdb34O3_pzgG_xCxn4cIBKbaNDr/pubhtml"
+# Old 20k synthetic dataset URL (kept for performance and scalability benchmarking)
+# url = "https://docs.google.com/spreadsheets/d/1SBbYmHlOJeUd0qFOMovVG6IDzE55x9XUI2lPf6QzlOQ/edit?gid=688168951#gid=688168951"
 
 if os.path.exists(excel_path):
     print(f"Reading {excel_path}...")
@@ -25,8 +29,13 @@ if os.path.exists(excel_path):
         subprocess.check_call([sys.executable, "-m", "pip", "install", "openpyxl"])
         df = pd.read_excel(excel_path)
 else:
-    print("Excel file not found locally. Downloading regression Google Sheet dataset...")
-    download_url = re.sub(r"/(edit|view).*$", "/export?format=csv", url)
+    print("Local Excel file not found. Downloading Google Sheet dataset...")
+    if "pubhtml" in url:
+        download_url = url.replace("pubhtml", "pub?output=csv")
+    else:
+        download_url = re.sub(r"/(edit|view).*$", "/export?format=csv", url)
+        
+    print(f"Downloading from {download_url}...")
     res = requests.get(download_url)
     res.raise_for_status()
     df = pd.read_csv(io.StringIO(res.content.decode('utf-8')))

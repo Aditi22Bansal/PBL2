@@ -1,0 +1,25 @@
+# Shared by both backend/Dockerfile (Node) and backend/Dockerfile.python (FastAPI) -
+# they share this directory as their build context.
+
+node_modules
+venv
+.venv
+__pycache__
+*.pyc
+*.pyo
+
+# Local dev secrets/config - compose supplies real env vars explicitly.
+.env
+.env.local
+.env.*.local
+
+# Not needed in either image; excluding keeps build context transfer fast.
+data/*.csv
+*.png
+.git
+.gitignore
+
+# Editor/OS cruft
+.vscode
+.idea
+Thumbs.db

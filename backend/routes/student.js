@@ -10,4 +10,7 @@ router.get('/profile', studentController.getProfile);
 router.put('/profile', studentController.saveProfile);
 router.post('/profile/submit', studentController.submitProfile);
 
+// Room change requests
+router.post('/change-request', studentController.submitChangeRequest);
+
 module.exports = router;

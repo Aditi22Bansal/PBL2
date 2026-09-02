@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { ArrowLeft, Database, Download, Lock, Unlock, Shuffle, FileText, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Database, Lock, Unlock, Shuffle, FileText, ShieldAlert } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { API_URL } from "@/lib/api";
@@ -49,27 +49,30 @@ export default function AdminAllocations() {
   const toggleLock = async (roomId: string, currentLockStatus: boolean) => {
       const newStatus = !currentLockStatus;
       
-      // Optimistic UI Update: Instantly change the button state before server replies
-      setAllocations((prev: any) => prev.map((a: any) => 
+       // Optimistic UI Update: Instantly change the button state before server replies
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       setAllocations((prev: any) => prev.map((a: any) =>
           a._id === roomId ? { ...a, isLocked: newStatus } : a
       ));
 
-      try {
-          await axios.post(`${API_URL}/api/admin/allocations/toggle-lock`, {
-              roomId: roomId,
-              isLocked: newStatus
-          });
-          // No need to fetchAllocations() again since we already updated the state!
-      } catch (err) {
-          // Rollback the UI if the server actually fails
-          setAllocations((prev: any) => prev.map((a: any) => 
-              a._id === roomId ? { ...a, isLocked: currentLockStatus } : a
-          ));
-          alert('Failed to update lock status in the database.');
+       try {
+           await axios.post(`${API_URL}/api/admin/allocations/toggle-lock`, {
+               roomId: roomId,
+               isLocked: newStatus
+           });
+           // No need to fetchAllocations() again since we already updated the state!
+       } catch {
+            // Rollback the UI if the server actually fails
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            setAllocations((prev: any) => prev.map((a: any) =>
+               a._id === roomId ? { ...a, isLocked: currentLockStatus } : a
+            ));
+            alert('Failed to update lock status in the database.');
       }
   }
 
-  const handleSwap = async (e: any) => {
+   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   const handleSwap = async (e: any) => {
       e.preventDefault();
       try {
           await axios.post(`${API_URL}/api/admin/allocations/manual-swap`, swapData);
@@ -77,10 +80,11 @@ export default function AdminAllocations() {
           setSwapData({ roomAId: '', memberA: '', roomBId: '', memberB: '' });
           alert("Swap completed successfully!");
           fetchAllocations();
-      } catch (err: any) {
-          alert(err.response?.data?.error || "Failed to swap members. Double check member IDs.");
-      }
-  }
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       } catch (err: any) {
+           alert(err.response?.data?.error || "Failed to swap members. Double check member IDs.");
+       }
+   }
 
   const handleForceAllocate = async () => {
       setForceAllocating(true);
@@ -88,8 +92,9 @@ export default function AdminAllocations() {
           const res = await axios.post(`${API_URL}/api/admin/force-allocate`);
           alert(res.data.message);
           fetchAllocations();
-      } catch (err: any) {
-          alert(err.response?.data?.error || "Force allocation failed.");
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       } catch (err: any) {
+           alert(err.response?.data?.error || "Force allocation failed.");
       } finally {
           setForceAllocating(false);
       }
@@ -121,6 +126,7 @@ export default function AdminAllocations() {
         return;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { jsPDF } = (window as any).jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -138,9 +144,11 @@ export default function AdminAllocations() {
     doc.text(`Generated: ${now}  |  Total Rooms: ${allocations.length}  |  Unassigned: ${unassigned.length}`, 14, 22);
 
     // Sort allocations by room number
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sorted = [...allocations].sort((a: any, b: any) => (a.room_number || '').localeCompare(b.room_number || ''));
 
     // Table data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tableRows = sorted.map((a: any) => {
         const members = (a.memberDetails || a.members || []).map((m: string, i: number) => `${i + 1}. ${m}`).join('\n');
         const score = typeof a.compatibility_score === 'number' ? `${(a.compatibility_score * 100).toFixed(1)}%` : 'N/A';
@@ -154,6 +162,7 @@ export default function AdminAllocations() {
         ];
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (doc as any).autoTable({
         startY: 34,
         head: [['Room', 'Location', 'Category', 'Match %', 'Assigned Students', 'Status']],
@@ -185,8 +194,10 @@ export default function AdminAllocations() {
             4: { cellWidth: 'auto' },
             5: { halign: 'center', cellWidth: 22 }
         },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         didDrawPage: (data: any) => {
             // Footer on each page
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const pageCount = (doc as any).internal.getNumberOfPages();
             doc.setFontSize(8);
             doc.setTextColor(150);
@@ -200,6 +211,7 @@ export default function AdminAllocations() {
 
     // Unassigned section (if any)
     if (unassigned.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const finalY = (doc as any).lastAutoTable?.finalY || 40;
         const remainingSpace = doc.internal.pageSize.getHeight() - finalY;
         if (remainingSpace < 40) doc.addPage();
@@ -210,7 +222,8 @@ export default function AdminAllocations() {
         doc.setTextColor(196, 97, 58);
         doc.text(`Unassigned Students (${unassigned.length})`, 14, startY);
 
-        (doc as any).autoTable({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (doc as any).autoTable({
             startY: startY + 4,
             head: [['#', 'Student']],
             body: unassigned.map((u: string, i: number) => [String(i + 1), u]),
@@ -294,6 +307,7 @@ export default function AdminAllocations() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[#1A3A2A]/5 text-[#3A4F44]">
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                         {[...allocations].sort((a: any, b: any) => (a.room_number || "").localeCompare(b.room_number || "")).map((a: any) => (
                         <tr key={a._id || a.room_number} className="hover:bg-[#F7F4EE]/50 transition-colors group">
                             <td className="px-8 py-5">
