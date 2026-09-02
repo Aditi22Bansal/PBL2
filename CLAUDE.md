@@ -6,12 +6,18 @@ being evolved into a generalized B2B SaaS while also satisfying a DevOps course 
 (CI/CD, IaC, containers/K8s, monitoring, reflection report).
 
 ## Critical workflow rules — ALWAYS FOLLOW
+- `main` is now a stable checkpoint — do NOT commit, push, or merge directly to `main` 
+  anymore. All new work happens on `ahmad-dev` (or branches created from it). If a prompt 
+  asks to touch `main` directly, flag that this contradicts the current workflow and 
+  confirm before proceeding rather than just doing it.
 - NEVER run git commit, push, stash, checkout, reset, or any command that discards/rewrites 
   the working tree — UNLESS explicitly instructed in the current prompt. Default is 
   local-only, no git operations.
 - Windows machine, PowerShell. Real project root: E:\pbl_hostel\PBL2 (not the outer 
   E:\pbl_hostel, which has its own separate, unused, empty git repo — ignore it)
-- Real repo remote: github.com/Aditi22Bansal/PBL2, branch feature/microservices
+- Real repo remote: github.com/Aditi22Bansal/PBL2, active working branch ahmad-dev 
+  (main is the stable checkpoint, not where work happens; feature/microservices was the 
+  prior working branch, now merged into main via PR #2)
 - When editing a file that already has unrelated pre-existing uncommitted changes, only 
   touch what the current task asks for — leave other in-flight changes alone, and say so 
   in your report.
