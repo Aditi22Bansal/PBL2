@@ -63,13 +63,20 @@ const getDashboardDTO = async (email) => {
     const analysis = conflictService.analyzeRoom(allocation, allRoommateProfiles);
 
     // 5. Calculate Room Stability Score
+    // compScore is already floored at 0 (see conflictPredictionService.js), so
+    // this can't go negative from that side; the extra Math.max(0, ...) below is
+    // just defensive.
     const compScore = analysis.compatibilityScore;
     const conflictComponent = Math.max(0, 100 - analysis.conflictScore * 4);
-    const roomStabilityScore = Math.round(compScore * STABILITY_WEIGHTS.compatibility + conflictComponent * STABILITY_WEIGHTS.conflict);
+    const roomStabilityScore = Math.max(0, Math.round(compScore * STABILITY_WEIGHTS.compatibility + conflictComponent * STABILITY_WEIGHTS.conflict));
 
-    // Determine matching quality label
+    // Determine matching quality label. A negative raw score means the room only
+    // formed because 100% placement is a hard requirement, not because the match
+    // itself was decent - call that out specifically rather than lumping it in
+    // with an ordinary sub-70 "Needs Alignment" result.
     let matchLabel = 'Excellent Match';
-    if (analysis.compatibilityScore < 70) matchLabel = 'Needs Alignment';
+    if (analysis.rawCompatibilityScore < 0) matchLabel = 'Below Average Match';
+    else if (analysis.compatibilityScore < 70) matchLabel = 'Needs Alignment';
     else if (analysis.compatibilityScore < 80) matchLabel = 'Satisfactory Match';
     else if (analysis.compatibilityScore < 90) matchLabel = 'Good Match';
 

@@ -218,3 +218,6 @@ Minor, low-priority pre-existing issues, tracked here rather than silently fixed
   together" list can show the same bullet twice (e.g. a guest-frequency mismatch) for a
   3-person room, because conflict reasons aren't de-duplicated the way `recommendations`
   is (which uses a `Set`).
+- **2 orphaned chat messages from student_5@sitpune.edu.in**: reference a `room_id` that
+  was deleted during the 2026-09-02 allocation-data regeneration; the messages still
+  exist in the `chats` collection but aren't reachable via any current room's chat thread.
