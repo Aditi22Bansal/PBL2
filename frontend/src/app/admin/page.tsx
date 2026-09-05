@@ -39,10 +39,10 @@ export default function AdminDashboard() {
   const [formHostelName, setFormHostelName] = useState("");
   const [formHostelCode, setFormHostelCode] = useState("");
   const [formGender, setFormGender] = useState<"Male" | "Female" | "Mixed">("Mixed");
-  const [formTemplates, setFormTemplates] = useState<Array<{ capacity: number | ""; count: number | "" }>>([
-    { capacity: 2, count: 20 },
-    { capacity: 3, count: 40 },
-    { capacity: 4, count: 10 }
+  const [formTemplates, setFormTemplates] = useState<Array<{ capacity: number | ""; count: number | ""; floor: string }>>([
+    { capacity: 2, count: 20, floor: "Ground" },
+    { capacity: 3, count: 40, floor: "1" },
+    { capacity: 4, count: 10, floor: "2" }
   ]);
   const [formValidationError, setFormValidationError] = useState("");
 
@@ -121,7 +121,8 @@ export default function AdminDashboard() {
         gender: formGender,
         roomTemplates: formTemplates.map(t => ({
           capacity: Number(t.capacity),
-          count: Number(t.count)
+          count: Number(t.count),
+          floor: t.floor.trim() || 'Ground'
         }))
       };
 
@@ -137,9 +138,9 @@ export default function AdminDashboard() {
       setFormHostelCode("");
       setFormGender("Mixed");
       setFormTemplates([
-        { capacity: 2, count: 20 },
-        { capacity: 3, count: 40 },
-        { capacity: 4, count: 10 }
+        { capacity: 2, count: 20, floor: "Ground" },
+        { capacity: 3, count: 40, floor: "1" },
+        { capacity: 4, count: 10, floor: "2" }
       ]);
       fetchConfigs();
       fetchAnalytics();
@@ -892,9 +893,9 @@ export default function AdminDashboard() {
                   setFormHostelCode("");
                   setFormGender("Mixed");
                   setFormTemplates([
-                    { capacity: 2, count: 20 },
-                    { capacity: 3, count: 40 },
-                    { capacity: 4, count: 10 }
+                    { capacity: 2, count: 20, floor: "Ground" },
+                    { capacity: 3, count: 40, floor: "1" },
+                    { capacity: 4, count: 10, floor: "2" }
                   ]);
                   setShowForm(true);
                 }}
@@ -992,6 +993,7 @@ export default function AdminDashboard() {
                         <tr>
                           <th className="px-6 py-4">Room Bed Capacity</th>
                           <th className="px-6 py-4">Number of Rooms Available</th>
+                          <th className="px-6 py-4">Floor</th>
                           <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
                       </thead>
@@ -1026,6 +1028,19 @@ export default function AdminDashboard() {
                                 className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all"
                               />
                             </td>
+                            <td className="px-6 py-3">
+                              <input
+                                type="text"
+                                placeholder="e.g. Ground, 1, 2"
+                                value={t.floor}
+                                onChange={(e) => {
+                                  const updated = [...formTemplates];
+                                  updated[idx].floor = e.target.value;
+                                  setFormTemplates(updated);
+                                }}
+                                className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all w-28"
+                              />
+                            </td>
                             <td className="px-6 py-3 text-right">
                               <button
                                 onClick={() => {
@@ -1045,7 +1060,7 @@ export default function AdminDashboard() {
                   </div>
 
                   <button
-                    onClick={() => setFormTemplates([...formTemplates, { capacity: "", count: "" }])}
+                    onClick={() => setFormTemplates([...formTemplates, { capacity: "", count: "", floor: "" }])}
                     className="mt-4 px-4 py-2.5 border border-neutral-200 hover:border-primary-300 hover:bg-primary-50 text-neutral-600 hover:text-primary-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
                   >
                     <Plus className="w-4 h-4" />
@@ -1106,7 +1121,7 @@ export default function AdminDashboard() {
                     <div className="space-y-1.5 border-t border-slate-100/80 pt-4 mb-6">
                       {c.roomTemplates.map((t: any, idx: number) => (
                         <div key={idx} className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                          <span>{getCapacityLabel(t.capacity)} Rooms</span>
+                          <span>{getCapacityLabel(t.capacity)} Rooms <span className="text-slate-400 font-medium">· Floor {t.floor || 'Ground'}</span></span>
                           <span className="text-slate-500 font-bold">{t.count} Rooms</span>
                         </div>
                       ))}
@@ -1134,7 +1149,7 @@ export default function AdminDashboard() {
                         setFormHostelName(c.hostelName);
                         setFormHostelCode(c.hostelCode || "");
                         setFormGender(c.gender);
-                        setFormTemplates(c.roomTemplates.map((t: any) => ({ capacity: t.capacity, count: t.count })));
+                        setFormTemplates(c.roomTemplates.map((t: any) => ({ capacity: t.capacity, count: t.count, floor: t.floor || '' })));
                         setShowForm(true);
                       }}
                       className="py-2 px-3 border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold rounded-lg text-xs transition-all"

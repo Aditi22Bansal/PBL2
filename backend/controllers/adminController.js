@@ -151,6 +151,11 @@ exports.triggerAllocation = async (req, res) => {
         const { config } = req.body || {};
         
         let activeConfig = config;
+        // Templates carrying their real admin-set floor, kept separately from
+        // activeConfig (which only ever needs capacity/count - the Python
+        // engine has no notion of floor) so the room-numbering step below can
+        // look up each capacity's actual configured floor(s).
+        let templatesForFloorLookup = [];
         if (!activeConfig) {
             const HostelConfiguration = require('../models/HostelConfiguration');
             // No more single-active exclusivity: an org can have several
@@ -159,13 +164,16 @@ exports.triggerAllocation = async (req, res) => {
             // of them rather than assuming exactly one.
             const dbConfigs = await HostelConfiguration.find({ isActive: true, organizationId: req.currentUser.organizationId }).lean();
             if (dbConfigs.length > 0) {
+                templatesForFloorLookup = dbConfigs.flatMap(c => c.roomTemplates);
                 activeConfig = {
-                    roomTemplates: dbConfigs.flatMap(c => c.roomTemplates.map(t => ({
+                    roomTemplates: templatesForFloorLookup.map(t => ({
                         capacity: t.capacity,
                         count: t.count
-                    })))
+                    }))
                 };
             }
+        } else {
+            templatesForFloorLookup = activeConfig.roomTemplates || [];
         }
 
         const profiles = await Profile.find({ organizationId: req.currentUser.organizationId });
@@ -236,7 +244,33 @@ exports.triggerAllocation = async (req, res) => {
         const ROOMS_PER_FLOOR = 8;
 
         // Determine offset for numbering so we don't overlap with locked rooms
-        let nextIds = { A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1 };
+        let nextRoomIdByBlockFloor = {};
+
+        // Per-capacity queue of the REAL admin-configured floor values, one
+        // entry per bed-slot the template represents, in template order. A
+        // capacity is the only signal available here to look this up by - the
+        // Python engine returns rooms, not which specific template each came
+        // from - which mirrors how capacity itself is already a flat,
+        // ungendered pool today (see the aggregation above); floor lookup is
+        // equally gender-blind, consistent with that existing simplification.
+        // Missing/blank floor (configs saved before this field existed)
+        // defaults to "Ground". A capacity with no matching template at all -
+        // i.e. a ceiling-expanded virtual room from an oversized misconfigured
+        // tier (see MAX_EFFECTIVE_ROOM_SIZE in matcher_greedy.py) - also falls
+        // through to "Ground"; there's no real per-template floor to
+        // attribute it to.
+        const floorQueueByCapacity = {};
+        for (const t of templatesForFloorLookup) {
+            const floorValue = (t.floor && String(t.floor).trim()) || 'Ground';
+            if (!floorQueueByCapacity[t.capacity]) floorQueueByCapacity[t.capacity] = [];
+            for (let i = 0; i < t.count; i++) {
+                floorQueueByCapacity[t.capacity].push(floorValue);
+            }
+        }
+        const nextFloorForCapacity = (capacity) => {
+            const queue = floorQueueByCapacity[capacity];
+            return (queue && queue.length > 0) ? queue.shift() : 'Ground';
+        };
 
         // Block assignment now derives from each room's own members (via the
         // profile map) instead of which pre-split pool it came from.
@@ -251,20 +285,23 @@ exports.triggerAllocation = async (req, res) => {
             return ['D', 'E', 'F', 'G'];
         };
 
-        const assignRoom = (allowedBlocks) => {
+        const assignRoom = (allowedBlocks, capacity) => {
             for (let blockId of allowedBlocks) {
-                let id = nextIds[blockId]++;
-                let f = Math.floor(id / ROOMS_PER_FLOOR) + 1;
-                let r = (id % ROOMS_PER_FLOOR) + 1;
-                const roomNumber = `${blockId}-${f}0${r}`;
-                return { block: blockId, floor: f, room_number: roomNumber };
+                const floorValue = nextFloorForCapacity(capacity);
+                const floorSlug = floorValue.toLowerCase() === 'ground' ? 'G' : floorValue;
+                const key = `${blockId}::${floorValue}`;
+                const idOnFloor = nextRoomIdByBlockFloor[key] || 0;
+                nextRoomIdByBlockFloor[key] = idOnFloor + 1;
+                const r = (idOnFloor % ROOMS_PER_FLOOR) + 1;
+                const roomNumber = `${blockId}-${floorSlug}0${r}`;
+                return { block: blockId, floor: floorValue, room_number: roomNumber };
             }
             return null;
         };
 
         const newAllocations = [];
         for (const alloc of (result.allocations || [])) {
-            const roomData = assignRoom(getBlocksForRoom(alloc));
+            const roomData = assignRoom(getBlocksForRoom(alloc), alloc.capacity);
             if (roomData) {
                 // The actual capacity the algorithm decided for THIS room - not a
                 // FIFO queue popped in emission order (that was decoupled from

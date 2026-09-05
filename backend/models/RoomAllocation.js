@@ -18,7 +18,10 @@ const roomAllocationSchema = new mongoose.Schema({
   room_number: { type: String },
   room_capacity: { type: Number },
   block: { type: String },
-  floor: { type: Number },
+  // The room's real admin-configured floor (e.g. "Ground", "1", "2") - a
+  // template's actual floor value, not a computed formula. String because
+  // "Ground" isn't a number.
+  floor: { type: String },
   isLocked: { type: Boolean, default: false },
   // Keyed by member user_id -> boolean. Only present for members who stated
   // an explicit preferred_room_size (2/3/4); "No preference" members have no
