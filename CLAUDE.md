@@ -63,6 +63,17 @@ Kubernetes (rolling update/rollback demo), monitoring (Prometheus+Grafana), refl
 report. No fixed deadline. Sequencing so far: REST refactor (done) → Docker (done) → 
 CI/CD (next) → K8s → Ansible → monitoring → report.
 
+## Recently added (features)
+- In-app notifications for room allocation. Socket.IO now has a per-student channel 
+  (`join_user` -> room `user:<email>`) alongside the existing chat `join_room`, because 
+  chat rooms are keyed on an allocation id — which doesn't exist yet for the student 
+  who's about to be allocated. The student dashboard (not RoomChat) opens the socket, so 
+  it's connected even while unallocated. triggerAllocation notifies ONLY students whose 
+  status genuinely flipped: previously-allocated = members of the pre-insert oldAllocs 
+  snapshot + lockedEmails, so a re-run never re-notifies people who were already placed. 
+  Each notification is both pushed live and persisted (Notification model), so a student 
+  who was offline sees it on their next dashboard load; dismissing marks it read.
+
 ## Known pre-existing minor bugs (not yet fixed, low priority)
 - Dashboard greets allocated-but-unnamed users as "Welcome back, Unknown" 
   (Profile.name defaults to "Unknown Name" instead of falling back to session.user.name)

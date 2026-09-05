@@ -2,6 +2,7 @@ const Profile = require('../models/Profile');
 const RoomAllocation = require('../models/RoomAllocation');
 const ChangeRequest = require('../models/ChangeRequest');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 
 exports.getDashboardData = async (req, res) => {
     try {
@@ -129,6 +130,44 @@ exports.submitChangeRequest = async (req, res) => {
         });
         await newReq.save();
         res.status(201).json({ message: 'Request submitted to admin' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server Error' });
+    }
+};
+
+// GET /api/student/notifications - unread only; the caller's own, never
+// anyone else's (email comes from the verified session via requireAuth).
+exports.getNotifications = async (req, res) => {
+    try {
+        const notifications = await Notification.find({
+            recipient_email: req.currentUser.email,
+            organizationId: req.currentUser.organizationId,
+            read: false
+        }).sort({ createdAt: -1 }).lean();
+
+        res.json(notifications);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server Error' });
+    }
+};
+
+// POST /api/student/notifications/read - marks the caller's unread
+// notifications as seen. Scoped to their own email, so one student can never
+// clear another's.
+exports.markNotificationsRead = async (req, res) => {
+    try {
+        const result = await Notification.updateMany(
+            {
+                recipient_email: req.currentUser.email,
+                organizationId: req.currentUser.organizationId,
+                read: false
+            },
+            { $set: { read: true } }
+        );
+
+        res.json({ message: 'Notifications marked as read', modified: result.modifiedCount });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Server Error' });

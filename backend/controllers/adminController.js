@@ -4,6 +4,7 @@ const Profile = require('../models/Profile');
 const RoomAllocation = require('../models/RoomAllocation');
 const ChangeRequest = require('../models/ChangeRequest');
 const Chat = require('../models/Chat');
+const Notification = require('../models/Notification');
 const { runPythonAllocation } = require('../services/allocationService');
 const analyticsService = require('../services/analyticsService');
 
@@ -332,6 +333,56 @@ exports.triggerAllocation = async (req, res) => {
                 `${insertedNewRooms ? 'Old rooms may still be present alongside the new ones — manual cleanup may be required.' : 'No existing data was touched.'} ` +
                 `Root cause: ${swapErr.message}`
             );
+        }
+
+        // Notify ONLY students whose status actually flipped to ALLOCATED in
+        // this run. A re-run re-places people who were already allocated (into
+        // the same or a different room) - their status never changed, so they
+        // must not be notified again. previouslyAllocated is the union of both
+        // pre-insert snapshots taken above: oldAllocs (unlocked rooms about to
+        // be replaced) and lockedEmails (locked rooms, excluded from this run
+        // entirely). Anyone in the new result outside that union is genuinely
+        // newly placed.
+        const previouslyAllocated = new Set([
+            ...oldAllocs.flatMap(a => a.members),
+            ...lockedEmails
+        ]);
+
+        try {
+            const io = req.app.get('socketio');
+            const newNotifications = [];
+
+            for (const alloc of newAllocations) {
+                for (const email of alloc.members) {
+                    if (previouslyAllocated.has(email)) continue;
+                    newNotifications.push({
+                        organizationId: req.currentUser.organizationId,
+                        recipient_email: email,
+                        type: 'ROOM_ALLOCATED',
+                        message: `You've been allocated room ${alloc.room_number}. Your roommate details are ready to view.`
+                    });
+                }
+            }
+
+            if (newNotifications.length > 0) {
+                const saved = await Notification.insertMany(newNotifications);
+                // Live push to whoever is online right now; anyone offline
+                // simply reads the persisted record on their next dashboard load.
+                for (const n of saved) {
+                    io.to(`user:${n.recipient_email}`).emit('room_allocated', {
+                        _id: n._id.toString(),
+                        type: n.type,
+                        message: n.message,
+                        createdAt: n.createdAt
+                    });
+                }
+            }
+            console.log(`[triggerAllocation] Notified ${newNotifications.length} newly allocated student(s).`);
+        } catch (notifyErr) {
+            // The allocation itself is already committed and correct at this
+            // point - a notification failure must not turn a successful run
+            // into a 500 for the admin.
+            console.error('[triggerAllocation] Allocation succeeded but notification step failed:', notifyErr);
         }
 
         const runId = result.run_id || `run_${Date.now().toString(16)}`;

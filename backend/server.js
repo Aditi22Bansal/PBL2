@@ -52,6 +52,19 @@ io.on('connection', (socket) => {
         console.log(`User ${socket.id} joined room ${roomId}`);
     });
 
+    // Join a per-student channel keyed by email, so the server can push an
+    // event at one specific student rather than broadcasting to a room. The
+    // chat's join_room can't serve this: it's keyed on an allocation id, which
+    // by definition doesn't exist yet for the student we most need to reach -
+    // the one who is about to BE allocated. Same trust level as join_room
+    // (client-asserted, unauthenticated); it only ever receives pushes, and
+    // nothing sensitive is emitted over it.
+    socket.on('join_user', (email) => {
+        if (!email) return;
+        socket.join(`user:${email}`);
+        console.log(`User ${socket.id} joined personal channel for ${email}`);
+    });
+
     // Handle incoming chat messages
     socket.on('send_message', (data) => {
         // Broadcast to everyone in the room including sender (or use socket.to().emit)

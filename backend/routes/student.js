@@ -18,4 +18,8 @@ router.post('/profile/submit', studentController.submitProfile);
 // Room change requests
 router.post('/change-request', studentController.submitChangeRequest);
 
+// In-app notifications (own, unread)
+router.get('/notifications', studentController.getNotifications);
+router.post('/notifications/read', studentController.markNotificationsRead);
+
 module.exports = router;
