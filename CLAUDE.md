@@ -50,12 +50,15 @@ Manual dev servers (node server.js, npm run dev, uvicorn) commonly already occup
 3000/5000/8000/27017 locally. Don't kill processes on these ports without asking — report 
 conflicts and let the user decide.
 
-## Product direction (in progress, not yet built)
-Target: multi-tenant B2B SaaS. Hard constraints the allocation engine must NEVER violate: 
-no mixed-gender rooms, no smoking/alcohol incompatibility, 100% of students must be 
-allocated a room (nobody left unassigned). Compatibility score is maximized WITHIN those 
-constraints, not traded off against them. NOT yet implemented — current engine treats 
-compatibility as primary without a hard-constraint layer.
+## Product direction (multi-tenant B2B SaaS — done)
+Hard constraints the allocation engine must NEVER violate: no mixed-gender rooms, no
+smoking/alcohol incompatibility — both enforced as absolute pre-filters (poisoned
+similarity-matrix cells + gender bucketing), not scored/traded-off features. 100% of
+students placed via a two-phase optimize-then-guarantee design; the rare genuinely
+irreconcilable case is reported via `needsManualPlacement` (named blocking
+constraint) rather than silently dropped or force-placed. Full design + the real
+production violation this fixed: [docs/decisions.md](docs/decisions.md) §2-3,
+[docs/architecture.md](docs/architecture.md).
 
 ## Security — fixed (worth citing as a real found-and-fixed vulnerability)
 Client-trusted role escalation via login, closed. `POST /api/auth/sync-user` used to
@@ -114,7 +117,8 @@ future invite flow exists.
 CI/CD pipeline (GitHub Actions), config management (Ansible/Puppet), containers + 
 Kubernetes (rolling update/rollback demo), monitoring (Prometheus+Grafana), reflection 
 report. No fixed deadline. Sequencing so far: REST refactor (done) → Docker (done) → 
-CI/CD (done) → K8s (done) → Ansible (done) → monitoring (done) → report.
+CI/CD (done) → K8s (done) → Ansible (done) → monitoring (done) → report (done).
+Full DevOps rubric now complete: [docs/reflection-report.md](docs/reflection-report.md).
 
 ### CI/CD (done)
 `.github/workflows/ci.yml` — push to `ahmad-dev` + PRs targeting `main`. Jobs: 

@@ -76,7 +76,7 @@ internals, and the reasoning behind the two-phase design:
 | Backend | Node 20, Express 5, Mongoose 9, Socket.IO 4.8 |
 | Allocation engine | Python 3.12, FastAPI, scikit-learn (cosine similarity), pandas |
 | Database | MongoDB 7 |
-| Infra | Docker + Docker Compose, Kubernetes, GitHub Actions CI/CD → GHCR |
+| Infra | Docker + Docker Compose, Kubernetes, GitHub Actions CI/CD → GHCR, Ansible, Prometheus + Grafana |
 
 ## Quick Start
 
@@ -153,6 +153,7 @@ configuration — not this README.
 - **[docs/k8s-deployment.md](docs/k8s-deployment.md)** — Kubernetes manifests + a live rolling-update/rollback demonstration
 - **[docs/ansible-deployment.md](docs/ansible-deployment.md)** — Ansible playbook provisioning a target and deploying the real GHCR images
 - **[docs/monitoring.md](docs/monitoring.md)** — Prometheus + Grafana, real app metrics, verified with real traffic
+- **[docs/reflection-report.md](docs/reflection-report.md)** — reflections on the DevOps track: what was learned, what broke, what I'd do differently
 - **[SECURITY.md](SECURITY.md)** — vulnerabilities found and fixed, isolation model, how to report an issue
 
 ## Known limitations
@@ -185,8 +186,6 @@ backlog:
 - **Real multi-building/wing support.** Per-block capacity and genuine gender/year
   overflow across more than one physical block aren't modeled yet — a dead-code cleanup
   removed logic that implied this already existed, but didn't build the real thing.
-- **Remaining DevOps rubric items:** just the reflection report — CI/CD, Kubernetes
-  (rolling update/rollback), config management (Ansible), and monitoring
-  (Prometheus + Grafana) are all done. See
-  [docs/ansible-deployment.md](docs/ansible-deployment.md) and
-  [docs/monitoring.md](docs/monitoring.md) for those writeups.
+
+The DevOps rubric track (CI/CD, Kubernetes, configuration management, monitoring,
+reflection report) is complete — see [docs/reflection-report.md](docs/reflection-report.md).
