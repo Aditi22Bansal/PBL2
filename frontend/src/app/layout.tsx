@@ -18,6 +18,12 @@ export default function RootLayout({
         <NextAuthProvider>
           {children}
         </NextAuthProvider>
+        {/* K8s rolling-update/rollback demo marker - purely visual proof of
+            which image build is currently serving traffic, nothing else
+            reads this. See docs/k8s-deployment.md. */}
+        <div className="fixed bottom-2 right-2 z-[9999] bg-black/70 text-white text-[10px] font-mono px-2 py-1 rounded-md pointer-events-none">
+          v1.0
+        </div>
       </body>
     </html>
   );
