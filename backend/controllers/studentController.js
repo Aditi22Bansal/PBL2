@@ -116,16 +116,23 @@ exports.submitPreferences = async (req, res) => {
 
 exports.submitChangeRequest = async (req, res) => {
     try {
-        const { roomId, reason } = req.body;
+        const { roomId, reason, requestType, requestedAccommodation } = req.body;
         const email = req.currentUser.email;
         const name = req.currentUser.name;
+
+        const type = requestType === 'ACCESSIBILITY' ? 'ACCESSIBILITY' : 'GENERAL';
+        if (type === 'ACCESSIBILITY' && !requestedAccommodation) {
+            return res.status(400).json({ error: 'requestedAccommodation is required for an ACCESSIBILITY request' });
+        }
 
         const newReq = new ChangeRequest({
             organizationId: req.currentUser.organizationId,
             studentId: email,
             studentName: name,
             currentRoomId: roomId,
-            reason: reason,
+            reason: reason || '',
+            requestType: type,
+            requestedAccommodation: type === 'ACCESSIBILITY' ? requestedAccommodation : '',
             status: 'Pending'
         });
         await newReq.save();

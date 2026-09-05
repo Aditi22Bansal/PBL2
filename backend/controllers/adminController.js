@@ -603,42 +603,59 @@ exports.getAnalytics = async (req, res) => {
     }
 };
 
+// Shared validated core behind every room-member move. Callers first
+// validate EVERYTHING they need (both rooms unlocked, member(s) actually
+// present, target has room if required) and only then apply mutations and
+// save - so a multi-step move (like a full swap, two of these in a row)
+// can't ever commit half of itself if a later check would have failed.
+function _assertUnlocked(room) {
+    if (room.isLocked) throw new Error(`Room ${room.room_number} is locked and cannot be modified.`);
+}
+function _resolveMember(room, memberFragment) {
+    const exact = room.members.find(m => m.includes(memberFragment));
+    if (!exact) throw new Error(`Could not find ${memberFragment} inside Room ${room.room_number}`);
+    return exact;
+}
+function _assertOpenSlot(room) {
+    const capacity = room.room_capacity || room.members.length;
+    if (room.members.length >= capacity) throw new Error(`Room ${room.room_number} has no open slot.`);
+}
+// Pure in-memory mutation - no fetching, no validation, no save. Validate
+// with the helpers above and save afterward.
+function _applyMove(fromRoom, exactMember, toRoom) {
+    fromRoom.members = fromRoom.members.filter(m => m !== exactMember);
+    toRoom.members.push(exactMember);
+}
+
 exports.manualSwap = async (req, res) => {
     try {
         const { roomAId, memberA, roomBId, memberB } = req.body;
         const validIdA = roomAId.match(/^[0-9a-fA-F]{24}$/) ? roomAId : null;
         const validIdB = roomBId.match(/^[0-9a-fA-F]{24}$/) ? roomBId : null;
-        
+
         const orgFilter = { organizationId: req.currentUser.organizationId };
         const roomA = await RoomAllocation.findOne({ ...orgFilter, $or: [{ room_number: roomAId }, { _id: validIdA }] });
         const roomB = await RoomAllocation.findOne({ ...orgFilter, $or: [{ room_number: roomBId }, { _id: validIdB }] });
-        
+
         if (!roomA || !roomB) {
             return res.status(404).json({ error: 'Room not found. Make sure to use exact Room Number (e.g. D-101).' });
         }
 
-        if (roomA.isLocked) return res.status(400).json({ error: `Room ${roomA.room_number} is locked and cannot be modified.` });
-        if (roomB.isLocked) return res.status(400).json({ error: `Room ${roomB.room_number} is locked and cannot be modified.` });
+        _assertUnlocked(roomA);
+        _assertUnlocked(roomB);
+        const exactMemberA = _resolveMember(roomA, memberA);
+        const exactMemberB = _resolveMember(roomB, memberB);
 
-        const exactMemberA = roomA.members.find(m => m.includes(memberA));
-        const exactMemberB = roomB.members.find(m => m.includes(memberB));
+        _applyMove(roomA, exactMemberA, roomB);
+        _applyMove(roomB, exactMemberB, roomA);
 
-        if (!exactMemberA) return res.status(400).json({ error: `Could not find ${memberA} inside Room ${roomA.room_number}` });
-        if (!exactMemberB) return res.status(400).json({ error: `Could not find ${memberB} inside Room ${roomB.room_number}` });
-        
-        roomA.members = roomA.members.filter(m => m !== exactMemberA);
-        roomA.members.push(exactMemberB);
-        
-        roomB.members = roomB.members.filter(m => m !== exactMemberB);
-        roomB.members.push(exactMemberA);
-        
         await roomA.save();
         await roomB.save();
-        
+
         res.json({ message: 'Swap completed successfully' });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Swap failed internally' });
+        res.status(400).json({ error: err.message || 'Swap failed internally' });
     }
 };
 
@@ -698,6 +715,118 @@ exports.handleRequestAction = async (req, res) => {
         res.json({ message: `Request ${status}`, data: cReq });
     } catch(err) {
         res.status(500).json({ error: 'Failed' });
+    }
+};
+
+// GET /api/admin/requests/:requestId/eligible-rooms
+// Only meaningful for an ACCESSIBILITY request: finds rooms the student could
+// actually move into - same gender wing as their current room, floor matches
+// what they requested ("Ground floor" -> floor "Ground"), has an open slot,
+// not locked, and isn't the room they're already in. Read-only; doesn't touch
+// anything, just informs the admin's choice below.
+exports.getEligibleAccommodationRooms = async (req, res) => {
+    try {
+        const { requestId } = req.params;
+        const orgFilter = { organizationId: req.currentUser.organizationId };
+
+        const cReq = await ChangeRequest.findOne({ _id: requestId, ...orgFilter });
+        if (!cReq) return res.status(404).json({ error: 'Request not found' });
+        if (cReq.requestType !== 'ACCESSIBILITY') {
+            return res.status(400).json({ error: 'Eligible-room suggestions only apply to ACCESSIBILITY requests' });
+        }
+
+        const currentRoom = await RoomAllocation.findOne({ members: cReq.studentId, ...orgFilter });
+        if (!currentRoom) return res.status(404).json({ error: "Could not find the student's current room" });
+
+        // "Ground floor" is the only structured accommodation option today
+        // (mirrors accessibility_need's single "Ground floor required" value);
+        // matching is case-insensitive against the real, admin-configured
+        // floor value (see the room-floor-realism work).
+        const wantsGround = cReq.requestedAccommodation.toLowerCase().includes('ground');
+
+        // "Right gender" means gender only - the one real hard constraint
+        // (no mixed-gender rooms) - NOT the full gender_group cohort string
+        // (which also bakes in branch/year), so a student isn't blocked from
+        // an otherwise-eligible room just because it's a different cohort.
+        // gender_group is always formed as "<Gender>_<branch>_<year>" by the
+        // allocation engine, so its first token IS the gender.
+        const studentProfile = await Profile.findOne({ user_id: cReq.studentId, ...orgFilter }).lean();
+        const studentGender = ((studentProfile && studentProfile.gender) || '').toUpperCase().startsWith('F') ? 'Female' : 'Male';
+
+        const candidates = await RoomAllocation.find({
+            ...orgFilter,
+            _id: { $ne: currentRoom._id },
+            isLocked: { $ne: true }
+        }).lean();
+
+        const eligibleRooms = candidates
+            .filter(r => (r.gender_group || '').startsWith(studentGender))
+            .filter(r => wantsGround ? (r.floor || '').toLowerCase() === 'ground' : false)
+            .filter(r => r.members.length < (r.room_capacity || r.members.length))
+            .map(r => ({
+                _id: r._id,
+                room_number: r.room_number,
+                block: r.block,
+                floor: r.floor,
+                room_capacity: r.room_capacity,
+                occupancy: r.members.length,
+                openSlots: (r.room_capacity || r.members.length) - r.members.length
+            }));
+
+        res.json({
+            currentRoom: { _id: currentRoom._id, room_number: currentRoom.room_number },
+            eligibleRooms
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to compute eligible rooms' });
+    }
+};
+
+// POST /api/admin/requests/accommodate
+// Executes the actual move for an ACCESSIBILITY request: moves the student
+// out of their current room and into the admin-chosen targetRoomId (one of
+// the eligible rooms above), using the exact same validated move logic
+// manualSwap uses (_assertUnlocked/_resolveMember/_assertOpenSlot/_applyMove)
+// - just a single direction instead of two, since the target already has an
+// open slot rather than a reciprocal member to send back. Marks the request
+// Approved only once the move itself has actually succeeded.
+exports.accommodateAccessibilityRequest = async (req, res) => {
+    try {
+        const { requestId, targetRoomId } = req.body;
+        if (!requestId || !targetRoomId) {
+            return res.status(400).json({ error: 'requestId and targetRoomId are required' });
+        }
+        const orgFilter = { organizationId: req.currentUser.organizationId };
+
+        const cReq = await ChangeRequest.findOne({ _id: requestId, ...orgFilter });
+        if (!cReq) return res.status(404).json({ error: 'Request not found' });
+        if (cReq.requestType !== 'ACCESSIBILITY') {
+            return res.status(400).json({ error: 'Only ACCESSIBILITY requests can be accommodated this way' });
+        }
+
+        const currentRoom = await RoomAllocation.findOne({ members: cReq.studentId, ...orgFilter });
+        const targetRoom = await RoomAllocation.findOne({ _id: targetRoomId, ...orgFilter });
+        if (!currentRoom || !targetRoom) {
+            return res.status(404).json({ error: 'Room not found' });
+        }
+
+        _assertUnlocked(currentRoom);
+        _assertUnlocked(targetRoom);
+        const exactMember = _resolveMember(currentRoom, cReq.studentId);
+        _assertOpenSlot(targetRoom);
+
+        _applyMove(currentRoom, exactMember, targetRoom);
+        await currentRoom.save();
+        await targetRoom.save();
+
+        cReq.status = 'Approved';
+        await cReq.save();
+
+        res.json({ message: `Moved to ${targetRoom.room_number} and request approved`, room_number: targetRoom.room_number });
+    } catch (err) {
+        console.error(err);
+        res.status(400).json({ error: err.message || 'Failed to accommodate request' });
     }
 };
 

@@ -39,6 +39,8 @@ router.post('/allocations/toggle-lock', adminController.toggleRoomLock);
 // Room change requests endpoints
 router.get('/requests', adminController.getChangeRequests);
 router.post('/requests/action', adminController.handleRequestAction);
+router.get('/requests/:requestId/eligible-rooms', adminController.getEligibleAccommodationRooms);
+router.post('/requests/accommodate', adminController.accommodateAccessibilityRequest);
 
 // Force allocate remaining unassigned students
 router.post('/force-allocate', adminController.forceAllocateRemaining);
