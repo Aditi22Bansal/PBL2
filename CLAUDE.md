@@ -114,7 +114,7 @@ future invite flow exists.
 CI/CD pipeline (GitHub Actions), config management (Ansible/Puppet), containers + 
 Kubernetes (rolling update/rollback demo), monitoring (Prometheus+Grafana), reflection 
 report. No fixed deadline. Sequencing so far: REST refactor (done) → Docker (done) → 
-CI/CD (done) → K8s (done) → Ansible → monitoring → report.
+CI/CD (done) → K8s (done) → Ansible (done) → monitoring → report.
 
 ### CI/CD (done)
 `.github/workflows/ci.yml` — push to `ahmad-dev` + PRs targeting `main`. Jobs: 
@@ -137,6 +137,25 @@ just a browser glance — a port-forward-death + stale-local-server mixup during
 first attempt made that discipline necessary, see docs/k8s-deployment.md for the full 
 account). Full writeup, screenshots, and exact commands: 
 [docs/k8s-deployment.md](docs/k8s-deployment.md).
+
+### Ansible (done)
+Two Docker containers (`ansible/target`, `ansible/control`) stand in for a real 
+managed host + control node — `target` mounts the host's real Docker socket 
+(Docker-outside-of-Docker), a deliberate, documented local-demo simplification, not a 
+real remote target. `ansible/playbook.yml` installs Docker (via Docker's official apt 
+repo — Ubuntu 22.04's own repos lack the `docker compose` v2 plugin), creates a 
+`roomsync_deploy` system user, and templates a production-style docker-compose.yml + 
+.env deploying the real GHCR `:latest` images on 4 deliberately-distinct ports 
+(4000/6000/9000/28017). Idempotency proven (`changed=0` on a second run, handler 
+correctly doesn't re-fire); real end-to-end browser verification (Playwright) confirmed 
+org registration, admin login, and student login all work against the live deployed 
+backend. One real caveat found and documented: the frontend image's 
+`NEXT_PUBLIC_API_URL` is baked in at CI build time to `localhost:5000`, so Socket.IO 
+and org-registration (both direct client-side calls) are misdirected in this 
+deployment shape — login/dashboards are unaffected since those go through the 
+server-side proxy. A Docker Desktop/WSL crash (caused by a near-full host disk) hit 
+mid-build and is documented as a real found-and-recovered issue, not hidden. Full 
+writeup: [docs/ansible-deployment.md](docs/ansible-deployment.md).
 
 ## Recently added (features)
 - In-app notifications for room allocation. Socket.IO now has a per-student channel 

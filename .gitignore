@@ -97,8 +97,15 @@ backend/ml_engine/__pycache__/
 # ...except the K8s deployment demo screenshots - those are real
 # documentation, embedded directly in docs/k8s-deployment.md.
 !docs/k8s-screenshots/*.png
+# ...and likewise the Ansible deployment demo screenshots.
+!docs/ansible-screenshots/*.png
 backend/data/*.csv
 
 # Docker - local-only overrides (may carry machine-specific ports/secrets)
 docker-compose.override.yml
 docker-compose.override.yaml
+
+# Ansible demo SSH keypair - generated locally by ansible/setup.sh, real key
+# material, never committed. The directory itself (with a .gitkeep) still is.
+ansible/keys/*
+!ansible/keys/.gitkeep

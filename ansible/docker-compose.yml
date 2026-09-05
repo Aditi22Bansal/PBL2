@@ -1,0 +1,49 @@
+# Two containers on a shared network: `target` (what Ansible provisions) and
+# `control` (Ansible itself). Run ./setup.sh once before the first `up --build`.
+#
+#   cd ansible
+#   ./setup.sh                          # one-time: generates keys/id_rsa(.pub)
+#   docker compose up --build -d
+#   docker compose exec control ansible-playbook -i inventory.ini playbook.yml
+#
+# `target` mounts the HOST's real Docker socket (Docker-outside-of-Docker) — so
+# when the playbook later runs `docker compose up -d` *inside* target, it is
+# actually talking to the same engine this file itself is running on. Containers
+# it starts are real, host-level siblings of target/control, not nested inside
+# target's own namespace. See docs/ansible-deployment.md for why this is a
+# deliberate, documented simplification rather than a real remote-target setup.
+
+services:
+  target:
+    build:
+      context: .
+      dockerfile: target/Dockerfile
+    container_name: ansible-target
+    hostname: target
+    networks:
+      - ansible-net
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./keys:/keys:ro
+    restart: unless-stopped
+
+  control:
+    build:
+      context: .
+      dockerfile: control/Dockerfile
+    container_name: ansible-control
+    networks:
+      - ansible-net
+    volumes:
+      - ./keys:/keys:ro
+      - ./inventory.ini:/ansible/inventory.ini:ro
+      - ./playbook.yml:/ansible/playbook.yml:ro
+      - ./templates:/ansible/templates:ro
+    depends_on:
+      - target
+    tty: true
+    restart: unless-stopped
+
+networks:
+  ansible-net:
+    name: ansible-net

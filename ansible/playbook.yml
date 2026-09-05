@@ -1,0 +1,125 @@
+---
+- name: Provision RoomSync deployment target and deploy the real CI-built images
+  hosts: target
+  become: true
+
+  vars:
+    deploy_user: roomsync_deploy
+    deploy_dir: /opt/roomsync
+    frontend_port: 4000
+    backend_port: 6000
+    python_port: 9000
+    mongo_port: 28017
+    ghcr_backend_image: ghcr.io/aditi22bansal/pbl2-backend:latest
+    ghcr_frontend_image: ghcr.io/aditi22bansal/pbl2-frontend:latest
+    ghcr_python_image: ghcr.io/aditi22bansal/pbl2-python-service:latest
+    # Placeholder only — real deployments must override this (e.g. -e nextauth_secret=...).
+    nextauth_secret: "ansible-demo-secret-change-me"
+
+  tasks:
+    - name: Install apt prerequisites for adding Docker's official repository
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - git
+          - gnupg
+        state: present
+        update_cache: true
+
+    # Ubuntu 22.04's own repos carry docker.io but not a "docker compose" v2 plugin
+    # (only the long-deprecated standalone "docker-compose" v1) — and the handler
+    # below needs the real `docker compose` (space) subcommand, so this uses Docker's
+    # official repo instead, exactly as https://docs.docker.com/engine/install/ubuntu/
+    # recommends.
+    - name: Ensure /etc/apt/keyrings exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker's official GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Add Docker's official apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch={{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+
+    - name: Install Docker Engine, CLI, and the Compose v2 plugin
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Create roomsync_deploy system user
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        system: true
+        shell: /bin/bash
+        create_home: true
+        groups: docker
+        append: true
+
+    # Docker-outside-of-Docker specific: the mounted /var/run/docker.sock belongs to
+    # whatever group owns it on the real host engine, which won't generally match this
+    # container's freshly-created "docker" group GID. Align them so roomsync_deploy's
+    # docker-group membership actually grants socket access, instead of assuming it does.
+    - name: Check the mounted Docker socket's real ownership
+      ansible.builtin.stat:
+        path: /var/run/docker.sock
+      register: docker_sock
+
+    - name: Align local docker group GID with the mounted socket's group
+      ansible.builtin.group:
+        name: docker
+        gid: "{{ docker_sock.stat.gid }}"
+      when: docker_sock.stat.gid != 0
+
+    - name: Socket is root-owned on this host — relax its permissions instead (local demo simplification, see docs/ansible-deployment.md)
+      ansible.builtin.file:
+        path: /var/run/docker.sock
+        mode: "0666"
+      when: docker_sock.stat.gid == 0
+
+    - name: Create /opt/roomsync owned by the deploy user
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0755"
+
+    - name: Template production docker-compose.yml
+      ansible.builtin.template:
+        src: templates/docker-compose.yml.j2
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+      notify: docker compose up
+
+    - name: Template .env (secrets/internal URLs)
+      ansible.builtin.template:
+        src: templates/env.j2
+        dest: "{{ deploy_dir }}/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+      notify: docker compose up
+
+  handlers:
+    - name: docker compose up
+      become: true
+      become_user: "{{ deploy_user }}"
+      ansible.builtin.shell: docker compose pull && docker compose up -d
+      args:
+        chdir: "{{ deploy_dir }}"
