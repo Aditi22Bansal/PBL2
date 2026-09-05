@@ -61,7 +61,18 @@ compatibility as primary without a hard-constraint layer.
 CI/CD pipeline (GitHub Actions), config management (Ansible/Puppet), containers + 
 Kubernetes (rolling update/rollback demo), monitoring (Prometheus+Grafana), reflection 
 report. No fixed deadline. Sequencing so far: REST refactor (done) → Docker (done) → 
-CI/CD (next) → K8s → Ansible → monitoring → report.
+CI/CD (done) → K8s → Ansible → monitoring → report.
+
+### CI/CD (done)
+`.github/workflows/ci.yml` — push to `ahmad-dev` + PRs targeting `main`. Jobs: 
+lint-backend (npm ci + syntax-check, no real lint script exists yet), lint-frontend 
+(npm ci + npm run build - same command already proven in frontend/Dockerfile), 
+python-check (py_compile sanity check - no pytest/flake8 configured anywhere), 
+docker-build (all 3 Dockerfiles, 3-way matrix, no live DB needed), and push-images 
+(push-only, ahmad-dev only, never on a PR). Images land in 
+`ghcr.io/aditi22bansal/pbl2-{backend,frontend,python-service}`, tagged `:<commit-sha>` 
+and `:latest`, using the built-in `GITHUB_TOKEN` (no new secrets). Diagram + job-shape 
+table: [docs/ci-pipeline.md](docs/ci-pipeline.md).
 
 ## Recently added (features)
 - In-app notifications for room allocation. Socket.IO now has a per-student channel 
