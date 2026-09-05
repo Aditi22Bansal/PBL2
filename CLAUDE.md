@@ -114,7 +114,7 @@ future invite flow exists.
 CI/CD pipeline (GitHub Actions), config management (Ansible/Puppet), containers + 
 Kubernetes (rolling update/rollback demo), monitoring (Prometheus+Grafana), reflection 
 report. No fixed deadline. Sequencing so far: REST refactor (done) → Docker (done) → 
-CI/CD (done) → K8s (done) → Ansible (done) → monitoring → report.
+CI/CD (done) → K8s (done) → Ansible (done) → monitoring (done) → report.
 
 ### CI/CD (done)
 `.github/workflows/ci.yml` — push to `ahmad-dev` + PRs targeting `main`. Jobs: 
@@ -156,6 +156,22 @@ deployment shape — login/dashboards are unaffected since those go through the
 server-side proxy. A Docker Desktop/WSL crash (caused by a near-full host disk) hit 
 mid-build and is documented as a real found-and-recovered issue, not hidden. Full 
 writeup: [docs/ansible-deployment.md](docs/ansible-deployment.md).
+
+### Monitoring (done)
+Instrumented both `backend` (prom-client middleware wrapping every request - default 
+process metrics + `http_request_duration_seconds`/`http_requests_total`, labeled by 
+method/matched-route-pattern/status_code) and `python-service` 
+(prometheus-fastapi-instrumentator, same shape automatically), both at `GET /metrics`. 
+Neither had any prior instrumentation - confirmed by grep, not assumed. Pushed via a 
+real commit -> CI built + pushed new GHCR images -> `k8s/backend.yaml`/
+`k8s/python-service.yaml` bumped to that SHA and rolled out, same real-image 
+discipline as the K8s task. `k8s/monitoring/`: Prometheus (scraping both services 
+cross-namespace) + Grafana, with a provisioned datasource and a provisioned 3-panel 
+dashboard (uptime/p95 latency/error rate) - no manual UI clicking. Verified with real 
+generated traffic (incl. genuine 401s/404s) before screenshotting: Prometheus 
+`/api/v1/targets` showed both services `up`, and the dashboard rendered real non-zero 
+latency and error-rate data, not an empty/zero one. Full writeup: 
+[docs/monitoring.md](docs/monitoring.md).
 
 ## Recently added (features)
 - In-app notifications for room allocation. Socket.IO now has a per-student channel 

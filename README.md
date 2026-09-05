@@ -152,6 +152,7 @@ configuration — not this README.
 - **[docs/ci-pipeline.md](docs/ci-pipeline.md)** — CI/CD pipeline (lint/build/docker-build/push to GHCR)
 - **[docs/k8s-deployment.md](docs/k8s-deployment.md)** — Kubernetes manifests + a live rolling-update/rollback demonstration
 - **[docs/ansible-deployment.md](docs/ansible-deployment.md)** — Ansible playbook provisioning a target and deploying the real GHCR images
+- **[docs/monitoring.md](docs/monitoring.md)** — Prometheus + Grafana, real app metrics, verified with real traffic
 - **[SECURITY.md](SECURITY.md)** — vulnerabilities found and fixed, isolation model, how to report an issue
 
 ## Known limitations
@@ -184,7 +185,8 @@ backlog:
 - **Real multi-building/wing support.** Per-block capacity and genuine gender/year
   overflow across more than one physical block aren't modeled yet — a dead-code cleanup
   removed logic that implied this already existed, but didn't build the real thing.
-- **Remaining DevOps rubric items:** monitoring (Prometheus + Grafana) and the
-  reflection report — CI/CD, Kubernetes (rolling update/rollback), and config
-  management (Ansible) are done; these two are still pending. See
-  [docs/ansible-deployment.md](docs/ansible-deployment.md) for the Ansible writeup.
+- **Remaining DevOps rubric items:** just the reflection report — CI/CD, Kubernetes
+  (rolling update/rollback), config management (Ansible), and monitoring
+  (Prometheus + Grafana) are all done. See
+  [docs/ansible-deployment.md](docs/ansible-deployment.md) and
+  [docs/monitoring.md](docs/monitoring.md) for those writeups.

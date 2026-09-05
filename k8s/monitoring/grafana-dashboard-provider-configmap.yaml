@@ -1,0 +1,21 @@
+# Tells Grafana to auto-load any dashboard JSON found in /var/lib/grafana/dashboards
+# on startup - the actual JSON lives in the grafana-dashboard-json ConfigMap below,
+# mounted at that path.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: monitoring
+data:
+  dashboard-provider.yml: |
+    apiVersion: 1
+    providers:
+      - name: RoomSync
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards

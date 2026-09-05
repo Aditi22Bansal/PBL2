@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: python-service
-          # v1 baseline - the commit SHA CI actually built and pushed this from.
-          image: ghcr.io/aditi22bansal/pbl2-python-service:d54c56930b7ea963a3c8ebe0e468fefc82c3b1de
+          # Prometheus-instrumented build - the commit SHA CI actually built and pushed this from.
+          image: ghcr.io/aditi22bansal/pbl2-python-service:be3de6fde14071a41b8416e2aecbf5804a883773
           ports:
             - containerPort: 8000
           readinessProbe:

@@ -1,0 +1,86 @@
+# The actual dashboard, auto-loaded by the provider ConfigMap above - nothing to
+# click together manually in the Grafana UI.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-json
+  namespace: monitoring
+data:
+  roomsync.json: |
+    {
+      "title": "RoomSync",
+      "uid": "roomsync-overview",
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "10s",
+      "time": { "from": "now-15m", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Uptime (up)",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "expr": "up{job=\"backend\"}", "legendFormat": "backend", "refId": "A" },
+            { "expr": "up{job=\"python-service\"}", "legendFormat": "python-service", "refId": "B" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": { "text": "DOWN", "color": "red" },
+                    "1": { "text": "UP", "color": "green" }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "p95 Latency (s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 16, "x": 8, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "s" } },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, job))",
+              "legendFormat": "{{job}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Error rate (non-2xx / total)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "percentunit" } },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{job=\"backend\", status_code!~\"2..\"}[5m])) / sum(rate(http_requests_total{job=\"backend\"}[5m]))",
+              "legendFormat": "backend",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(rate(http_requests_total{job=\"python-service\", status!~\"2xx\"}[5m])) / sum(rate(http_requests_total{job=\"python-service\"}[5m]))",
+              "legendFormat": "python-service",
+              "refId": "B"
+            }
+          ]
+        }
+      ]
+    }

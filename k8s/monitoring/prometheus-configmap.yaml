@@ -1,0 +1,26 @@
+# Scrapes the real app services in the roomsync namespace (both were instrumented
+# with real /metrics endpoints - see docs/monitoring.md) plus Prometheus itself.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 10s
+
+    scrape_configs:
+      - job_name: backend
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["backend.roomsync.svc.cluster.local:5000"]
+
+      - job_name: python-service
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["python-service.roomsync.svc.cluster.local:8000"]
+
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]

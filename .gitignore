@@ -99,6 +99,8 @@ backend/ml_engine/__pycache__/
 !docs/k8s-screenshots/*.png
 # ...and likewise the Ansible deployment demo screenshots.
 !docs/ansible-screenshots/*.png
+# ...and likewise the monitoring/Grafana dashboard demo screenshot.
+!docs/monitoring-screenshots/*.png
 backend/data/*.csv
 
 # Docker - local-only overrides (may carry machine-specific ports/secrets)
