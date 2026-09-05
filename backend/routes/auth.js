@@ -6,7 +6,14 @@ const Organization = require('../models/Organization');
 // Sync user from NextAuth to MongoDB
 router.post('/sync-user', async (req, res) => {
     try {
-        const { email, name, image, role = 'STU' } = req.body;
+        // role is deliberately NEVER read from req.body - it used to be
+        // client-supplied here (and re-written on every login via the
+        // upsert below), which meant anyone could self-escalate to ADMIN
+        // just by setting a cookie/form field before signing in. A brand
+        // new user is always created as STUDENT; becoming an ADMIN happens
+        // only through the founding-admin org-onboarding flow or a direct
+        // DB promotion - never through login.
+        const { email, name, image } = req.body;
 
         if (!email) {
             return res.status(400).json({ error: 'Email is required' });
@@ -24,9 +31,19 @@ router.post('/sync-user', async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized domain.' });
         }
 
+        // $set only ever touches fields that are legitimately re-syncable on
+        // every login (display name/avatar can change upstream; org
+        // membership should track the domain mapping if it's ever
+        // reconfigured). $setOnInsert applies ONLY when this upsert actually
+        // creates a brand-new document - never on an existing user - so an
+        // existing account's role can no longer be overwritten by anything
+        // sent from the client, ever.
         const user = await User.findOneAndUpdate(
             { email },
-            { name, avatarUrl: image, role, organizationId: organization._id },
+            {
+                $set: { name, avatarUrl: image, organizationId: organization._id },
+                $setOnInsert: { role: 'STUDENT' }
+            },
             { upsert: true, new: true }
         );
 

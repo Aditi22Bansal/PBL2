@@ -57,6 +57,38 @@ allocated a room (nobody left unassigned). Compatibility score is maximized WITH
 constraints, not traded off against them. NOT yet implemented — current engine treats 
 compatibility as primary without a hard-constraint layer.
 
+## Security — fixed (worth citing as a real found-and-fixed vulnerability)
+Client-trusted role escalation via login, closed. `POST /api/auth/sync-user` used to
+accept `role` straight from the request body and write it via an upsert on EVERY
+login (`routes/auth.js`) — any user could set `role: 'ADMIN'` client-side (a cookie
+the login page set itself, or a plain form field for the dev-login provider) and
+their account would be silently promoted to ADMIN the next time they signed in, no
+invitation or approval needed. Fixed: `role` is no longer read from the request body
+at all; a brand-new user is created with `role: 'STUDENT'` via `$setOnInsert` only,
+and an existing user's `role` is never included in the update, so nothing sent by a
+client can ever write it again, on login or otherwise. Verified live: repeatedly
+POSTing `role: 'ADMIN'` for an existing real student left their DB role at STUDENT
+(and calling an admin-only endpoint as them still correctly 403s, since `requireAdmin`
+re-reads role from the DB fresh on every request); the real admin account's
+pre-existing `role: 'ADMIN'` was confirmed unchanged (no longer self-healing via
+upsert, so it must already be correct in the DB — which it is).
+Also added: a real MongoDB unique (multikey) index on `Organization.allowedEmailDomains`
+(model + real DB index confirmed) — two orgs literally cannot claim the same domain
+now; verified a colliding insert is rejected with E11000, not just discouraged by
+app logic.
+
+Known, NOT fixed here (discovered while verifying the above, distinct issue): the
+frontend's `session.user.role` (NextAuth JWT/session) is still populated straight
+from the login form's selected role / the `selectedRole` cookie
+(`frontend/src/app/api/auth/[...nextauth]/route.ts`'s `jwt`/`signIn` callbacks),
+never from the backend's real, now-protected `User.role`. This doesn't expose any
+real data or capability — every actual `/api/admin/*` call still re-checks the DB
+role via `requireAdmin` and correctly 403s regardless of what the session claims —
+but it means the frontend's own role-based routing (which dashboard you land on) is
+still just UI decoration driven by client input, not real authorization. Worth
+closing later (e.g. have the frontend read the synced user's real role back from
+`sync-user`'s response instead of trusting its own request).
+
 ## DevOps rubric being satisfied alongside this project
 CI/CD pipeline (GitHub Actions), config management (Ansible/Puppet), containers + 
 Kubernetes (rolling update/rollback demo), monitoring (Prometheus+Grafana), reflection 
