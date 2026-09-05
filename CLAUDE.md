@@ -83,15 +83,6 @@ CI/CD (next) → K8s → Ansible → monitoring → report.
 - Socket.IO's `join_user(email)` is client-asserted and unauthenticated, matching the 
   existing `join_room` trust level. Safe today — the channel is push-only and carries 
   just a room number — but it MUST be authenticated before anything sensitive goes on it.
-- Duplicate room_number values are possible: adminController.js numbers rooms within-floor 
-  as `(count % ROOMS_PER_FLOOR) + 1` (ROOMS_PER_FLOOR=8), keyed by (block, floor). Since 
-  every male room is block D regardless of branch/year, a single (D, Ground) bucket can 
-  exceed 8 rooms in one run (confirmed: 22 in the real 109-profile dataset), wrapping the 
-  counter and producing e.g. multiple rooms named "D-G01". Pre-existing since the 
-  floor-realism work, not introduced or worsened by the block-lettering cleanup below - 
-  surfaced while verifying it. Root cause is the same gap noted in the backlog below (no 
-  real per-block capacity anywhere in the data model); fixing it for real means building 
-  that, not just bumping ROOMS_PER_FLOOR.
 
 ## Backlog (deferred, not attempted)
 - Branch dropdown (`frontend/src/lib/questionnaireConfig.ts`) is a static hardcoded list 
@@ -181,3 +172,14 @@ CI/CD (next) → K8s → Ansible → monitoring → report.
   C/E/F/G were always dead; every non-first-year female room was always B, every male room 
   always D. Now returns a single block letter (A/B/D) directly - same runtime behavior, 
   honest code. Did NOT build real per-block capacity/overflow (see backlog above).
+- Fixed duplicate room_number collisions surfaced by the block-lettering cleanup above: 
+  adminController.js's within-floor room numbering used `(count % ROOMS_PER_FLOOR) + 1` 
+  (ROOMS_PER_FLOOR=8), wrapping back to 01 once a single (block, floor) bucket passed 8 
+  rooms - e.g. block D (every male room) can hold 20+ Ground-floor rooms alone, producing 
+  several rooms literally named "D-G01". The real database was never actually affected 
+  (confirmed: its current room_numbers predate the floor-realism work entirely and were 
+  already unique; the collision only ever showed up in a scratch re-trigger during 
+  verification), so no data regeneration was needed - just the code path. Fix: removed the 
+  modulo entirely; the per-(block,floor) counter now increments naturally (D-G01..D-G22, 
+  no wraparound). Numbering-only change - verified byte-identical room composition 
+  (member groupings) against the pre-fix baseline.

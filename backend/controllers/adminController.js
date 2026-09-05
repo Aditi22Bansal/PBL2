@@ -250,7 +250,6 @@ exports.triggerAllocation = async (req, res) => {
         profilesJson.forEach(p => profileMap[p.user_id] = p);
 
         const CAPACITY_PER_ROOM = 3;
-        const ROOMS_PER_FLOOR = 8;
 
         // Determine offset for numbering so we don't overlap with locked rooms
         let nextRoomIdByBlockFloor = {};
@@ -341,8 +340,13 @@ exports.triggerAllocation = async (req, res) => {
             const key = `${blockId}::${floorValue}`;
             const idOnFloor = nextRoomIdByBlockFloor[key] || 0;
             nextRoomIdByBlockFloor[key] = idOnFloor + 1;
-            const r = (idOnFloor % ROOMS_PER_FLOOR) + 1;
-            const roomNumber = `${blockId}-${floorSlug}0${r}`;
+            // No modulo/wraparound: the counter increments naturally so room
+            // numbers stay unique within a (block, floor) combination no
+            // matter how many rooms land there (was capped at ROOMS_PER_FLOOR=8,
+            // wrapping back to 01 and colliding with an earlier real room once
+            // a single block+floor held more than 8 rooms - e.g. every male
+            // room is block D today, so D+Ground alone can hold 20+ rooms).
+            const roomNumber = `${blockId}-${floorSlug}${String(idOnFloor + 1).padStart(2, '0')}`;
             return { block: blockId, floor: floorValue, room_number: roomNumber };
         };
 
