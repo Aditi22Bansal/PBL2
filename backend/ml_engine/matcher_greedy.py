@@ -213,7 +213,8 @@ def create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms, sim_matrix
             "gender_group": gender,
             "members": group_ids,
             "room_number": None,
-            "compatibility_score": score
+            "compatibility_score": score,
+            "capacity": room_def["capacity"]
         })
 
     return flex_allocations
@@ -301,7 +302,8 @@ def run_greedy_allocation_for_gender(
                     "gender_group": profiles[first_unassigned].gender,
                     "members": [profiles[first_unassigned].user_id],
                     "room_number": None,
-                    "compatibility_score": 1.0
+                    "compatibility_score": 1.0,
+                    "capacity": cap
                 })
                 allocated_room_ids.add(room_def["id"])
             continue
@@ -364,7 +366,8 @@ def run_greedy_allocation_for_gender(
                 "gender_group": profiles[A].gender,
                 "members": [profiles[m].user_id for m in members],
                 "room_number": None,
-                "compatibility_score": round(avg_score, 4)
+                "compatibility_score": round(avg_score, 4),
+                "capacity": cap
             })
             allocated_room_ids.add(room_def["id"])
             group_found = True

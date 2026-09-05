@@ -233,16 +233,6 @@ exports.triggerAllocation = async (req, res) => {
         const CAPACITY_PER_ROOM = 3;
         const ROOMS_PER_FLOOR = 8;
 
-        // Build capacity pool from room templates
-        const capacityPool = [];
-        if (activeConfig && activeConfig.roomTemplates) {
-            for (const template of activeConfig.roomTemplates) {
-                for (let i = 0; i < (template.count || 0); i++) {
-                    capacityPool.push(template.capacity);
-                }
-            }
-        }
-
         // Determine offset for numbering so we don't overlap with locked rooms
         let nextIds = { A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1 };
 
@@ -274,7 +264,11 @@ exports.triggerAllocation = async (req, res) => {
         for (const alloc of (result.allocations || [])) {
             const roomData = assignRoom(getBlocksForRoom(alloc));
             if (roomData) {
-                const roomCapacity = capacityPool.length > 0 ? capacityPool.shift() : (alloc.members ? alloc.members.length : CAPACITY_PER_ROOM);
+                // The actual capacity the algorithm decided for THIS room - not a
+                // FIFO queue popped in emission order (that was decoupled from
+                // reality: it could assign e.g. a template's capacity to a room
+                // that was actually filled to a completely different size).
+                const roomCapacity = alloc.capacity || (alloc.members ? alloc.members.length : CAPACITY_PER_ROOM);
                 newAllocations.push({
                     organizationId: req.currentUser.organizationId,
                     allocation_run_id: result.run_id || 'manual_id',
