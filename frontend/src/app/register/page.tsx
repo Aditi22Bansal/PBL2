@@ -1,47 +1,53 @@
 "use client";
 
-import { signIn, useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, ShieldCheck, UserCog, Building2, Mail } from "lucide-react";
+import { ChevronRight, ShieldCheck, Building2, Check, AlertTriangle, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import axios from "axios";
+import { API_URL } from "@/lib/api";
 
 export default function RegisterPage() {
-  const { status } = useSession();
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [agreed, setAgreed] = useState(false);
+  const [orgName, setOrgName] = useState("");
+  const [domain, setDomain] = useState("");
+  const [founderName, setFounderName] = useState("");
+  const [founderEmail, setFounderEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
-  // If already logged in, redirect to admin
-  useEffect(() => {
-    if (status === "authenticated") {
-      router.push("/admin");
+  const canSubmit = orgName.trim() && domain.trim() && founderName.trim() && founderEmail.trim();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit || submitting) return;
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      // Public, unauthenticated endpoint - there's no session yet at this
+      // point, so this goes straight to the backend (API_URL), not through
+      // the authenticated proxy (which requires a session to already exist).
+      await axios.post(`${API_URL}/api/auth/register-organization`, {
+        orgName: orgName.trim(),
+        domain: domain.trim(),
+        founderName: founderName.trim(),
+        founderEmail: founderEmail.trim(),
+      });
+      setSuccess(true);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      setError(err.response?.data?.error || "Failed to create organization. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
-  }, [status, router]);
-
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  const handleAdminRegister = async () => {
-    if (!agreed) return;
-    setLoading(true);
-    // Set role cookie to ADMIN before Google OAuth
-    document.cookie = `selectedRole=ADMIN; path=/; max-age=3600`;
-    // Google OAuth will handle signup + signin in one step
-    await signIn("google", { callbackUrl: "/admin" });
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center relative overflow-hidden">
-      {/* Background */}
       <div className="absolute top-0 right-0 w-full h-[60vh] bg-gradient-to-b from-violet-100/40 to-transparent pointer-events-none" />
 
-      {/* Back link */}
       <button
         onClick={() => router.push("/")}
         className="absolute top-6 left-6 z-20 flex items-center gap-2 text-sm text-slate-400 hover:text-slate-700 transition-colors"
@@ -56,7 +62,6 @@ export default function RegisterPage() {
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="w-full"
         >
-          {/* Brand */}
           <div className="text-center mb-6">
             <span className="font-serif text-2xl font-semibold text-slate-700 tracking-tight">
               Room<span className="text-orange-500">Sync</span>
@@ -64,103 +69,131 @@ export default function RegisterPage() {
             <p className="text-xs text-slate-400 mt-1">Hostel Management Platform</p>
           </div>
 
-          {/* Card */}
           <div className="bg-white px-10 py-12 rounded-[2rem] shadow-[0_10px_50px_rgba(0,0,0,0.05)] border border-slate-100">
-
-            {/* Icon */}
             <motion.div
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2 }}
               className="mx-auto bg-violet-100 text-violet-600 p-4 rounded-full w-20 h-20 flex items-center justify-center mb-6"
             >
-              <UserCog className="w-10 h-10" />
+              <Building2 className="w-10 h-10" />
             </motion.div>
 
             <h1 className="text-2xl font-bold text-slate-800 mb-2 text-center">
-              Admin Registration
+              Create Your Organization
             </h1>
             <p className="text-slate-500 text-sm text-center leading-relaxed mb-8 px-2">
-              Register as a hostel administrator using your official SIT Google account. Once verified, you&apos;ll have full access to the management dashboard.
+              Set up RoomSync for your institution. Your email domain becomes the gate for
+              everyone else who signs in — only your organization&apos;s addresses will be accepted.
             </p>
 
-            {/* What you get */}
-            <div className="space-y-3 mb-8">
-              {[
-                { icon: Building2, text: "Configure your hostel — blocks, rooms, amenities" },
-                { icon: UserCog, text: "Run AI-powered room allocation for your students" },
-                { icon: Mail, text: "Manage student profiles and allocation reports" },
-              ].map(({ icon: Icon, text }) => (
-                <div
-                  key={text}
-                  className="flex items-center gap-3 bg-violet-50 rounded-xl px-4 py-3"
-                >
-                  <Icon className="w-4 h-4 text-violet-500 flex-shrink-0" />
-                  <span className="text-sm text-slate-600">{text}</span>
+            {success ? (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-6 rounded-2xl text-center space-y-4">
+                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto border border-emerald-200 shadow-sm">
+                  <Check size={20} className="text-emerald-600" />
                 </div>
-              ))}
-            </div>
-
-            {/* Agreement checkbox */}
-            <label className="flex items-start gap-3 mb-8 cursor-pointer group">
-              <div className="relative mt-0.5">
-                <input
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                  className="sr-only"
-                />
-                <div
-                  className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
-                    agreed
-                      ? "bg-violet-600 border-violet-600"
-                      : "border-slate-300 group-hover:border-violet-400"
-                  }`}
+                <p className="text-sm font-medium leading-relaxed">
+                  Organization created. You&apos;re registered as the founding administrator for{" "}
+                  <span className="font-semibold">{domain.trim()}</span>.
+                </p>
+                <button
+                  onClick={() => router.push("/login")}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-full transition-all flex items-center justify-center gap-2"
                 >
-                  {agreed && (
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </div>
+                  Log in now <ChevronRight size={16} />
+                </button>
               </div>
-              <span className="text-xs text-slate-500 leading-relaxed">
-                I confirm I am a hostel warden or faculty administrator at my institution. I understand this platform is for institutional use only and agree to use it responsibly.
-              </span>
-            </label>
-
-            {/* Google Sign In Button */}
-            <button
-              onClick={handleAdminRegister}
-              disabled={loading || !agreed}
-              className="w-full text-white font-medium py-4 px-6 rounded-xl flex items-center justify-center gap-4 transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed bg-violet-600 hover:bg-violet-700"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  <div className="bg-white p-1 rounded-md">
-                    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.86C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.05H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.95l3.66-2.86z" fill="#FBBC05" />
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.05l3.66 2.86c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                    </svg>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {error && (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-start gap-3 text-xs leading-relaxed">
+                    <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                    <span>{error}</span>
                   </div>
-                  Register with Institutional Account
-                  <ChevronRight className="w-5 h-5 ml-1 opacity-70" />
-                </>
-              )}
-            </button>
+                )}
 
-            {/* Footer */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Organization Name
+                  </label>
+                  <input
+                    type="text"
+                    value={orgName}
+                    onChange={(e) => setOrgName(e.target.value)}
+                    placeholder="e.g. Acme Engineering College"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Email Domain
+                  </label>
+                  <input
+                    type="text"
+                    value={domain}
+                    onChange={(e) => setDomain(e.target.value)}
+                    placeholder="e.g. acme.edu"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    Only accounts ending in this domain will be able to sign in.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Your Name
+                  </label>
+                  <input
+                    type="text"
+                    value={founderName}
+                    onChange={(e) => setFounderName(e.target.value)}
+                    placeholder="e.g. Jordan Lee"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Your Email
+                  </label>
+                  <input
+                    type="email"
+                    value={founderEmail}
+                    onChange={(e) => setFounderEmail(e.target.value)}
+                    placeholder="e.g. jordan@acme.edu"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    Must belong to the domain above — this becomes your founding admin account.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submitting || !canSubmit}
+                  className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium py-4 px-6 rounded-xl transition-all duration-300 shadow-md hover:shadow-lg"
+                >
+                  {submitting ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      Create Organization
+                      <ChevronRight className="w-5 h-5 ml-1 opacity-70" />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
             <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span>Restricted to your institution&apos;s email domain</span>
+              <span>One founding admin per organization — invite teammates later</span>
             </div>
 
             <div className="mt-4 text-center">
-              <span className="text-xs text-slate-400">Already registered? </span>
+              <span className="text-xs text-slate-400">Already have an organization? </span>
               <button
                 onClick={() => router.push("/login")}
                 className="text-xs text-violet-600 hover:text-violet-800 font-medium transition-colors"

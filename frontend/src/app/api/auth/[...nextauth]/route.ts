@@ -1,7 +1,6 @@
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { cookies } from "next/headers";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 const IS_DEV_AUTH = process.env.NEXT_PUBLIC_DEV_AUTH === "true";
@@ -83,11 +82,10 @@ export const authOptions = {
       // sign-in if sync fails"), but for a tenant-membership gate, failing
       // open on a backend outage is a bigger risk than a temporary lockout.
       try {
-        const cookieStore = await cookies();
-        const roleCookie =
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (user as any).role || cookieStore.get("selectedRole")?.value || "STUDENT";
-
+        // No role is sent here anymore - the backend never reads it from
+        // the request body (see backend/routes/auth.js), so sending the
+        // login form's selection or the selectedRole cookie would just be
+        // misleading dead weight.
         const syncRes = await fetch(`${BACKEND_URL}/api/auth/sync-user`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -95,13 +93,22 @@ export const authOptions = {
             email: user.email,
             name: user.name,
             image: user.image,
-            role: roleCookie.toUpperCase(), // "ADMIN" or "STUDENT"
           }),
         });
 
         if (!syncRes.ok) {
           return "/unauthorized";
         }
+
+        // The role that actually matters from here on is the REAL,
+        // DB-persisted one sync-user just returned - never the login form's
+        // selection or the selectedRole cookie. Overwriting it here means
+        // the jwt() callback below (which reads user.role) picks up the real
+        // value instead of whatever the client originally claimed, so a
+        // student who selects "Admin" at the role picker gets a session that
+        // correctly says STUDENT, not a session that trusts their own pick.
+        const syncedUser = await syncRes.json();
+        (user as any).role = syncedUser.role;
       } catch (err) {
         console.error("[sync-user] Failed to sync to backend:", err);
         return "/unauthorized";
@@ -113,11 +120,14 @@ export const authOptions = {
     // Attach role to JWT token ──────────────────────────────
     async jwt({ token, user }) {
       if (user) {
-        const cookieStore = await cookies();
-        const roleCookie =
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (user as any).role || cookieStore.get("selectedRole")?.value || "STUDENT";
-        token.role = roleCookie.toUpperCase();
+        // signIn() above always runs first and, on success, has already
+        // overwritten user.role with the real, DB-persisted value - this is
+        // never the client's original form selection or a cookie by the
+        // time we get here (signIn returning a redirect string instead of
+        // true would have aborted the sign-in entirely, so jwt() only ever
+        // runs after that real value was set).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        token.role = ((user as any).role || "STUDENT").toUpperCase();
       }
       return token;
     },

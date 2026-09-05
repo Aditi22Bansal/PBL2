@@ -77,17 +77,38 @@ Also added: a real MongoDB unique (multikey) index on `Organization.allowedEmail
 now; verified a colliding insert is rejected with E11000, not just discouraged by
 app logic.
 
-Known, NOT fixed here (discovered while verifying the above, distinct issue): the
-frontend's `session.user.role` (NextAuth JWT/session) is still populated straight
-from the login form's selected role / the `selectedRole` cookie
-(`frontend/src/app/api/auth/[...nextauth]/route.ts`'s `jwt`/`signIn` callbacks),
-never from the backend's real, now-protected `User.role`. This doesn't expose any
-real data or capability — every actual `/api/admin/*` call still re-checks the DB
-role via `requireAdmin` and correctly 403s regardless of what the session claims —
-but it means the frontend's own role-based routing (which dashboard you land on) is
-still just UI decoration driven by client input, not real authorization. Worth
-closing later (e.g. have the frontend read the synced user's real role back from
-`sync-user`'s response instead of trusting its own request).
+Frontend session role also fixed. `session.user.role` (NextAuth JWT/session) used
+to be populated straight from the login form's selected role / the `selectedRole`
+cookie, never from the backend's real `User.role` — so even after the write-path
+fix above, a student who clicked "Continue as Admin" would still land on the
+`/admin` route (blocked from doing anything real, but a confusing broken shell).
+Fixed: `signIn()` now overwrites `user.role` with the real role from `sync-user`'s
+response before `jwt()` ever reads it, so the session always reflects DB truth,
+never the client's own selection. The now-dead cookie-fallback and the pointless
+`role` field in the sync-user request body were removed too. Verified live: a real
+student selecting "Continue as Admin" is now redirected to `/unauthorized` instead
+of ever reaching the admin shell; the real admin and a freshly-created founding
+admin both still land on `/admin` correctly when they pick the right role.
+
+## Org onboarding (done — founding-admin-only)
+`POST /api/auth/register-organization` (public, no auth) creates a brand-new
+Organization + its founding ADMIN User. Rejects if the domain is already claimed
+(the unique index above is the real enforcement; a friendly pre-check gives a
+clear message first) and requires the founder's own email to belong to the domain
+being registered. This Mongo deployment is standalone (no replica set), so no
+multi-document transaction is available — instead: Organization is created first,
+then the founding User; if that second insert fails for any reason, the
+just-created Organization is deleted as a compensating rollback, so a failed
+registration never leaves a stranded org with nobody able to administer it.
+Verified: concurrent duplicate-domain registrations — exactly one succeeds, the
+loser leaves no orphaned data. `register/page.tsx` is now "Create Your
+Organization" (org name, domain, founder name/email) — the old unrestricted
+self-attestation checkbox flow is gone entirely. A brand-new org's founding admin
+sees a completely empty, correctly isolated dashboard (zero SIT Pune data of any
+kind) immediately after registering and logging in.
+Multi-admin invite (inviting a second admin into an existing org) is deferred, not
+built — today it's founding-admin-only; every org has exactly one admin until a
+future invite flow exists.
 
 ## DevOps rubric being satisfied alongside this project
 CI/CD pipeline (GitHub Actions), config management (Ansible/Puppet), containers + 
