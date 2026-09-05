@@ -9,7 +9,10 @@ const profileSchema = new mongoose.Schema({
   gender: { type: String },
   year_of_study: { type: String },
   branch: { type: String },
-  
+  // Optional - existing profiles without it are treated as "No preference"
+  // downstream, no backfill needed.
+  preferred_room_size: { type: String, default: 'No preference' },
+
   sleep_time: { type: String },
   wake_time: { type: String },
   cleanliness: { type: String },

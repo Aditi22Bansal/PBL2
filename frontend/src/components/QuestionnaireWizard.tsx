@@ -19,6 +19,7 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
     gender: "",
     year_of_study: "",
     branch: "",
+    preferred_room_size: "",
     sleep_time: "",
     wake_time: "",
     cleanliness: "",

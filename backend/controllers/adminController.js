@@ -208,7 +208,8 @@ exports.triggerAllocation = async (req, res) => {
             pref_roommate_social: p.pref_roommate_social || 'Does not matter',
             cleanliness_expectation: p.cleanliness_expectation || 'Moderately Clean',
             light_preference: p.light_preference || 'Dim light is fine',
-            most_important_factor: p.most_important_factor || 'Cleanliness and Organization'
+            most_important_factor: p.most_important_factor || 'Cleanliness and Organization',
+            preferred_room_size: p.preferred_room_size || 'No preference'
         }));
 
         // Send the full profile list to /allocate/v2 in a single call. Gender (and

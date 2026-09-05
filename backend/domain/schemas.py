@@ -16,7 +16,8 @@ class StudentProfile(BaseModel):
     gender: str
     year_of_study: str
     branch: str
-    
+    preferred_room_size: str = "No preference"
+
     # Lifestyle and Preferences
     sleep_time: str
     wake_time: str
