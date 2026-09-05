@@ -80,6 +80,9 @@ CI/CD (next) → K8s → Ansible → monitoring → report.
 - /admin/requests shows "Original Assigned Room: Unknown (ID: )" for one stale test record
 - "Things to discuss together" can show a duplicate bullet (conflict reasons aren't 
   de-duplicated, unlike recommendations which does use a Set)
+- Socket.IO's `join_user(email)` is client-asserted and unauthenticated, matching the 
+  existing `join_room` trust level. Safe today — the channel is push-only and carries 
+  just a room number — but it MUST be authenticated before anything sensitive goes on it.
 
 ## Recently fixed (allocation engine)
 - Room-size ceiling (MAX_EFFECTIVE_ROOM_SIZE=6 in matcher_greedy.py): an oversized 
