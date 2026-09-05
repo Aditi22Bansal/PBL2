@@ -114,7 +114,7 @@ future invite flow exists.
 CI/CD pipeline (GitHub Actions), config management (Ansible/Puppet), containers + 
 Kubernetes (rolling update/rollback demo), monitoring (Prometheus+Grafana), reflection 
 report. No fixed deadline. Sequencing so far: REST refactor (done) → Docker (done) → 
-CI/CD (done) → K8s → Ansible → monitoring → report.
+CI/CD (done) → K8s (done) → Ansible → monitoring → report.
 
 ### CI/CD (done)
 `.github/workflows/ci.yml` — push to `ahmad-dev` + PRs targeting `main`. Jobs: 
@@ -126,6 +126,17 @@ docker-build (all 3 Dockerfiles, 3-way matrix, no live DB needed), and push-imag
 `ghcr.io/aditi22bansal/pbl2-{backend,frontend,python-service}`, tagged `:<commit-sha>` 
 and `:latest`, using the built-in `GITHUB_TOKEN` (no new secrets). Diagram + job-shape 
 table: [docs/ci-pipeline.md](docs/ci-pipeline.md).
+
+### Kubernetes (done)
+Manifests in `k8s/`: namespace + ConfigMap + Secret (placeholder) + a Deployment/Service 
+pair for each of mongo (+ PVC), python-service, backend, frontend. Deployed to a local 
+kind cluster, all 4 pods verified Running/Ready; rolling update (`kubectl set image`) 
+and rollback (`kubectl rollout undo`) both demonstrated live end-to-end via a visible 
+version badge, with independent raw-HTTP + pod-image verification at each step (not 
+just a browser glance — a port-forward-death + stale-local-server mixup during the 
+first attempt made that discipline necessary, see docs/k8s-deployment.md for the full 
+account). Full writeup, screenshots, and exact commands: 
+[docs/k8s-deployment.md](docs/k8s-deployment.md).
 
 ## Recently added (features)
 - In-app notifications for room allocation. Socket.IO now has a per-student channel 

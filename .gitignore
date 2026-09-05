@@ -94,6 +94,9 @@ backend/__pycache__/
 backend/ml_engine/__pycache__/
 
 *.png
+# ...except the K8s deployment demo screenshots - those are real
+# documentation, embedded directly in docs/k8s-deployment.md.
+!docs/k8s-screenshots/*.png
 backend/data/*.csv
 
 # Docker - local-only overrides (may carry machine-specific ports/secrets)

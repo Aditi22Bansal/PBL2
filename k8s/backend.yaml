@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: roomsync
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          # v1 baseline - the commit SHA CI actually built and pushed this from.
+          image: ghcr.io/aditi22bansal/pbl2-backend:d54c56930b7ea963a3c8ebe0e468fefc82c3b1de
+          ports:
+            - containerPort: 5000
+          # One shared ConfigMap covers all 3 app services for a demo this
+          # size - backend only actually reads MONGO_URI/DEV_AUTH/
+          # PYTHON_SERVICE_URL/USE_REST_ALLOCATION from it; the frontend-only
+          # keys (BACKEND_URL/NEXTAUTH_URL) just ride along unused, harmlessly.
+          # PORT is set directly here instead, not via the shared ConfigMap -
+          # see configmap.yaml's comment for why.
+          envFrom:
+            - configMapRef:
+                name: roomsync-config
+          env:
+            - name: PORT
+              value: "5000"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: roomsync
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - port: 5000
+      targetPort: 5000

@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: roomsync
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          # v1 baseline - the commit SHA CI actually built and pushed this
+          # from. NEXT_PUBLIC_API_URL/NEXT_PUBLIC_DEV_AUTH are NOT set here -
+          # they're build-time-only (baked into the client JS bundle by
+          # `next build` inside the image, see frontend/Dockerfile), so
+          # they can't be changed at deploy time via env vars at all; the
+          # image already has them baked to the Dockerfile's own defaults
+          # (http://localhost:5000, true), which is exactly the URL this
+          # gets reached at via kubectl port-forward (see docs/k8s-deployment.md).
+          image: ghcr.io/aditi22bansal/pbl2-frontend:d54c56930b7ea963a3c8ebe0e468fefc82c3b1de
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: roomsync-config
+          env:
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: roomsync-secret
+                  key: NEXTAUTH_SECRET
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: roomsync
+spec:
+  # NodePort over LoadBalancer: a bare local cluster (kind / Docker Desktop's
+  # built-in K8s) has no cloud load-balancer controller, so a LoadBalancer
+  # Service would just sit in "pending" external-IP forever without extra
+  # infrastructure (e.g. MetalLB) - NodePort is the practical choice that
+  # actually exposes something without needing that. (In practice, on THIS
+  # specific kind cluster the NodePort range isn't published to the host
+  # either - only the API server port is - so `kubectl port-forward` is what
+  # actually gets used for the live demo; see docs/k8s-deployment.md. NodePort
+  # is still the right manifest choice for a cluster that DOES publish it,
+  # e.g. Docker Desktop's K8s.)
+  type: NodePort
+  selector:
+    app: frontend
+  ports:
+    - port: 3000
+      targetPort: 3000
+      # 30080/30081/30088/30089 were already taken by other lab exercises
+      # sharing this same cluster (social-media, mongo-lab, microservices-demo,
+      # apache-demo) - confirmed free via `kubectl get svc -A` before picking this.
+      nodePort: 30090
