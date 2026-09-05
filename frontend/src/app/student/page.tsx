@@ -452,6 +452,20 @@ export default function StudentDashboard() {
                       </span>
                     </div>
                   )}
+                  {allocation.accessibilityNeedSatisfied !== null && (
+                    <div className="flex items-center gap-2.5 text-xs text-slate-700 font-semibold">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${allocation.accessibilityNeedSatisfied ? 'bg-emerald-50 border border-emerald-100' : 'bg-amber-50 border border-amber-100'}`}>
+                        <span className={`font-black ${allocation.accessibilityNeedSatisfied ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {allocation.accessibilityNeedSatisfied ? '✓' : '!'}
+                        </span>
+                      </div>
+                      <span>
+                        {allocation.accessibilityNeedSatisfied
+                          ? 'Your accessibility request was honored.'
+                          : "We weren't able to accommodate your accessibility request this time."}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 

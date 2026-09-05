@@ -26,7 +26,11 @@ const roomAllocationSchema = new mongoose.Schema({
   // Keyed by member user_id -> boolean. Only present for members who stated
   // an explicit preferred_room_size (2/3/4); "No preference" members have no
   // key here at all.
-  preference_satisfaction: { type: mongoose.Schema.Types.Mixed, default: {} }
+  preference_satisfaction: { type: mongoose.Schema.Types.Mixed, default: {} },
+  // Same pattern as preference_satisfaction: keyed by member user_id ->
+  // boolean, only present for members who stated an explicit accessibility_need
+  // (e.g. "Ground floor required"); "None" members have no key here at all.
+  accessibility_satisfaction: { type: mongoose.Schema.Types.Mixed, default: {} }
 }, { timestamps: true });
 
 module.exports = mongoose.model('RoomAllocation', roomAllocationSchema);

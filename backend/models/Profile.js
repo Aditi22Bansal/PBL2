@@ -12,6 +12,9 @@ const profileSchema = new mongoose.Schema({
   // Optional - existing profiles without it are treated as "No preference"
   // downstream, no backfill needed.
   preferred_room_size: { type: String, default: 'No preference' },
+  // Structured only - never free text describing a condition. Existing
+  // profiles without it are treated as "None" downstream, no backfill needed.
+  accessibility_need: { type: String, default: 'None' },
 
   sleep_time: { type: String },
   wake_time: { type: String },

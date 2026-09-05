@@ -218,7 +218,8 @@ exports.triggerAllocation = async (req, res) => {
             cleanliness_expectation: p.cleanliness_expectation || 'Moderately Clean',
             light_preference: p.light_preference || 'Dim light is fine',
             most_important_factor: p.most_important_factor || 'Cleanliness and Organization',
-            preferred_room_size: p.preferred_room_size || 'No preference'
+            preferred_room_size: p.preferred_room_size || 'No preference',
+            accessibility_need: p.accessibility_need || 'None'
         }));
 
         // Send the full profile list to /allocate/v2 in a single call. Gender (and
@@ -267,10 +268,39 @@ exports.triggerAllocation = async (req, res) => {
                 floorQueueByCapacity[t.capacity].push(floorValue);
             }
         }
-        const nextFloorForCapacity = (capacity) => {
+        // preferGround: a soft, best-effort preference - if any bed of this
+        // capacity is on "Ground", hand it out; otherwise fall through to
+        // whatever's next in the queue exactly as normal (never blocks
+        // placement, satisfaction just ends up marked false downstream).
+        const nextFloorForCapacity = (capacity, preferGround) => {
             const queue = floorQueueByCapacity[capacity];
-            return (queue && queue.length > 0) ? queue.shift() : 'Ground';
+            if (!queue || queue.length === 0) return 'Ground';
+            if (preferGround) {
+                const groundIdx = queue.findIndex(f => f.toLowerCase() === 'ground');
+                if (groundIdx !== -1) return queue.splice(groundIdx, 1)[0];
+            }
+            return queue.shift();
         };
+
+        // A student's accessibility need doesn't affect WHO they're grouped
+        // with (compatibility matching is untouched) - it only affects WHICH
+        // physical room a formed group lands in, which is exactly the layer
+        // that already owns real floor data (the queue above, built in the
+        // room-floor-realism work). Process accessibility-needing groups
+        // FIRST, before any other group gets a turn at the floor queue - the
+        // same pass-ordering fix room-size preference needed, for the same
+        // reason: an earlier-processed group with no stake in the outcome
+        // could otherwise take the only ground-floor bed of that capacity
+        // before a group that actually needs it ever gets a look.
+        const needsGroundFloor = (alloc) => (alloc.members || []).some(uid => {
+            const p = profileMap[uid];
+            return p && p.accessibility_need === 'Ground floor required';
+        });
+        const allAllocs = result.allocations || [];
+        const orderedAllocs = [
+            ...allAllocs.filter(needsGroundFloor),
+            ...allAllocs.filter(a => !needsGroundFloor(a))
+        ];
 
         // Block assignment now derives from each room's own members (via the
         // profile map) instead of which pre-split pool it came from.
@@ -285,9 +315,9 @@ exports.triggerAllocation = async (req, res) => {
             return ['D', 'E', 'F', 'G'];
         };
 
-        const assignRoom = (allowedBlocks, capacity) => {
+        const assignRoom = (allowedBlocks, capacity, preferGround) => {
             for (let blockId of allowedBlocks) {
-                const floorValue = nextFloorForCapacity(capacity);
+                const floorValue = nextFloorForCapacity(capacity, preferGround);
                 const floorSlug = floorValue.toLowerCase() === 'ground' ? 'G' : floorValue;
                 const key = `${blockId}::${floorValue}`;
                 const idOnFloor = nextRoomIdByBlockFloor[key] || 0;
@@ -300,14 +330,26 @@ exports.triggerAllocation = async (req, res) => {
         };
 
         const newAllocations = [];
-        for (const alloc of (result.allocations || [])) {
-            const roomData = assignRoom(getBlocksForRoom(alloc), alloc.capacity);
+        for (const alloc of orderedAllocs) {
+            const roomData = assignRoom(getBlocksForRoom(alloc), alloc.capacity, needsGroundFloor(alloc));
             if (roomData) {
                 // The actual capacity the algorithm decided for THIS room - not a
                 // FIFO queue popped in emission order (that was decoupled from
                 // reality: it could assign e.g. a template's capacity to a room
                 // that was actually filled to a completely different size).
                 const roomCapacity = alloc.capacity || (alloc.members ? alloc.members.length : CAPACITY_PER_ROOM);
+
+                // Post-hoc, same pattern as preference_satisfaction: only
+                // students who stated an explicit need get an entry at all: no
+                // key at all for "None" - nothing to satisfy.
+                const accessibilitySatisfaction = {};
+                for (const uid of alloc.members) {
+                    const need = profileMap[uid] && profileMap[uid].accessibility_need;
+                    if (need && need !== 'None') {
+                        accessibilitySatisfaction[uid] = need === 'Ground floor required' && roomData.floor.toLowerCase() === 'ground';
+                    }
+                }
+
                 newAllocations.push({
                     organizationId: req.currentUser.organizationId,
                     allocation_run_id: result.run_id || 'manual_id',
@@ -319,7 +361,8 @@ exports.triggerAllocation = async (req, res) => {
                     room_number: roomData.room_number,
                     room_capacity: roomCapacity,
                     isLocked: false, // Default to false
-                    preference_satisfaction: alloc.preference_satisfaction || {}
+                    preference_satisfaction: alloc.preference_satisfaction || {},
+                    accessibility_satisfaction: accessibilitySatisfaction
                 });
             }
         }

@@ -117,6 +117,14 @@ const getDashboardDTO = async (email, organizationId) => {
         ? !!preferenceSatisfaction[email]
         : null;
 
+    // Same pattern: null unless the student actually stated a need, exactly
+    // like room-size preference above.
+    const hasAccessibilityNeed = !!profile.accessibility_need && profile.accessibility_need !== 'None';
+    const accessibilitySatisfaction = allocation.accessibility_satisfaction || {};
+    const accessibilityNeedSatisfied = hasAccessibilityNeed && Object.prototype.hasOwnProperty.call(accessibilitySatisfaction, email)
+        ? !!accessibilitySatisfaction[email]
+        : null;
+
     return {
         status: 'ALLOCATED',
         profile: {
@@ -140,6 +148,8 @@ const getDashboardDTO = async (email, organizationId) => {
             matchingExplanation,
             preferredRoomSize: hasRoomSizePreference ? profile.preferred_room_size : null,
             preferredRoomSizeSatisfied,
+            accessibilityNeed: hasAccessibilityNeed ? profile.accessibility_need : null,
+            accessibilityNeedSatisfied,
             roommates: roommatesDocs.map(r => ({
                 name: r.name,
                 branch: r.branch,

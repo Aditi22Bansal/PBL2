@@ -79,6 +79,14 @@ export const questionnaireSteps: QuestionnaireStep[] = [
         options: ["2", "3", "4", "No preference"],
         required: true,
         validationError: "Please select a preferred room size (or No preference)."
+      },
+      {
+        id: "accessibility_need",
+        label: "Accessibility Need",
+        type: "select",
+        options: ["None", "Ground floor required"],
+        required: true,
+        validationError: "Please select an accessibility need (or None)."
       }
     ]
   },
