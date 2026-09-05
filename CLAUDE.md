@@ -103,3 +103,32 @@ CI/CD (next) → K8s → Ansible → monitoring → report.
   post-hoc per placed student (room capacity vs. stated preference) and surfaced on the 
   student dashboard's "Why We Matched" card. True no-op when nobody has a preference 
   (100% of real profiles today) — verified byte-identical against the 31-room baseline.
+- Room floor is now real and admin-configured, not a computed formula. HostelConfiguration's 
+  room templates carry a `floor` field (e.g. "Ground", "1", "2"); adminController.js pulls 
+  each placed room's floor from a per-capacity queue built from that real data instead of 
+  `Math.floor(id / ROOMS_PER_FLOOR) + 1`. Missing/blank floor (pre-migration configs, or a 
+  ceiling-expanded virtual room with no real template to attribute a floor to) defaults to 
+  "Ground". Verified: admin-set floor values flow byte-for-byte into RoomAllocation.floor 
+  and into room numbers (e.g. "D-G01", "A-101").
+- accessibility_need (structured: "None" / "Ground floor required") is a soft, best-effort 
+  preference — same questionnaire/Profile/payload pattern as preferred_room_size, including 
+  being threaded into the Python payload. But it's honored in adminController.js's Node-side 
+  room-assignment step, NOT inside matcher_greedy.py's group-formation: accessibility need 
+  doesn't affect WHO groups together (compatibility matching is untouched), only WHICH 
+  physical room a formed group lands in — and floor is only known as real data in Node 
+  (see the floor-realism fix above), not in Python at all. Accessibility-needing groups get 
+  first pick of that capacity's "Ground" floor-queue slots (processed before any other 
+  group, mirroring room-size preference's own pass-ordering fix) before falling through to 
+  normal assignment — best-effort, placement is never blocked. Satisfaction is tracked the 
+  same way (accessibility_satisfaction, post-hoc, only for students with an explicit need) 
+  and surfaced on the dashboard. True no-op against real data (nobody has this need yet).
+- Structured accessibility accommodation requests: ChangeRequest now has requestType 
+  ('GENERAL' | 'ACCESSIBILITY') and requestedAccommodation, with the old free-text `reason` 
+  kept as an optional note rather than the thing that used to carry the actual request. 
+  For an ACCESSIBILITY request, the admin's Requests panel can query eligible target rooms 
+  (right gender — not full branch/year cohort, floor matches, has an open slot, unlocked) 
+  and move the student there in one click. The move reuses manualSwap's exact validated 
+  core (`_assertUnlocked`/`_resolveMember`/`_assertOpenSlot`/`_applyMove`, refactored out of 
+  manualSwap itself) for a single-direction move instead of a two-way swap, then marks the 
+  request Approved. GENERAL requests are untouched — still reviewed/swapped manually via 
+  the Allocations panel exactly as before.
