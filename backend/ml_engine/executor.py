@@ -75,11 +75,13 @@ def compute_allocation(profiles_dict, config=None):
     for template in room_templates:
         cap = template["capacity"]
         cnt = template["count"]
+        is_virtual = template.get("is_virtual", False)
         for _ in range(cnt):
             global_rooms.append({
                 "id": f"Room_{room_id_counter}",
                 "capacity": cap,
-                "assigned_members": []
+                "assigned_members": [],
+                "is_virtual": is_virtual
             })
             room_id_counter += 1
 
@@ -122,9 +124,12 @@ def compute_allocation(profiles_dict, config=None):
         bucket_rooms = []
         current_capacity = 0
 
-        # Sort empty rooms (those without assigned members) descending by capacity
+        # Sort empty rooms (those without assigned members): legitimate
+        # configured tiers first (as a whole group), then ceiling-expanded
+        # virtual tiers only once legitimate capacity runs out - within each
+        # group, largest-first as before.
         empty_rooms = [r for r in global_rooms if len(r["assigned_members"]) == 0]
-        empty_rooms.sort(key=lambda x: x["capacity"], reverse=True)
+        empty_rooms.sort(key=lambda x: (x.get("is_virtual", False), -x["capacity"]))
 
         for r in empty_rooms:
             if current_capacity >= bucket_student_count:
@@ -225,7 +230,8 @@ def compute_allocation(profiles_dict, config=None):
                     continue
 
                 unclaimed_rooms = [r for r in global_rooms if len(r["assigned_members"]) == 0]
-                unclaimed_rooms.sort(key=lambda x: x["capacity"], reverse=True)
+                # Legitimate tiers first, virtual ones only once those run out.
+                unclaimed_rooms.sort(key=lambda x: (x.get("is_virtual", False), -x["capacity"]))
 
                 bucket_rooms = []
                 current_capacity = 0
@@ -267,9 +273,15 @@ def compute_allocation(profiles_dict, config=None):
         # bucket-mate is stuck.
         for uid in still_unplaced:
             student = profiles_by_id[uid]
+            # Only ever roomable with the same gender in the first place, so a
+            # cross-gender "conflict" (e.g. a female non-drinker vs. a male
+            # drinker) is never the real reason this student is stuck - it
+            # would just misreport a capacity problem as a hard conflict.
             conflicting_with = [
                 other_uid for other_uid in all_unassigned
-                if other_uid != uid and has_hard_conflict(student, profiles_by_id[other_uid])
+                if other_uid != uid
+                and profiles_by_id[other_uid].gender == student.gender
+                and has_hard_conflict(student, profiles_by_id[other_uid])
             ]
             if conflicting_with:
                 needs_manual_placement.append({

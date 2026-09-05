@@ -69,3 +69,13 @@ CI/CD (next) → K8s → Ansible → monitoring → report.
 - /admin/requests shows "Original Assigned Room: Unknown (ID: )" for one stale test record
 - "Things to discuss together" can show a duplicate bullet (conflict reasons aren't 
   de-duplicated, unlike recommendations which does use a Set)
+
+## Recently fixed (allocation engine)
+- Room-size ceiling (MAX_EFFECTIVE_ROOM_SIZE=6 in matcher_greedy.py): an oversized 
+  configured tier (e.g. carnation's capacity:23) is split into ceiling-sized virtual 
+  rooms and only used once legitimate configured tiers (<=6) are exhausted — legitimate 
+  tiers are always tried first, largest-first within each group. Prevents both mega-rooms 
+  and legitimate 2/3/4-bed tiers being starved by a misconfigured larger one.
+- needsManualPlacement's "hard_conflict" reason now only compares a stuck student 
+  against others of their own gender (was comparing across the full unassigned pool 
+  regardless of gender, which could misreport a capacity problem as a hard conflict).

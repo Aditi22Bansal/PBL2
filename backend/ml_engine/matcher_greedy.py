@@ -54,6 +54,12 @@ def expand_oversized_templates(room_templates, max_size=MAX_EFFECTIVE_ROOM_SIZE)
     actual rooms of capacity 23. Never invents extra beds and never affects a
     template already at or under max_size (a pure no-op for every real
     configured tier today, all of which are 2-4).
+
+    Each returned template is tagged is_virtual: True/False, so downstream
+    room-claiming code can rank real configured tiers ahead of ceiling-
+    expanded ones (see the sort calls in this file and executor.py) - a
+    misconfigured oversized tier should only ever get used once legitimate
+    capacity is genuinely exhausted, not compete equally with it by size.
     """
     expanded = []
     for template in room_templates:
@@ -61,16 +67,16 @@ def expand_oversized_templates(room_templates, max_size=MAX_EFFECTIVE_ROOM_SIZE)
         count = template.get("count", 0)
 
         if cap <= max_size:
-            expanded.append({"capacity": cap, "count": count})
+            expanded.append({"capacity": cap, "count": count, "is_virtual": False})
             continue
 
         full_chunks = cap // max_size
         remainder = cap % max_size
 
         if full_chunks > 0:
-            expanded.append({"capacity": max_size, "count": count * full_chunks})
+            expanded.append({"capacity": max_size, "count": count * full_chunks, "is_virtual": True})
         if remainder > 0:
-            expanded.append({"capacity": remainder, "count": count})
+            expanded.append({"capacity": remainder, "count": count, "is_virtual": True})
 
     return expanded
 
@@ -281,18 +287,22 @@ def run_greedy_allocation_for_gender(
         for template in room_templates:
             cap = template["capacity"]
             cnt = template["count"]
+            is_virtual = template.get("is_virtual", False)
             for _ in range(cnt):
                 bucket_rooms.append({
                     "id": f"Room_{room_id_counter}",
-                    "capacity": cap
+                    "capacity": cap,
+                    "is_virtual": is_virtual
                 })
                 room_id_counter += 1
 
     n = len(profiles)
-    
-    # Sort bucket_rooms by capacity descending to fill larger rooms first
+
+    # Legitimate configured tiers first (as a whole group), ceiling-expanded
+    # virtual tiers only once those are exhausted; largest-first within each
+    # group, same as before.
     bucket_rooms = [r.copy() for r in bucket_rooms]
-    bucket_rooms.sort(key=lambda x: x["capacity"], reverse=True)
+    bucket_rooms.sort(key=lambda x: (x.get("is_virtual", False), -x["capacity"]))
     
     # If no rooms available
     if not bucket_rooms:
@@ -431,9 +441,10 @@ def run_greedy_allocation_for_gender(
 
         unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
 
-        # Find unused rooms in the claimed inventory for flex rooms
+        # Find unused rooms in the claimed inventory for flex rooms. Legitimate
+        # tiers first, virtual ones only once those are exhausted.
         unused_rooms = [r for r in bucket_rooms if r["id"] not in allocated_room_ids]
-        unused_rooms.sort(key=lambda x: x["capacity"], reverse=True)
+        unused_rooms.sort(key=lambda x: (x.get("is_virtual", False), -x["capacity"]))
 
         flex_rooms = create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms, sim_matrix)
         allocations.extend(flex_rooms)
