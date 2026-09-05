@@ -11,7 +11,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 from domain.schemas import StudentProfile
-from ml_engine.matcher_greedy import run_greedy_allocation_for_gender, normalize_config
+from ml_engine.matcher_greedy import run_greedy_allocation_for_gender, normalize_config, expand_oversized_templates
 from ml_engine.encoder import has_hard_conflict, encode_profile
 
 
@@ -62,8 +62,12 @@ def compute_allocation(profiles_dict, config=None):
 
     run_id = f"run_{uuid.uuid4().hex[:8]}"
 
-    # 1. Normalize the config to get room templates
+    # 1. Normalize the config to get room templates, then split any
+    # oversized tier (e.g. a misconfigured capacity:23 template) into
+    # multiple sane-sized virtual room templates. Preserves total bed count
+    # exactly; a no-op for every template already at or under the ceiling.
     room_templates = normalize_config(config, len(profiles))
+    room_templates = expand_oversized_templates(room_templates)
 
     # 2. Build the global inventory of rooms
     global_rooms = []

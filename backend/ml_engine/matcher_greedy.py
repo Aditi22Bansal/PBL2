@@ -16,7 +16,7 @@ ALL_COVERAGES = []
 def normalize_config(config, total_students_count):
     if config is None:
         config = {}
-        
+
     room_templates = []
     if "roomTemplates" in config:
         room_templates = config["roomTemplates"]
@@ -28,8 +28,51 @@ def normalize_config(config, total_students_count):
         cap = 3
         count = (total_students_count + cap - 1) // cap
         room_templates = [{"capacity": cap, "count": max(1, count)}]
-        
+
     return room_templates
+
+
+# Sane ceiling on how large a single roommate-matching group is ever actually
+# target-filled to, independent of what a configured room template's capacity
+# says. Real configured tiers today only ever go up to 4 (tulip/carnation's
+# legitimate 2/3/4-bed rows); 6 leaves generous headroom above that for a
+# plausible future larger-dorm tier, while still firmly rejecting anything
+# like a capacity:23 tier (almost certainly a data-entry error - see
+# expand_oversized_templates below) from ever being greedily target-filled as
+# one room. Past roughly this size, "roommate compatibility" stops being a
+# meaningful unit anyway - it becomes dormitory/bunk-hall assignment, which
+# this engine isn't designed to optimize for.
+MAX_EFFECTIVE_ROOM_SIZE = 6
+
+
+def expand_oversized_templates(room_templates, max_size=MAX_EFFECTIVE_ROOM_SIZE):
+    """
+    Splits any room template whose capacity exceeds max_size into multiple
+    smaller virtual room templates, preserving total bed count exactly. A
+    capacity:23 tier (count N) becomes N*(23//6)=N*3 virtual rooms of
+    capacity 6, plus N virtual rooms of the 23%6=5 remainder - instead of N
+    actual rooms of capacity 23. Never invents extra beds and never affects a
+    template already at or under max_size (a pure no-op for every real
+    configured tier today, all of which are 2-4).
+    """
+    expanded = []
+    for template in room_templates:
+        cap = template["capacity"]
+        count = template.get("count", 0)
+
+        if cap <= max_size:
+            expanded.append({"capacity": cap, "count": count})
+            continue
+
+        full_chunks = cap // max_size
+        remainder = cap % max_size
+
+        if full_chunks > 0:
+            expanded.append({"capacity": max_size, "count": count * full_chunks})
+        if remainder > 0:
+            expanded.append({"capacity": remainder, "count": count})
+
+    return expanded
 
 
 # ================== LOCAL SEARCH ==================
@@ -232,6 +275,7 @@ def run_greedy_allocation_for_gender(
     else:
         # Default/Legacy config parsing
         room_templates = normalize_config(config_or_rooms, len(profiles))
+        room_templates = expand_oversized_templates(room_templates)
         bucket_rooms = []
         room_id_counter = 1
         for template in room_templates:
