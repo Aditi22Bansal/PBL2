@@ -352,6 +352,20 @@ export default function StudentDashboard() {
                   ) : (
                     <p className="text-xs text-slate-500 italic">Common preferences map complete.</p>
                   )}
+                  {allocation.preferredRoomSizeSatisfied !== null && (
+                    <div className="flex items-center gap-2.5 text-xs text-slate-700 font-semibold">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${allocation.preferredRoomSizeSatisfied ? 'bg-emerald-50 border border-emerald-100' : 'bg-amber-50 border border-amber-100'}`}>
+                        <span className={`font-black ${allocation.preferredRoomSizeSatisfied ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {allocation.preferredRoomSizeSatisfied ? '✓' : '!'}
+                        </span>
+                      </div>
+                      <span>
+                        {allocation.preferredRoomSizeSatisfied
+                          ? 'You got your preferred room size.'
+                          : 'Your room size differs from what you requested.'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 

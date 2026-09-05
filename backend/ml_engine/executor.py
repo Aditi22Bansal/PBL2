@@ -297,6 +297,22 @@ def compute_allocation(profiles_dict, config=None):
                                         "template capacity remained to form a new room."
                 })
 
+    # ==================== PREFERENCE SATISFACTION ====================
+    # Post-hoc, uniform across every placement path (preference pass, normal
+    # fill, Phase 2 slot-in/new-room, fallback, flex) - a student's stated
+    # preference is "satisfied" purely by whether the room they actually
+    # landed in matches it, regardless of which mechanism placed them there.
+    # Only students with an explicit 2/3/4 preference get an entry; "No
+    # preference" students are omitted entirely (nothing to satisfy).
+    for room in all_allocs:
+        cap = room.get("capacity")
+        satisfaction = {}
+        for uid in room["members"]:
+            pref = profiles_by_id[uid].preferred_room_size
+            if pref and pref != "No preference":
+                satisfaction[uid] = (cap is not None and str(cap) == pref)
+        room["preference_satisfaction"] = satisfaction
+
     # ==================== METRICS ====================
     if len(all_allocs) > 0:
         raw_avg = float(np.mean([a["compatibility_score"] for a in all_allocs]))

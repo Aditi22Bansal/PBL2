@@ -280,7 +280,8 @@ exports.triggerAllocation = async (req, res) => {
                     floor: roomData.floor,
                     room_number: roomData.room_number,
                     room_capacity: roomCapacity,
-                    isLocked: false // Default to false
+                    isLocked: false, // Default to false
+                    preference_satisfaction: alloc.preference_satisfaction || {}
                 });
             }
         }

@@ -19,7 +19,11 @@ const roomAllocationSchema = new mongoose.Schema({
   room_capacity: { type: Number },
   block: { type: String },
   floor: { type: Number },
-  isLocked: { type: Boolean, default: false }
+  isLocked: { type: Boolean, default: false },
+  // Keyed by member user_id -> boolean. Only present for members who stated
+  // an explicit preferred_room_size (2/3/4); "No preference" members have no
+  // key here at all.
+  preference_satisfaction: { type: mongoose.Schema.Types.Mixed, default: {} }
 }, { timestamps: true });
 
 module.exports = mongoose.model('RoomAllocation', roomAllocationSchema);

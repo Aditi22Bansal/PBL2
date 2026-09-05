@@ -79,3 +79,13 @@ CI/CD (next) → K8s → Ansible → monitoring → report.
 - needsManualPlacement's "hard_conflict" reason now only compares a stuck student 
   against others of their own gender (was comparing across the full unassigned pool 
   regardless of gender, which could misreport a capacity problem as a hard conflict).
+- Room-size preference (soft/best-effort): students can state preferred_room_size 
+  (2/3/4/"No preference") in the questionnaire. Per legitimate (non-virtual) capacity 
+  tier, matcher_greedy.py runs a preference pass first, seeding groups only from 
+  students who explicitly want that size (ranked by pairwise similarity) and using 
+  "No preference" students as filler for any leftover slots — never as seeds. Whatever 
+  the preference pass can't fill falls through unchanged to the existing fill logic, 
+  then Phase 2, so 100% placement is never at risk. preference_satisfaction is computed 
+  post-hoc per placed student (room capacity vs. stated preference) and surfaced on the 
+  student dashboard's "Why We Matched" card. True no-op when nobody has a preference 
+  (100% of real profiles today) — verified byte-identical against the 31-room baseline.

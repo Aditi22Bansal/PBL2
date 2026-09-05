@@ -108,6 +108,15 @@ const getDashboardDTO = async (email, organizationId) => {
         matchingExplanation = "Excellent matching indicator! You share key commonalities in resting patterns, with only minor schedule differences to discuss.";
     }
 
+    // Only meaningful when the student actually stated a preference (2/3/4) -
+    // "No preference" students get null, same as anyone whose room predates
+    // this feature and carries no preference_satisfaction entry for them.
+    const hasRoomSizePreference = !!profile.preferred_room_size && profile.preferred_room_size !== 'No preference';
+    const preferenceSatisfaction = allocation.preference_satisfaction || {};
+    const preferredRoomSizeSatisfied = hasRoomSizePreference && Object.prototype.hasOwnProperty.call(preferenceSatisfaction, email)
+        ? !!preferenceSatisfaction[email]
+        : null;
+
     return {
         status: 'ALLOCATED',
         profile: {
@@ -129,6 +138,8 @@ const getDashboardDTO = async (email, organizationId) => {
             stabilityScore: roomStabilityScore,
             matchLabel,
             matchingExplanation,
+            preferredRoomSize: hasRoomSizePreference ? profile.preferred_room_size : null,
+            preferredRoomSizeSatisfied,
             roommates: roommatesDocs.map(r => ({
                 name: r.name,
                 branch: r.branch,
