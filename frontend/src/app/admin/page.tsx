@@ -18,7 +18,7 @@ import { motion, AnimatePresence } from "framer-motion";
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [sheetUrl, setSheetUrl] = useState("https://docs.google.com/spreadsheets/d/e/2PACX-1vTzPOiW7s1jbwfQlBcKpIuEDCmFqsI3uWZUNr3shrXuRlpsd6N_Jgdb34O3_pzgG_xCxn4cIBKbaNDr/pubhtml");
+  const [sheetUrl, setSheetUrl] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [allocating, setAllocating] = useState(false);
   const [allocations, setAllocations] = useState<any[]>([]);

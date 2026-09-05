@@ -10,7 +10,7 @@ export default function UnauthorizedPage() {
         </div>
         <h1 className="text-2xl font-bold text-slate-50 mb-4">Access Denied</h1>
         <p className="text-slate-400 mb-8">
-          This system is restricted to <span className="text-white font-medium">@sitpune.edu.in</span> accounts.
+          This system is restricted to <span className="text-white font-medium">your institution&apos;s</span> accounts.
           Please try logging in again with your official college email.
         </p>
         <Link 

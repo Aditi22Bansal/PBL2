@@ -13,7 +13,7 @@ from repositories.csv_repo import CSVRepository
 from ml_engine.matcher_greedy import run_greedy_allocation_for_gender, run_ablation_study, run_relaxed_allocation
 from ml_engine.executor import compute_allocation
 
-app = FastAPI(title="SIT Pune Hostel Allocator")
+app = FastAPI(title="RoomSync Allocation Engine")
 
 # To be secured by Supabase JWT later
 app.add_middleware(

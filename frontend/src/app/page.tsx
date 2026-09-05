@@ -270,10 +270,10 @@ footer{background:var(--ink);padding:72px 6vw 40px;}
 
 const MARQUEE = [
   "96.6% Avg Compatibility","98.8% Room Coverage","48 Validated Experiments",
-  "Real Student Data · SIT Pune","Hill-Climbing Optimization","Greedy Triplet Matching",
+  "Real Student Data","Hill-Climbing Optimization","Greedy Triplet Matching",
   "Cosine Similarity Engine","Zero Unassigned Students","Open to All Institutions",
   "96.6% Avg Compatibility","98.8% Room Coverage","48 Validated Experiments",
-  "Real Student Data · SIT Pune","Hill-Climbing Optimization","Greedy Triplet Matching",
+  "Real Student Data","Hill-Climbing Optimization","Greedy Triplet Matching",
   "Cosine Similarity Engine","Zero Unassigned Students","Open to All Institutions",
 ];
 
@@ -496,7 +496,7 @@ export default function Landing() {
       <section className="results-section" id="results">
         <div className="eyebrow">Research Results</div>
           <h2 className="sec-h2">Numbers that<br/><em>don&apos;t lie.</em></h2>
-        <p className="sec-sub">Tested against three baseline methods across 48 independent experimental runs using real student survey data from SIT Pune.</p>
+        <p className="sec-sub">Tested against three baseline methods across 48 independent experimental runs using real student survey data.</p>
         <div className="mstrip">
           {[{n:"0.966",u:"",l:"Avg. compatibility score\nacross all 48 runs"},{n:"98.82",u:"%",l:"Room coverage rate\n— near-complete allocation"},{n:"48",u:"/48",l:"Runs where hybrid model\noutperformed every baseline"},{n:"0–2",u:"",l:"Students left unassigned\nper full semester run"}].map(m=>(
             <div className="mcell" key={m.l}>
@@ -531,7 +531,7 @@ export default function Landing() {
           <p className="sec-sub">From the research team and early hostel staff who&apos;ve seen the system in action.</p>
         <div className="tgrid">
           {[
-            {feat:true,stars:"★★★★★",q:"The hybrid approach consistently achieved superior average compatibility and coverage — without ever being beaten by a baseline across all 48 experimental runs.",name:"Amol Dhumane",role:"Lead Researcher · SIT Pune",av:"AD",avBg:"rgba(196,97,58,0.3)",avC:"white"},
+            {feat:true,stars:"★★★★★",q:"The hybrid approach consistently achieved superior average compatibility and coverage — without ever being beaten by a baseline across all 48 experimental runs.",name:"Research Lead",role:"Allocation Engine Team",av:"RL",avBg:"rgba(196,97,58,0.3)",avC:"white"},
             {feat:false,stars:"★★★★★",q:"Finally a system that thinks about whether students will actually get along — not just assigns beds. This is exactly what hostel management has been missing.",name:"Hostel Warden",role:"Residential Hall · Pune University",av:"HW",avBg:"#EBF4EF",avC:"#2E6347"},
             {feat:false,stars:"★★★★★",q:"The roommate chat feature alone is a game-changer. Students can introduce themselves before move-in day instead of meeting total strangers.",name:"Student Coordinator",role:"Student Body · Engineering College",av:"SC",avBg:"#FAF0EB",avC:"#C4613A"},
             {feat:false,stars:"★★★★★",q:"I was skeptical an algorithm could beat human judgment. The compatibility scores are genuinely impressive and the near-complete coverage is remarkable.",name:"Residential Affairs Director",role:"Large Engineering Institute · Pune",av:"RA",avBg:"#FBF5E6",avC:"#8A6A1A"},

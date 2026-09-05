@@ -83,6 +83,27 @@ CI/CD (next) → K8s → Ansible → monitoring → report.
 - Socket.IO's `join_user(email)` is client-asserted and unauthenticated, matching the 
   existing `join_room` trust level. Safe today — the channel is push-only and carries 
   just a room number — but it MUST be authenticated before anything sensitive goes on it.
+- Duplicate room_number values are possible: adminController.js numbers rooms within-floor 
+  as `(count % ROOMS_PER_FLOOR) + 1` (ROOMS_PER_FLOOR=8), keyed by (block, floor). Since 
+  every male room is block D regardless of branch/year, a single (D, Ground) bucket can 
+  exceed 8 rooms in one run (confirmed: 22 in the real 109-profile dataset), wrapping the 
+  counter and producing e.g. multiple rooms named "D-G01". Pre-existing since the 
+  floor-realism work, not introduced or worsened by the block-lettering cleanup below - 
+  surfaced while verifying it. Root cause is the same gap noted in the backlog below (no 
+  real per-block capacity anywhere in the data model); fixing it for real means building 
+  that, not just bumping ROOMS_PER_FLOOR.
+
+## Backlog (deferred, not attempted)
+- Branch dropdown (`frontend/src/lib/questionnaireConfig.ts`) is a static hardcoded list 
+  (CSE/AIML/RNA/MECHANICAL/ENTC/CIVIL) with zero algorithm coupling (matcher_greedy.py only 
+  ever compares branch for equality, never against a specific value) - purely a frontend 
+  constraint. Genuinely dynamic per-org values depend on an org-onboarding system that 
+  doesn't exist yet; not worth building for one field in an otherwise fully static 
+  questionnaire config.
+- Real multi-building/wing support (per-block capacity, genuine gender/year overflow across 
+  more than one block) is a real future feature, not attempted here. Today's cleanup only 
+  removed dead code that implied this already existed (see below) - HostelConfiguration 
+  still has no "block"/building concept at all.
 
 ## Recently fixed (allocation engine)
 - Room-size ceiling (MAX_EFFECTIVE_ROOM_SIZE=6 in matcher_greedy.py): an oversized 
@@ -132,3 +153,31 @@ CI/CD (next) → K8s → Ansible → monitoring → report.
   manualSwap itself) for a single-direction move instead of a two-way swap, then marks the 
   request Approved. GENERAL requests are untouched — still reviewed/swapped manually via 
   the Allocations panel exactly as before.
+- Two real multi-tenant domain bugs fixed. (1) NextAuth's signIn callback (frontend) had 
+  its own hardcoded `@sitpune.edu.in` checks (Google provider + the legacy Demo Bypass 
+  credentials provider) that ran BEFORE the backend's real Organization.allowedEmailDomains 
+  lookup ever got consulted, and even then the callback ignored /api/auth/sync-user's 
+  response and always returned true. Fixed: both hardcoded checks removed; signIn now 
+  awaits sync-user and denies (redirects to /unauthorized) on a non-OK response, uniformly 
+  for every provider including DEV_AUTH - a dev-login still has to belong to a real 
+  registered org's domain, matching the intent already documented in backend/routes/auth.js. 
+  Deliberate behavior change: a sync-user failure (bad domain OR backend unreachable) now 
+  fails closed instead of silently letting sign-in through. (2) adminController.js's CSV 
+  sync fallback email (for rows with no email column) was hardcoded to 
+  `student_N@sitpune.edu.in` regardless of which org was syncing - now derived from that 
+  org's real `allowedEmailDomains[0]` (one extra Organization lookup; org context was 
+  already in scope). csv_repo.py has the same hardcoded fallback but is legacy/unreachable 
+  on the live path (only the old FastAPI CLI endpoints use it) - left as-is with a comment 
+  explaining why, lower priority.
+- Hardcoded SIT-Pune branding genericized across login/register/unauthorized pages, page 
+  title, PDF report header/footer, FastAPI title, and the landing page (testimonial 
+  attribution and marketing copy) - all replaced with institution-agnostic text ("your 
+  institution" etc.), since there's no per-org branding system yet. Default Google Sheet 
+  sync URL blanked (was pre-filled to a specific real sheet). 
+- Block-lettering dead code removed (adminController.js's getBlockForRoom/assignRoom): the 
+  room-numbering logic used to return a LIST of blocks per gender/year group (e.g. 
+  `['B','C']`, `['D','E','F','G']`), implying overflow to a second/third block once the 
+  first filled up - but assignRoom's loop returned unconditionally on the first entry, so 
+  C/E/F/G were always dead; every non-first-year female room was always B, every male room 
+  always D. Now returns a single block letter (A/B/D) directly - same runtime behavior, 
+  honest code. Did NOT build real per-block capacity/overflow (see backlog above).

@@ -5,6 +5,7 @@ const RoomAllocation = require('../models/RoomAllocation');
 const ChangeRequest = require('../models/ChangeRequest');
 const Chat = require('../models/Chat');
 const Notification = require('../models/Notification');
+const Organization = require('../models/Organization');
 const { runPythonAllocation } = require('../services/allocationService');
 const analyticsService = require('../services/analyticsService');
 
@@ -12,6 +13,13 @@ exports.syncCsv = async (req, res) => {
     try {
         let { sheet_url } = req.body;
         if (!sheet_url) return res.status(400).json({ error: 'CSV sheet_url is required' });
+
+        // The org's own real domain for rows with no email column - was
+        // hardcoded to @sitpune.edu.in, which mislabeled every synthetic
+        // fallback email with a different institution's domain for any org
+        // other than the default one.
+        const org = await Organization.findById(req.currentUser.organizationId).lean();
+        const fallbackDomain = (org && org.allowedEmailDomains && org.allowedEmailDomains[0]) || 'example.com';
 
         sheet_url = sheet_url.trim();
         if (sheet_url.includes("/edit") || sheet_url.includes("/view")) {
@@ -52,7 +60,7 @@ exports.syncCsv = async (req, res) => {
                     const nameKey = keys.find(k => k.toLowerCase().includes('name'));
                     const branchKey = keys.find(k => k.toLowerCase().includes('branch'));
                     
-                    const email = emailKey && row[emailKey] ? row[emailKey].trim() : `student_${index}@sitpune.edu.in`;
+                    const email = emailKey && row[emailKey] ? row[emailKey].trim() : `student_${index}@${fallbackDomain}`;
                     if(!email) return null;
 
                     const fallbackName = nameKey && row[nameKey] ? row[nameKey] : email.split('@')[0];
@@ -303,35 +311,44 @@ exports.triggerAllocation = async (req, res) => {
         ];
 
         // Block assignment now derives from each room's own members (via the
-        // profile map) instead of which pre-split pool it came from.
-        const getBlocksForRoom = (alloc) => {
+        // profile map) instead of which pre-split pool it came from. One
+        // fixed block per gender/year group today - A (first-year female), B
+        // (other female), D (male) - and nothing else. This used to return a
+        // list per group (['B','C'], ['D','E','F','G']) implying overflow to
+        // a second/third block once the first filled up, but assignRoom
+        // never actually consumed anything past the first entry, so those
+        // extra letters were dead: every non-first-year female room was
+        // always 'B', every male room always 'D'. Real per-block capacity
+        // limits (and genuine overflow) don't exist anywhere in the data
+        // model - HostelConfiguration has no "block"/building concept at all
+        // - so this now just says what actually happens instead of implying
+        // logic that was never there. Multi-building/wing support is a real
+        // future feature, not attempted here (see CLAUDE.md backlog).
+        const getBlockForRoom = (alloc) => {
             const firstMember = alloc.members && alloc.members[0];
             const profile = firstMember ? profileMap[firstMember] : null;
             const isFemale = ((profile && profile.gender) || '').toUpperCase().startsWith('F');
             if (isFemale) {
                 const isFY = profile && profile.year_of_study === '1st Year';
-                return isFY ? ['A'] : ['B', 'C'];
+                return isFY ? 'A' : 'B';
             }
-            return ['D', 'E', 'F', 'G'];
+            return 'D';
         };
 
-        const assignRoom = (allowedBlocks, capacity, preferGround) => {
-            for (let blockId of allowedBlocks) {
-                const floorValue = nextFloorForCapacity(capacity, preferGround);
-                const floorSlug = floorValue.toLowerCase() === 'ground' ? 'G' : floorValue;
-                const key = `${blockId}::${floorValue}`;
-                const idOnFloor = nextRoomIdByBlockFloor[key] || 0;
-                nextRoomIdByBlockFloor[key] = idOnFloor + 1;
-                const r = (idOnFloor % ROOMS_PER_FLOOR) + 1;
-                const roomNumber = `${blockId}-${floorSlug}0${r}`;
-                return { block: blockId, floor: floorValue, room_number: roomNumber };
-            }
-            return null;
+        const assignRoom = (blockId, capacity, preferGround) => {
+            const floorValue = nextFloorForCapacity(capacity, preferGround);
+            const floorSlug = floorValue.toLowerCase() === 'ground' ? 'G' : floorValue;
+            const key = `${blockId}::${floorValue}`;
+            const idOnFloor = nextRoomIdByBlockFloor[key] || 0;
+            nextRoomIdByBlockFloor[key] = idOnFloor + 1;
+            const r = (idOnFloor % ROOMS_PER_FLOOR) + 1;
+            const roomNumber = `${blockId}-${floorSlug}0${r}`;
+            return { block: blockId, floor: floorValue, room_number: roomNumber };
         };
 
         const newAllocations = [];
         for (const alloc of orderedAllocs) {
-            const roomData = assignRoom(getBlocksForRoom(alloc), alloc.capacity, needsGroundFloor(alloc));
+            const roomData = assignRoom(getBlockForRoom(alloc), alloc.capacity, needsGroundFloor(alloc));
             if (roomData) {
                 // The actual capacity the algorithm decided for THIS room - not a
                 // FIFO queue popped in emission order (that was decoupled from

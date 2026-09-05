@@ -3,8 +3,8 @@ import "./globals.css";
 import { NextAuthProvider } from "@/components/Providers";
 
 export const metadata: Metadata = {
-  title: "SIT Pune Hostel Room Allocation",
-  description: "Advanced AI-powered hostel allocation system for SIT Pune students.",
+  title: "RoomSync — Hostel Room Allocation",
+  description: "Advanced AI-powered hostel allocation system for your institution.",
 };
 
 export default function RootLayout({

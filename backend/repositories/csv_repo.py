@@ -91,7 +91,14 @@ class CSVRepository(DataRepository):
                     return default
                 return val
 
-            # For the demo CSV, we mock the user_id if email column doesn't exist
+            # For the demo CSV, we mock the user_id if email column doesn't exist.
+            # Known lower-priority twin of the same hardcoded-domain fallback
+            # in adminController.js's syncCsv (fixed to derive from the org's
+            # real allowedEmailDomains) - left as-is here because this whole
+            # class is legacy/unreachable on the live Node -> /allocate/v2
+            # path (only the old FastAPI CLI endpoints and run_pipeline.py
+            # still use it), and it has no request/org context to derive a
+            # real domain from even if it were live.
             user_id = g("email", f"student_{i}@sitpune.edu.in")
             
             # Fill missing numeric info with defaults

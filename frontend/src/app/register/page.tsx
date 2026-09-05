@@ -125,7 +125,7 @@ export default function RegisterPage() {
                 </div>
               </div>
               <span className="text-xs text-slate-500 leading-relaxed">
-                I confirm I am a hostel warden or faculty administrator at SIT Pune. I understand this platform is for institutional use only and agree to use it responsibly.
+                I confirm I am a hostel warden or faculty administrator at my institution. I understand this platform is for institutional use only and agree to use it responsibly.
               </span>
             </label>
 
@@ -147,7 +147,7 @@ export default function RegisterPage() {
                       <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.05l3.66 2.86c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                     </svg>
                   </div>
-                  Register with SIT Account
+                  Register with Institutional Account
                   <ChevronRight className="w-5 h-5 ml-1 opacity-70" />
                 </>
               )}
@@ -156,7 +156,7 @@ export default function RegisterPage() {
             {/* Footer */}
             <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span>Restricted to @sitpune.edu.in accounts</span>
+              <span>Restricted to your institution&apos;s email domain</span>
             </div>
 
             <div className="mt-4 text-center">
