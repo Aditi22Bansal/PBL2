@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import uuid
@@ -23,6 +24,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Prometheus: request duration histogram + request count by status, both broken
+# down by method/handler, exposed at GET /metrics - the standard minimal
+# instrumentator setup, wired to the real app instance (not a static/fake metric).
+Instrumentator().instrument(app).expose(app)
 
 # Dependency Injection for DAL
 def get_repository():

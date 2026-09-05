@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const promClient = require('prom-client');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -24,6 +25,43 @@ const io = new Server(server, {
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Prometheus metrics: default Node/process metrics plus real per-request
+// duration/count, labeled by the matched route PATTERN (e.g. "/api/admin/profile/:id"),
+// not the raw URL - so labels stay bounded regardless of how many distinct emails/ids
+// actually get requested. Unmatched (404) requests are labeled "unmatched" for the
+// same reason, rather than the raw attempted path.
+promClient.collectDefaultMetrics();
+
+const httpRequestDurationSeconds = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [0.01, 0.05, 0.1, 0.3, 0.5, 1, 2, 5],
+});
+
+const httpRequestsTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status_code'],
+});
+
+app.use((req, res, next) => {
+  const endTimer = httpRequestDurationSeconds.startTimer();
+  res.on('finish', () => {
+    const routePath = req.route && req.route.path;
+    const route = routePath ? `${req.baseUrl}${routePath}` : (req.baseUrl || 'unmatched');
+    const labels = { method: req.method, route, status_code: res.statusCode };
+    endTimer(labels);
+    httpRequestsTotal.inc(labels);
+  });
+  next();
+});
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', promClient.register.contentType);
+  res.end(await promClient.register.metrics());
+});
 
 // Database connection
 const connectDB = async () => {
