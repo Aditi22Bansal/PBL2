@@ -153,6 +153,7 @@ configuration — not this README.
 - **[docs/k8s-deployment.md](docs/k8s-deployment.md)** — Kubernetes manifests + a live rolling-update/rollback demonstration
 - **[docs/ansible-deployment.md](docs/ansible-deployment.md)** — Ansible playbook provisioning a target and deploying the real GHCR images
 - **[docs/monitoring.md](docs/monitoring.md)** — Prometheus + Grafana, real app metrics, verified with real traffic
+- **[docs/autoscaling.md](docs/autoscaling.md)** — HPA on python-service, a real k6 load test, and real scale-up/scale-down replica counts over time
 - **[docs/reflection-report.md](docs/reflection-report.md)** — reflections on the DevOps track: what was learned, what broke, what I'd do differently
 - **[SECURITY.md](SECURITY.md)** — vulnerabilities found and fixed, isolation model, how to report an issue
 

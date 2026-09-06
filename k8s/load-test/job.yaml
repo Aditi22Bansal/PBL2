@@ -1,0 +1,53 @@
+# One-off load-test tooling for docs/autoscaling.md - NOT part of the normal
+# `k8s/` apply set (dev-up-k8s.ps1 doesn't touch this directory). Run manually,
+# IN THIS ORDER (the ConfigMap must exist with the real script content before
+# the Job starts, and must be created this way rather than embedded in this
+# file - a plain `data:` block here would go stale the moment
+# allocate-load-test.js is edited, silently running an old script version):
+#
+#   kubectl create configmap allocate-load-test-script -n roomsync \
+#     --from-file=allocate-load-test.js=k8s/load-test/allocate-load-test.js \
+#     --dry-run=client -o yaml | kubectl apply -f -
+#   kubectl apply -f k8s/load-test/job.yaml
+#
+# Runs k6 (official grafana/k6 image, no local install needed) as a real Pod
+# INSIDE the roomsync namespace, hitting python-service's ClusterIP Service by
+# its real DNS name - the same path the Node backend itself uses, and the
+# same load-balancing across replicas a real caller would get. Deliberately
+# NOT run via `kubectl port-forward` from the host: port-forward proxies to
+# one specific pod/connection rather than round-robining through the Service
+# like real traffic, and this project has already hit real port-forward
+# reliability problems mid-demo before (see docs/k8s-deployment.md) - running
+# the load generator inside the cluster sidesteps both issues.
+#
+# Re-running: `kubectl delete job allocate-load-test -n roomsync` first (Jobs
+# are immutable once created), then re-apply.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: allocate-load-test
+  namespace: roomsync
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:latest
+          args: ["run", "/scripts/allocate-load-test.js"]
+          env:
+            - name: TARGET
+              value: http://python-service:8000/allocate/v2
+            - name: INTERNAL_SERVICE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: roomsync-secret
+                  key: INTERNAL_SERVICE_KEY
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: allocate-load-test-script
