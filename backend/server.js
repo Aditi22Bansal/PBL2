@@ -84,8 +84,6 @@ const connectDB = async () => {
     }
 };
 
-connectDB();
-
 // Make io accessible to routes if needed
 app.set('socketio', io);
 
@@ -135,6 +133,17 @@ app.get('/api/health', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-    console.log(`Server & Socket.IO running on port ${PORT}`);
-});
+
+// Only auto-connect/listen when this file is run directly (`node server.js`, exactly
+// what the Dockerfile/dev scripts do) - not when required as a module. Lets tests
+// `require('../server')` to get `app` for supertest and control their own Mongo
+// connection (e.g. an in-memory instance) without also binding a real port or
+// racing a real MongoDB connection attempt. Zero behavior change for production.
+if (require.main === module) {
+    connectDB();
+    server.listen(PORT, () => {
+        console.log(`Server & Socket.IO running on port ${PORT}`);
+    });
+}
+
+module.exports = { app, server, connectDB };

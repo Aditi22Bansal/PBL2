@@ -12,7 +12,7 @@ env:
 
 jobs:
   lint-backend:
-    name: Lint backend (Node)
+    name: Lint backend (Node) + auth/tenant/injection test suite
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,18 +23,28 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
+      # No --omit=dev here (unlike Dockerfile's build install) - this job needs
+      # jest/supertest/mongodb-memory-server, which only ever belong in devDependencies.
       - name: Install dependencies
         working-directory: backend
         run: npm ci
 
-      # backend/package.json has no real lint/build script today (just a stub
-      # `test` that always exits 1) - this syntax-checks every source file
-      # instead of inventing tooling that doesn't exist in the repo.
+      # backend/package.json has no real lint script today - this syntax-checks
+      # every source file instead of inventing tooling that doesn't exist in the repo.
       - name: Syntax-check all JS sources
         working-directory: backend
         run: |
           find . -name "*.js" -not -path "./node_modules/*" -not -path "./venv/*" -print0 \
             | xargs -0 -n1 node --check
+
+      # The real jest suite (backend/tests/test_*.js) - permanent regression tests
+      # for the actual proven vulnerabilities (SECURITY.md): admin-route auth,
+      # role escalation via sync-user, multi-tenant isolation, and NoSQL injection
+      # hardening. Runs against a real in-memory MongoDB (mongodb-memory-server),
+      # not a mock. A real test failure fails this job, not just a syntax error.
+      - name: Run backend test suite (jest)
+        working-directory: backend
+        run: npm test
 
   lint-frontend:
     name: Build frontend (Next.js)

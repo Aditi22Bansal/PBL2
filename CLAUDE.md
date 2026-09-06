@@ -164,7 +164,8 @@ Full DevOps rubric now complete: [docs/reflection-report.md](docs/reflection-rep
 
 ### CI/CD (done)
 `.github/workflows/ci.yml` — push to `ahmad-dev` + PRs targeting `main`. Jobs: 
-lint-backend (npm ci + syntax-check, no real lint script exists yet), lint-frontend 
+lint-backend (npm ci + syntax-check, then the real `backend/tests/test_*.js` jest 
+suite - see below), lint-frontend 
 (npm ci + npm run build - same command already proven in frontend/Dockerfile), 
 python-check (py_compile syntax check, then the real `backend/tests/` pytest suite - 
 see below), docker-build (all 3 Dockerfiles, 3-way matrix, no live DB needed), and push-images 
@@ -186,6 +187,30 @@ filler-never-seed), the `MAX_EFFECTIVE_ROOM_SIZE` tier-priority ceiling, and
 `Dockerfile.python` build that it never ships in the production image. 14 tests, runs
 in ~1 second. A real test failure fails the `python-check` CI job, not just a syntax
 check.
+
+**Backend security test suite (`backend/tests/test_*.js`, jest + supertest +
+mongodb-memory-server, CI-run).** Permanent regression tests for the actual proven
+vulnerabilities in SECURITY.md, against a real in-memory MongoDB (not a mock - real
+unique indexes/query semantics apply): `test_auth.js` (401/403/200 on admin routes,
+plus identity coming only from the trusted header - never body/query, mirroring the
+original student_54/student_96 exploit), `test_role_escalation.js` (forging
+`role: "ADMIN"` via `sync-user`, on both an existing account and first-ever
+creation, verified by a direct DB read), `test_tenant_isolation.js` (two orgs, zero
+cross-tenant leakage on both the list endpoint and a direct-ID reference; duplicate
+domain registration rejected), `test_injection.js` (`{"$ne": null}`-shaped payloads
+to the three hardened endpoints, verified with a real unrelated "decoy" document to
+prove the query itself was blocked, not just that the collection happened to be
+empty). `server.js` now exports `{ app, server, connectDB }` and only
+auto-connects/listens when run directly (`require.main === module`) - zero
+production behavior change, but lets tests get `app` for supertest without binding a
+real port. jest/supertest/mongodb-memory-server are devDependencies only - confirmed
+via a real `Dockerfile` build (`npm ci --omit=dev`) that none of them ship in the
+production image. Every one of these tests was verified for real: the corresponding
+fix was temporarily reverted, the test was confirmed to fail (for the injection
+tests, confirmed via actual data mutation on a decoy document, not just a differing
+status code), then the fix was restored and the test re-confirmed passing. 11 tests,
+runs in a few seconds locally (longer on a cold mongodb-memory-server binary
+download). A real test failure fails the `lint-backend` CI job.
 
 ### Kubernetes (done)
 Manifests in `k8s/`: namespace + ConfigMap + Secret (placeholder) + a Deployment/Service 
