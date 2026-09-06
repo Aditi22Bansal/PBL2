@@ -50,6 +50,23 @@ Manual dev servers (node server.js, npm run dev, uvicorn) commonly already occup
 3000/5000/8000/27017 locally. Don't kill processes on these ports without asking — report 
 conflicts and let the user decide.
 
+## Resource discipline
+Don't leave the Docker Compose stack AND the devops-lab kind cluster running
+simultaneously unless a task actually needs both at once (e.g. comparing behavior
+between them) — running both plus normal tooling (browser, editor, this session
+itself) has caused real resource-contention problems on this machine before: a live
+mongo `CrashLoopBackOff` in the K8s deployment, traced to a 1-second probe timeout
+being exceeded under load, not any real mongod failure (see `k8s/mongo.yaml`'s
+probe `timeoutSeconds` comment). `%UserProfile%\.wslconfig` now caps WSL2 (which
+Docker Desktop runs inside) to roughly half this machine's RAM/CPUs as a backstop,
+but the cheaper fix is just not running everything at once. Two scripts make
+"only run what's needed" the easy path instead of a habit to remember:
+- `scripts/dev-down-all.ps1` — releases the Compose stack and the `roomsync`/
+  `monitoring` K8s namespaces back to idle (leaves the shared kind cluster itself
+  and its other unrelated namespaces alone).
+- `scripts/dev-up-k8s.ps1` — re-applies all of `k8s/` in dependency order onto the
+  existing cluster; images are GHCR pulls, not rebuilds, so this is fast.
+
 ## Product direction (multi-tenant B2B SaaS — done)
 Hard constraints the allocation engine must NEVER violate: no mixed-gender rooms, no
 smoking/alcohol incompatibility — both enforced as absolute pre-filters (poisoned
