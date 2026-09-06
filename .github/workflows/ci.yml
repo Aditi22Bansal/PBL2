@@ -12,7 +12,7 @@ env:
 
 jobs:
   lint-backend:
-    name: Lint backend (Node)
+    name: Lint backend (Node) + auth/tenant/injection test suite
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,18 +23,28 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
+      # No --omit=dev here (unlike Dockerfile's build install) - this job needs
+      # jest/supertest/mongodb-memory-server, which only ever belong in devDependencies.
       - name: Install dependencies
         working-directory: backend
         run: npm ci
 
-      # backend/package.json has no real lint/build script today (just a stub
-      # `test` that always exits 1) - this syntax-checks every source file
-      # instead of inventing tooling that doesn't exist in the repo.
+      # backend/package.json has no real lint script today - this syntax-checks
+      # every source file instead of inventing tooling that doesn't exist in the repo.
       - name: Syntax-check all JS sources
         working-directory: backend
         run: |
           find . -name "*.js" -not -path "./node_modules/*" -not -path "./venv/*" -print0 \
             | xargs -0 -n1 node --check
+
+      # The real jest suite (backend/tests/test_*.js) - permanent regression tests
+      # for the actual proven vulnerabilities (SECURITY.md): admin-route auth,
+      # role escalation via sync-user, multi-tenant isolation, and NoSQL injection
+      # hardening. Runs against a real in-memory MongoDB (mongodb-memory-server),
+      # not a mock. A real test failure fails this job, not just a syntax error.
+      - name: Run backend test suite (jest)
+        working-directory: backend
+        run: npm test
 
   lint-frontend:
     name: Build frontend (Next.js)
@@ -63,7 +73,7 @@ jobs:
         run: npm run build
 
   python-check:
-    name: Python sanity check
+    name: Python compile check + allocation engine tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,13 +82,25 @@ jobs:
         with:
           python-version: '3.12'
 
-      # No pytest/flake8/etc. configured anywhere in backend/ - this compiles
-      # every source file (catches syntax errors) rather than inventing a
-      # test suite that doesn't exist. Doesn't need requirements.txt installed:
-      # py_compile only parses/compiles, it never executes imports.
+      # Compiles every source file first (catches syntax errors) - doesn't need
+      # requirements.txt installed, py_compile only parses/compiles, never imports.
       - name: Compile-check all Python sources
         working-directory: backend
         run: python -m py_compile main.py run_pipeline.py domain/*.py ml_engine/*.py repositories/*.py
+
+      # The real pytest suite (backend/tests/) - permanent, CI-run tests for the
+      # allocation engine's proven-important invariants (hard constraints, 100%
+      # placement, needsManualPlacement correctness, capacityShortfall, room-size
+      # preference, tier priority, room_capacity accuracy). requirements-test.txt is
+      # separate from requirements.txt so pytest never ships in the production image
+      # (see Dockerfile.python, which only ever installs requirements.txt).
+      - name: Install test dependencies
+        working-directory: backend
+        run: pip install -r requirements-test.txt
+
+      - name: Run allocation engine test suite
+        working-directory: backend
+        run: python -m pytest tests/ -v
 
   docker-build:
     name: Docker build (${{ matrix.name }})

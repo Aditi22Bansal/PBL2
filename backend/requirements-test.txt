@@ -1,0 +1,6 @@
+# Test-only dependencies for the ml_engine/ pytest suite (backend/tests/).
+# Deliberately separate from requirements.txt: Dockerfile.python installs only
+# requirements.txt into the production image (`pip install -r requirements.txt`),
+# so anything test-only belongs here instead, never there.
+-r requirements.txt
+pytest==8.4.2
