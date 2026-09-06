@@ -13,17 +13,26 @@ const chatRoutes = require('./routes/chat');
 const http = require('http');
 const { Server } = require('socket.io');
 
+// Real browser-facing frontend origin(s), comma-separated - no browser should ever
+// need to reach this backend from anywhere else. Empty by default (no origins
+// allowed) rather than defaulting to a guess, so a misconfigured deployment fails
+// closed instead of silently staying wide open.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // allow frontend access
+    origin: ALLOWED_ORIGINS,
     methods: ["GET", "POST"]
   }
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json({ limit: '50mb' }));
 
 // Prometheus metrics: default Node/process metrics plus real per-request

@@ -26,6 +26,8 @@ services:
     container_name: roomsync-python-service
     ports:
       - "{{ python_port }}:8000"
+    env_file:
+      - .env
     restart: unless-stopped
 
   backend:

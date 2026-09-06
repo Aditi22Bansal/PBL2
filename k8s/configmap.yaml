@@ -17,6 +17,9 @@ data:
   DEV_AUTH: "true"
   PYTHON_SERVICE_URL: "http://python-service:8000"
   USE_REST_ALLOCATION: "true"
+  # The frontend's real browser-facing origin (see NEXTAUTH_URL below) - the only
+  # origin the backend's CORS should ever need to allow a browser request from.
+  ALLOWED_ORIGINS: "http://localhost:3000"
 
   # frontend (server-side; NEXT_PUBLIC_* are build-time-baked, see frontend
   # Deployment's build args note - these two are the runtime-only ones)

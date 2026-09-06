@@ -22,4 +22,8 @@ ENV USE_REST_ALLOCATION=true
 
 EXPOSE 5000
 
+# node:20-alpine ships a built-in non-root "node" user (uid 1000) - standard
+# hardening so a compromise inside this container doesn't run as root.
+USER node
+
 CMD ["node", "server.js"]

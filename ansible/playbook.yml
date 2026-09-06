@@ -13,8 +13,10 @@
     ghcr_backend_image: ghcr.io/aditi22bansal/pbl2-backend:latest
     ghcr_frontend_image: ghcr.io/aditi22bansal/pbl2-frontend:latest
     ghcr_python_image: ghcr.io/aditi22bansal/pbl2-python-service:latest
-    # Placeholder only — real deployments must override this (e.g. -e nextauth_secret=...).
+    # Placeholders only — real deployments must override these (e.g.
+    # -e nextauth_secret=... -e internal_service_key=...).
     nextauth_secret: "ansible-demo-secret-change-me"
+    internal_service_key: "ansible-demo-internal-key-change-me"
 
   tasks:
     - name: Install apt prerequisites for adding Docker's official repository

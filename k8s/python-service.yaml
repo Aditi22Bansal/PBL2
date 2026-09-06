@@ -19,6 +19,12 @@ spec:
           image: ghcr.io/aditi22bansal/pbl2-python-service:be3de6fde14071a41b8416e2aecbf5804a883773
           ports:
             - containerPort: 8000
+          env:
+            - name: INTERNAL_SERVICE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: roomsync-secret
+                  key: INTERNAL_SERVICE_KEY
           readinessProbe:
             httpGet:
               path: /health

@@ -31,6 +31,10 @@ services:
     container_name: roomsync-python-service
     ports:
       - "${PYTHON_PORT:-8000}:8000"
+    environment:
+      # Shared secret gating every route except /health and /metrics - see main.py.
+      # Obviously-fake placeholder, same pattern as NEXTAUTH_SECRET below.
+      INTERNAL_SERVICE_KEY: docker-compose-internal-key-change-me
     restart: unless-stopped
 
   backend:
@@ -47,6 +51,11 @@ services:
       DEV_AUTH: "true"
       PYTHON_SERVICE_URL: http://python-service:8000
       USE_REST_ALLOCATION: "true"
+      # Must match python-service's INTERNAL_SERVICE_KEY above exactly.
+      INTERNAL_SERVICE_KEY: docker-compose-internal-key-change-me
+      # The frontend's real browser-facing origin - tracks whatever host port it's
+      # actually published on, same reasoning as NEXT_PUBLIC_API_URL's own comment above.
+      ALLOWED_ORIGINS: http://localhost:${FRONTEND_PORT:-3000}
     depends_on:
       mongo:
         condition: service_healthy

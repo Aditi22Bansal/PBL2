@@ -4,6 +4,10 @@ const path = require('path');
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
 const USE_REST_ALLOCATION = process.env.USE_REST_ALLOCATION === 'true';
+// python-service has no user-level auth of its own - every route (except /health and
+// /metrics) requires this shared secret, since the service is only safe to run
+// without one when it's genuinely unreachable except from here (see main.py).
+const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || '';
 
 const runRelaxedPythonAllocation = async (profiles, config = null) => {
     return runPythonAllocation(profiles, config);
@@ -27,7 +31,9 @@ const runPythonAllocationViaHTTP = async (profiles, config = null) => {
     }
 
     try {
-        const response = await axios.post(`${PYTHON_SERVICE_URL}/allocate/v2`, payload);
+        const response = await axios.post(`${PYTHON_SERVICE_URL}/allocate/v2`, payload, {
+            headers: { 'X-Internal-Service-Key': INTERNAL_SERVICE_KEY }
+        });
         const result = response.data;
         if (result.error) {
             throw new Error(result.error);
