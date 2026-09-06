@@ -31,9 +31,12 @@ standard (default)   rancher.io/local-path   Delete          WaitForFirstConsume
 
 `standard` (kind's `local-path-provisioner`) is what `k8s/mongo.yaml`'s PVC requests.
 
-This cluster is shared with a few unrelated lab exercises (`apache-demo`,
-`microservices-demo`, `mongo-lab`, `social-media`, all pre-existing namespaces) — the
-`roomsync` namespace and everything in it is fully isolated from those.
+This cluster was shared with a few unrelated lab exercises (`apache-demo`,
+`microservices-demo`, `mongo-lab`, `social-media`) at the time this demo was run — the
+`roomsync` namespace and everything in it was fully isolated from those. Those 4
+namespaces have since been removed in a later cleanup pass (coursework unrelated to
+this project, no longer needed); the cluster now hosts only `roomsync` and
+`monitoring` alongside its own built-in system namespaces.
 
 ## Manifests (`k8s/`)
 
