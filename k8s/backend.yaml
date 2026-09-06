@@ -15,8 +15,10 @@ spec:
     spec:
       containers:
         - name: backend
-          # Prometheus-instrumented build - the commit SHA CI actually built and pushed this from.
-          image: ghcr.io/aditi22bansal/pbl2-backend:be3de6fde14071a41b8416e2aecbf5804a883773
+          # Security-hardening build (internal-service-key, CORS allowlist, SSRF
+          # allowlist, injection fixes, non-root) - the commit SHA CI actually built
+          # and pushed this from.
+          image: ghcr.io/aditi22bansal/pbl2-backend:cc7b8e7049d3bb4e764ea4406f527524f1bab678
           ports:
             - containerPort: 5000
           # One shared ConfigMap covers all 3 app services for a demo this
