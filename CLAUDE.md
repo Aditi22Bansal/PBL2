@@ -166,12 +166,26 @@ Full DevOps rubric now complete: [docs/reflection-report.md](docs/reflection-rep
 `.github/workflows/ci.yml` — push to `ahmad-dev` + PRs targeting `main`. Jobs: 
 lint-backend (npm ci + syntax-check, no real lint script exists yet), lint-frontend 
 (npm ci + npm run build - same command already proven in frontend/Dockerfile), 
-python-check (py_compile sanity check - no pytest/flake8 configured anywhere), 
-docker-build (all 3 Dockerfiles, 3-way matrix, no live DB needed), and push-images 
+python-check (py_compile syntax check, then the real `backend/tests/` pytest suite - 
+see below), docker-build (all 3 Dockerfiles, 3-way matrix, no live DB needed), and push-images 
 (push-only, ahmad-dev only, never on a PR). Images land in 
 `ghcr.io/aditi22bansal/pbl2-{backend,frontend,python-service}`, tagged `:<commit-sha>` 
 and `:latest`, using the built-in `GITHUB_TOKEN` (no new secrets). Diagram + job-shape 
 table: [docs/ci-pipeline.md](docs/ci-pipeline.md).
+
+**Allocation engine test suite (`backend/tests/`, pytest, CI-run).** Encodes the
+real, previously-only-manually-verified invariants as permanent tests, using small
+deterministic synthetic profile sets (never the real dataset): hard constraints
+(gender bucketing, smoking/drinking never roomed together, even when otherwise a
+perfect compatibility match), 100% placement accounting, `needsManualPlacement`
+correctness (including the gender-scoping fix), `capacityShortfall`'s pre-flight
+rejection, room-size preference (honored + graceful fallback +
+filler-never-seed), the `MAX_EFFECTIVE_ROOM_SIZE` tier-priority ceiling, and
+`room_capacity` accuracy. `pytest` is a test-only dependency
+(`backend/requirements-test.txt`, extends `requirements.txt`) - confirmed via a real
+`Dockerfile.python` build that it never ships in the production image. 14 tests, runs
+in ~1 second. A real test failure fails the `python-check` CI job, not just a syntax
+check.
 
 ### Kubernetes (done)
 Manifests in `k8s/`: namespace + ConfigMap + Secret (placeholder) + a Deployment/Service 

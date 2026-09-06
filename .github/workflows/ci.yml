@@ -63,7 +63,7 @@ jobs:
         run: npm run build
 
   python-check:
-    name: Python sanity check
+    name: Python compile check + allocation engine tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,13 +72,25 @@ jobs:
         with:
           python-version: '3.12'
 
-      # No pytest/flake8/etc. configured anywhere in backend/ - this compiles
-      # every source file (catches syntax errors) rather than inventing a
-      # test suite that doesn't exist. Doesn't need requirements.txt installed:
-      # py_compile only parses/compiles, it never executes imports.
+      # Compiles every source file first (catches syntax errors) - doesn't need
+      # requirements.txt installed, py_compile only parses/compiles, never imports.
       - name: Compile-check all Python sources
         working-directory: backend
         run: python -m py_compile main.py run_pipeline.py domain/*.py ml_engine/*.py repositories/*.py
+
+      # The real pytest suite (backend/tests/) - permanent, CI-run tests for the
+      # allocation engine's proven-important invariants (hard constraints, 100%
+      # placement, needsManualPlacement correctness, capacityShortfall, room-size
+      # preference, tier priority, room_capacity accuracy). requirements-test.txt is
+      # separate from requirements.txt so pytest never ships in the production image
+      # (see Dockerfile.python, which only ever installs requirements.txt).
+      - name: Install test dependencies
+        working-directory: backend
+        run: pip install -r requirements-test.txt
+
+      - name: Run allocation engine test suite
+        working-directory: backend
+        run: python -m pytest tests/ -v
 
   docker-build:
     name: Docker build (${{ matrix.name }})
