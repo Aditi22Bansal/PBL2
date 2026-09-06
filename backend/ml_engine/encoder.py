@@ -7,8 +7,6 @@ WEIGHTS = {
     "sleep_time": 3.0,
     "wake_time": 3.0,
     "cleanliness": 3.0,
-    "smoking_habit": 5.0,  # Critical Dealbreaker
-    "drinking_habit": 4.0, # Dealbreaker
     "guest_frequency": 2.0,
     "study_env": 2.0,
     "active_late": 2.0,
@@ -59,10 +57,8 @@ def encode_profile(profile: StudentProfile) -> np.ndarray:
         # Cleanliness
         clean_map.get(profile.cleanliness, 2) * WEIGHTS["cleanliness"],
         clean_map.get(profile.cleanliness_expectation, 2) * WEIGHTS["cleanliness_expectation"],
-        
-        # Habits (High Weight)
-        freq_map.get(profile.smoking_habit, 0) * WEIGHTS["smoking_habit"],
-        freq_map.get(profile.drinking_habit, 0) * WEIGHTS["drinking_habit"],
+
+        # Guests (smoking/drinking are unconditional hard filters now, not scored features)
         freq_map.get(profile.guest_frequency, 1) * WEIGHTS["guest_frequency"],
         
         # Environment
@@ -98,18 +94,21 @@ def get_structural_penalty(p1: StudentProfile, p2: StudentProfile) -> float:
 def has_hard_conflict(p1: StudentProfile, p2: StudentProfile) -> bool:
     """
     Checks if there are dealbreaker incompatibilities between two profiles.
+    Smoking and drinking are unconditional hard constraints: an incompatible pair
+    is never roomed together, regardless of what either lists as their most
+    important factor.
     Returns True if incompatible.
     """
-    # Example hard constraint: Non-smoker explicitly demanding incompatible habits
     freq_map = {"No": 0, "Rarely": 1, "Occasionally": 2, "Weekly": 3, "Frequently": 4, "Yes": 4}
-    
+
     p1_smoke = freq_map.get(p1.smoking_habit, 0)
     p2_smoke = freq_map.get(p2.smoking_habit, 0)
-    
-    # If one is a frequent smoker and the other strongly prioritizes lifestyle habits and doesn't smoke
     if abs(p1_smoke - p2_smoke) >= 3:
-        if p1.most_important_factor == "Lifestyle Habits ( Smoking, Drinking, Guests, etc.)" or \
-           p2.most_important_factor == "Lifestyle Habits ( Smoking, Drinking, Guests, etc.)":
-            return True
-            
+        return True
+
+    p1_drink = freq_map.get(p1.drinking_habit, 0)
+    p2_drink = freq_map.get(p2.drinking_habit, 0)
+    if abs(p1_drink - p2_drink) >= 3:
+        return True
+
     return False

@@ -370,7 +370,7 @@ export default function LoginPage() {
                 >
                   <input
                     type="email"
-                    placeholder="E.g., student0@sitpune.edu.in"
+                    placeholder="E.g., student0@yourdomain.edu"
                     value={demoEmail}
                     onChange={(e) => setDemoEmail(e.target.value)}
                     required
@@ -397,7 +397,7 @@ export default function LoginPage() {
 
             <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span>Restricted to @sitpune.edu.in Domains</span>
+              <span>Restricted to your institution&apos;s email domain</span>
               {/* Hidden backdoor toggle */}
               <button
                 onClick={() => setDemoMode(!demoMode)}

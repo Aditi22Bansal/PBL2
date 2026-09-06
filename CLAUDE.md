@@ -6,12 +6,18 @@ being evolved into a generalized B2B SaaS while also satisfying a DevOps course 
 (CI/CD, IaC, containers/K8s, monitoring, reflection report).
 
 ## Critical workflow rules — ALWAYS FOLLOW
+- `main` is now a stable checkpoint — do NOT commit, push, or merge directly to `main` 
+  anymore. All new work happens on `ahmad-dev` (or branches created from it). If a prompt 
+  asks to touch `main` directly, flag that this contradicts the current workflow and 
+  confirm before proceeding rather than just doing it.
 - NEVER run git commit, push, stash, checkout, reset, or any command that discards/rewrites 
   the working tree — UNLESS explicitly instructed in the current prompt. Default is 
   local-only, no git operations.
 - Windows machine, PowerShell. Real project root: E:\pbl_hostel\PBL2 (not the outer 
   E:\pbl_hostel, which has its own separate, unused, empty git repo — ignore it)
-- Real repo remote: github.com/Aditi22Bansal/PBL2, branch feature/microservices
+- Real repo remote: github.com/Aditi22Bansal/PBL2, active working branch ahmad-dev 
+  (main is the stable checkpoint, not where work happens; feature/microservices was the 
+  prior working branch, now merged into main via PR #2)
 - When editing a file that already has unrelated pre-existing uncommitted changes, only 
   touch what the current task asks for — leave other in-flight changes alone, and say so 
   in your report.
@@ -44,18 +50,143 @@ Manual dev servers (node server.js, npm run dev, uvicorn) commonly already occup
 3000/5000/8000/27017 locally. Don't kill processes on these ports without asking — report 
 conflicts and let the user decide.
 
-## Product direction (in progress, not yet built)
-Target: multi-tenant B2B SaaS. Hard constraints the allocation engine must NEVER violate: 
-no mixed-gender rooms, no smoking/alcohol incompatibility, 100% of students must be 
-allocated a room (nobody left unassigned). Compatibility score is maximized WITHIN those 
-constraints, not traded off against them. NOT yet implemented — current engine treats 
-compatibility as primary without a hard-constraint layer.
+## Product direction (multi-tenant B2B SaaS — done)
+Hard constraints the allocation engine must NEVER violate: no mixed-gender rooms, no
+smoking/alcohol incompatibility — both enforced as absolute pre-filters (poisoned
+similarity-matrix cells + gender bucketing), not scored/traded-off features. 100% of
+students placed via a two-phase optimize-then-guarantee design; the rare genuinely
+irreconcilable case is reported via `needsManualPlacement` (named blocking
+constraint) rather than silently dropped or force-placed. Full design + the real
+production violation this fixed: [docs/decisions.md](docs/decisions.md) §2-3,
+[docs/architecture.md](docs/architecture.md).
+
+## Security — fixed (worth citing as a real found-and-fixed vulnerability)
+Client-trusted role escalation via login, closed. `POST /api/auth/sync-user` used to
+accept `role` straight from the request body and write it via an upsert on EVERY
+login (`routes/auth.js`) — any user could set `role: 'ADMIN'` client-side (a cookie
+the login page set itself, or a plain form field for the dev-login provider) and
+their account would be silently promoted to ADMIN the next time they signed in, no
+invitation or approval needed. Fixed: `role` is no longer read from the request body
+at all; a brand-new user is created with `role: 'STUDENT'` via `$setOnInsert` only,
+and an existing user's `role` is never included in the update, so nothing sent by a
+client can ever write it again, on login or otherwise. Verified live: repeatedly
+POSTing `role: 'ADMIN'` for an existing real student left their DB role at STUDENT
+(and calling an admin-only endpoint as them still correctly 403s, since `requireAdmin`
+re-reads role from the DB fresh on every request); the real admin account's
+pre-existing `role: 'ADMIN'` was confirmed unchanged (no longer self-healing via
+upsert, so it must already be correct in the DB — which it is).
+Also added: a real MongoDB unique (multikey) index on `Organization.allowedEmailDomains`
+(model + real DB index confirmed) — two orgs literally cannot claim the same domain
+now; verified a colliding insert is rejected with E11000, not just discouraged by
+app logic.
+
+Frontend session role also fixed. `session.user.role` (NextAuth JWT/session) used
+to be populated straight from the login form's selected role / the `selectedRole`
+cookie, never from the backend's real `User.role` — so even after the write-path
+fix above, a student who clicked "Continue as Admin" would still land on the
+`/admin` route (blocked from doing anything real, but a confusing broken shell).
+Fixed: `signIn()` now overwrites `user.role` with the real role from `sync-user`'s
+response before `jwt()` ever reads it, so the session always reflects DB truth,
+never the client's own selection. The now-dead cookie-fallback and the pointless
+`role` field in the sync-user request body were removed too. Verified live: a real
+student selecting "Continue as Admin" is now redirected to `/unauthorized` instead
+of ever reaching the admin shell; the real admin and a freshly-created founding
+admin both still land on `/admin` correctly when they pick the right role.
+
+## Org onboarding (done — founding-admin-only)
+`POST /api/auth/register-organization` (public, no auth) creates a brand-new
+Organization + its founding ADMIN User. Rejects if the domain is already claimed
+(the unique index above is the real enforcement; a friendly pre-check gives a
+clear message first) and requires the founder's own email to belong to the domain
+being registered. This Mongo deployment is standalone (no replica set), so no
+multi-document transaction is available — instead: Organization is created first,
+then the founding User; if that second insert fails for any reason, the
+just-created Organization is deleted as a compensating rollback, so a failed
+registration never leaves a stranded org with nobody able to administer it.
+Verified: concurrent duplicate-domain registrations — exactly one succeeds, the
+loser leaves no orphaned data. `register/page.tsx` is now "Create Your
+Organization" (org name, domain, founder name/email) — the old unrestricted
+self-attestation checkbox flow is gone entirely. A brand-new org's founding admin
+sees a completely empty, correctly isolated dashboard (zero SIT Pune data of any
+kind) immediately after registering and logging in.
+Multi-admin invite (inviting a second admin into an existing org) is deferred, not
+built — today it's founding-admin-only; every org has exactly one admin until a
+future invite flow exists.
 
 ## DevOps rubric being satisfied alongside this project
 CI/CD pipeline (GitHub Actions), config management (Ansible/Puppet), containers + 
 Kubernetes (rolling update/rollback demo), monitoring (Prometheus+Grafana), reflection 
 report. No fixed deadline. Sequencing so far: REST refactor (done) → Docker (done) → 
-CI/CD (next) → K8s → Ansible → monitoring → report.
+CI/CD (done) → K8s (done) → Ansible (done) → monitoring (done) → report (done).
+Full DevOps rubric now complete: [docs/reflection-report.md](docs/reflection-report.md).
+
+### CI/CD (done)
+`.github/workflows/ci.yml` — push to `ahmad-dev` + PRs targeting `main`. Jobs: 
+lint-backend (npm ci + syntax-check, no real lint script exists yet), lint-frontend 
+(npm ci + npm run build - same command already proven in frontend/Dockerfile), 
+python-check (py_compile sanity check - no pytest/flake8 configured anywhere), 
+docker-build (all 3 Dockerfiles, 3-way matrix, no live DB needed), and push-images 
+(push-only, ahmad-dev only, never on a PR). Images land in 
+`ghcr.io/aditi22bansal/pbl2-{backend,frontend,python-service}`, tagged `:<commit-sha>` 
+and `:latest`, using the built-in `GITHUB_TOKEN` (no new secrets). Diagram + job-shape 
+table: [docs/ci-pipeline.md](docs/ci-pipeline.md).
+
+### Kubernetes (done)
+Manifests in `k8s/`: namespace + ConfigMap + Secret (placeholder) + a Deployment/Service 
+pair for each of mongo (+ PVC), python-service, backend, frontend. Deployed to a local 
+kind cluster, all 4 pods verified Running/Ready; rolling update (`kubectl set image`) 
+and rollback (`kubectl rollout undo`) both demonstrated live end-to-end via a visible 
+version badge, with independent raw-HTTP + pod-image verification at each step (not 
+just a browser glance — a port-forward-death + stale-local-server mixup during the 
+first attempt made that discipline necessary, see docs/k8s-deployment.md for the full 
+account). Full writeup, screenshots, and exact commands: 
+[docs/k8s-deployment.md](docs/k8s-deployment.md).
+
+### Ansible (done)
+Two Docker containers (`ansible/target`, `ansible/control`) stand in for a real 
+managed host + control node — `target` mounts the host's real Docker socket 
+(Docker-outside-of-Docker), a deliberate, documented local-demo simplification, not a 
+real remote target. `ansible/playbook.yml` installs Docker (via Docker's official apt 
+repo — Ubuntu 22.04's own repos lack the `docker compose` v2 plugin), creates a 
+`roomsync_deploy` system user, and templates a production-style docker-compose.yml + 
+.env deploying the real GHCR `:latest` images on 4 deliberately-distinct ports 
+(4000/6000/9000/28017). Idempotency proven (`changed=0` on a second run, handler 
+correctly doesn't re-fire); real end-to-end browser verification (Playwright) confirmed 
+org registration, admin login, and student login all work against the live deployed 
+backend. One real caveat found and documented: the frontend image's 
+`NEXT_PUBLIC_API_URL` is baked in at CI build time to `localhost:5000`, so Socket.IO 
+and org-registration (both direct client-side calls) are misdirected in this 
+deployment shape — login/dashboards are unaffected since those go through the 
+server-side proxy. A Docker Desktop/WSL crash (caused by a near-full host disk) hit 
+mid-build and is documented as a real found-and-recovered issue, not hidden. Full 
+writeup: [docs/ansible-deployment.md](docs/ansible-deployment.md).
+
+### Monitoring (done)
+Instrumented both `backend` (prom-client middleware wrapping every request - default 
+process metrics + `http_request_duration_seconds`/`http_requests_total`, labeled by 
+method/matched-route-pattern/status_code) and `python-service` 
+(prometheus-fastapi-instrumentator, same shape automatically), both at `GET /metrics`. 
+Neither had any prior instrumentation - confirmed by grep, not assumed. Pushed via a 
+real commit -> CI built + pushed new GHCR images -> `k8s/backend.yaml`/
+`k8s/python-service.yaml` bumped to that SHA and rolled out, same real-image 
+discipline as the K8s task. `k8s/monitoring/`: Prometheus (scraping both services 
+cross-namespace) + Grafana, with a provisioned datasource and a provisioned 3-panel 
+dashboard (uptime/p95 latency/error rate) - no manual UI clicking. Verified with real 
+generated traffic (incl. genuine 401s/404s) before screenshotting: Prometheus 
+`/api/v1/targets` showed both services `up`, and the dashboard rendered real non-zero 
+latency and error-rate data, not an empty/zero one. Full writeup: 
+[docs/monitoring.md](docs/monitoring.md).
+
+## Recently added (features)
+- In-app notifications for room allocation. Socket.IO now has a per-student channel 
+  (`join_user` -> room `user:<email>`) alongside the existing chat `join_room`, because 
+  chat rooms are keyed on an allocation id — which doesn't exist yet for the student 
+  who's about to be allocated. The student dashboard (not RoomChat) opens the socket, so 
+  it's connected even while unallocated. triggerAllocation notifies ONLY students whose 
+  status genuinely flipped: previously-allocated = members of the pre-insert oldAllocs 
+  snapshot + lockedEmails, so a re-run never re-notifies people who were already placed. 
+  Each notification is both pushed live and persisted (Notification model), so a student 
+  who was offline sees it on their next dashboard load; dismissing marks it read.
 
 ## Known pre-existing minor bugs (not yet fixed, low priority)
 - Dashboard greets allocated-but-unnamed users as "Welcome back, Unknown" 
@@ -63,3 +194,106 @@ CI/CD (next) → K8s → Ansible → monitoring → report.
 - /admin/requests shows "Original Assigned Room: Unknown (ID: )" for one stale test record
 - "Things to discuss together" can show a duplicate bullet (conflict reasons aren't 
   de-duplicated, unlike recommendations which does use a Set)
+- Socket.IO's `join_user(email)` is client-asserted and unauthenticated, matching the 
+  existing `join_room` trust level. Safe today — the channel is push-only and carries 
+  just a room number — but it MUST be authenticated before anything sensitive goes on it.
+
+## Backlog (deferred, not attempted)
+- Branch dropdown (`frontend/src/lib/questionnaireConfig.ts`) is a static hardcoded list 
+  (CSE/AIML/RNA/MECHANICAL/ENTC/CIVIL) with zero algorithm coupling (matcher_greedy.py only 
+  ever compares branch for equality, never against a specific value) - purely a frontend 
+  constraint. Genuinely dynamic per-org values depend on an org-onboarding system that 
+  doesn't exist yet; not worth building for one field in an otherwise fully static 
+  questionnaire config.
+- Real multi-building/wing support (per-block capacity, genuine gender/year overflow across 
+  more than one block) is a real future feature, not attempted here. Today's cleanup only 
+  removed dead code that implied this already existed (see below) - HostelConfiguration 
+  still has no "block"/building concept at all.
+
+## Recently fixed (allocation engine)
+- Room-size ceiling (MAX_EFFECTIVE_ROOM_SIZE=6 in matcher_greedy.py): an oversized 
+  configured tier (e.g. carnation's capacity:23) is split into ceiling-sized virtual 
+  rooms and only used once legitimate configured tiers (<=6) are exhausted — legitimate 
+  tiers are always tried first, largest-first within each group. Prevents both mega-rooms 
+  and legitimate 2/3/4-bed tiers being starved by a misconfigured larger one.
+- needsManualPlacement's "hard_conflict" reason now only compares a stuck student 
+  against others of their own gender (was comparing across the full unassigned pool 
+  regardless of gender, which could misreport a capacity problem as a hard conflict).
+- Room-size preference (soft/best-effort): students can state preferred_room_size 
+  (2/3/4/"No preference") in the questionnaire. Per legitimate (non-virtual) capacity 
+  tier, matcher_greedy.py runs a preference pass first, seeding groups only from 
+  students who explicitly want that size (ranked by pairwise similarity) and using 
+  "No preference" students as filler for any leftover slots — never as seeds. Whatever 
+  the preference pass can't fill falls through unchanged to the existing fill logic, 
+  then Phase 2, so 100% placement is never at risk. preference_satisfaction is computed 
+  post-hoc per placed student (room capacity vs. stated preference) and surfaced on the 
+  student dashboard's "Why We Matched" card. True no-op when nobody has a preference 
+  (100% of real profiles today) — verified byte-identical against the 31-room baseline.
+- Room floor is now real and admin-configured, not a computed formula. HostelConfiguration's 
+  room templates carry a `floor` field (e.g. "Ground", "1", "2"); adminController.js pulls 
+  each placed room's floor from a per-capacity queue built from that real data instead of 
+  `Math.floor(id / ROOMS_PER_FLOOR) + 1`. Missing/blank floor (pre-migration configs, or a 
+  ceiling-expanded virtual room with no real template to attribute a floor to) defaults to 
+  "Ground". Verified: admin-set floor values flow byte-for-byte into RoomAllocation.floor 
+  and into room numbers (e.g. "D-G01", "A-101").
+- accessibility_need (structured: "None" / "Ground floor required") is a soft, best-effort 
+  preference — same questionnaire/Profile/payload pattern as preferred_room_size, including 
+  being threaded into the Python payload. But it's honored in adminController.js's Node-side 
+  room-assignment step, NOT inside matcher_greedy.py's group-formation: accessibility need 
+  doesn't affect WHO groups together (compatibility matching is untouched), only WHICH 
+  physical room a formed group lands in — and floor is only known as real data in Node 
+  (see the floor-realism fix above), not in Python at all. Accessibility-needing groups get 
+  first pick of that capacity's "Ground" floor-queue slots (processed before any other 
+  group, mirroring room-size preference's own pass-ordering fix) before falling through to 
+  normal assignment — best-effort, placement is never blocked. Satisfaction is tracked the 
+  same way (accessibility_satisfaction, post-hoc, only for students with an explicit need) 
+  and surfaced on the dashboard. True no-op against real data (nobody has this need yet).
+- Structured accessibility accommodation requests: ChangeRequest now has requestType 
+  ('GENERAL' | 'ACCESSIBILITY') and requestedAccommodation, with the old free-text `reason` 
+  kept as an optional note rather than the thing that used to carry the actual request. 
+  For an ACCESSIBILITY request, the admin's Requests panel can query eligible target rooms 
+  (right gender — not full branch/year cohort, floor matches, has an open slot, unlocked) 
+  and move the student there in one click. The move reuses manualSwap's exact validated 
+  core (`_assertUnlocked`/`_resolveMember`/`_assertOpenSlot`/`_applyMove`, refactored out of 
+  manualSwap itself) for a single-direction move instead of a two-way swap, then marks the 
+  request Approved. GENERAL requests are untouched — still reviewed/swapped manually via 
+  the Allocations panel exactly as before.
+- Two real multi-tenant domain bugs fixed. (1) NextAuth's signIn callback (frontend) had 
+  its own hardcoded `@sitpune.edu.in` checks (Google provider + the legacy Demo Bypass 
+  credentials provider) that ran BEFORE the backend's real Organization.allowedEmailDomains 
+  lookup ever got consulted, and even then the callback ignored /api/auth/sync-user's 
+  response and always returned true. Fixed: both hardcoded checks removed; signIn now 
+  awaits sync-user and denies (redirects to /unauthorized) on a non-OK response, uniformly 
+  for every provider including DEV_AUTH - a dev-login still has to belong to a real 
+  registered org's domain, matching the intent already documented in backend/routes/auth.js. 
+  Deliberate behavior change: a sync-user failure (bad domain OR backend unreachable) now 
+  fails closed instead of silently letting sign-in through. (2) adminController.js's CSV 
+  sync fallback email (for rows with no email column) was hardcoded to 
+  `student_N@sitpune.edu.in` regardless of which org was syncing - now derived from that 
+  org's real `allowedEmailDomains[0]` (one extra Organization lookup; org context was 
+  already in scope). csv_repo.py has the same hardcoded fallback but is legacy/unreachable 
+  on the live path (only the old FastAPI CLI endpoints use it) - left as-is with a comment 
+  explaining why, lower priority.
+- Hardcoded SIT-Pune branding genericized across login/register/unauthorized pages, page 
+  title, PDF report header/footer, FastAPI title, and the landing page (testimonial 
+  attribution and marketing copy) - all replaced with institution-agnostic text ("your 
+  institution" etc.), since there's no per-org branding system yet. Default Google Sheet 
+  sync URL blanked (was pre-filled to a specific real sheet). 
+- Block-lettering dead code removed (adminController.js's getBlockForRoom/assignRoom): the 
+  room-numbering logic used to return a LIST of blocks per gender/year group (e.g. 
+  `['B','C']`, `['D','E','F','G']`), implying overflow to a second/third block once the 
+  first filled up - but assignRoom's loop returned unconditionally on the first entry, so 
+  C/E/F/G were always dead; every non-first-year female room was always B, every male room 
+  always D. Now returns a single block letter (A/B/D) directly - same runtime behavior, 
+  honest code. Did NOT build real per-block capacity/overflow (see backlog above).
+- Fixed duplicate room_number collisions surfaced by the block-lettering cleanup above: 
+  adminController.js's within-floor room numbering used `(count % ROOMS_PER_FLOOR) + 1` 
+  (ROOMS_PER_FLOOR=8), wrapping back to 01 once a single (block, floor) bucket passed 8 
+  rooms - e.g. block D (every male room) can hold 20+ Ground-floor rooms alone, producing 
+  several rooms literally named "D-G01". The real database was never actually affected 
+  (confirmed: its current room_numbers predate the floor-realism work entirely and were 
+  already unique; the collision only ever showed up in a scratch re-trigger during 
+  verification), so no data regeneration was needed - just the code path. Fix: removed the 
+  modulo entirely; the per-(block,floor) counter now increments naturally (D-G01..D-G22, 
+  no wraparound). Numbering-only change - verified byte-identical room composition 
+  (member groupings) against the pre-fix baseline.

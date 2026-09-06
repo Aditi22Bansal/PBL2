@@ -1,13 +1,21 @@
 const mongoose = require('mongoose');
+const { SIT_PUNE_ORG_ID } = require('../config/defaultOrg');
 
 const profileSchema = new mongoose.Schema({
+  organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, default: SIT_PUNE_ORG_ID },
   user_id: { type: String, required: true, unique: true },
   name: { type: String, default: 'Unknown Name' },
   age: { type: Number },
   gender: { type: String },
   year_of_study: { type: String },
   branch: { type: String },
-  
+  // Optional - existing profiles without it are treated as "No preference"
+  // downstream, no backfill needed.
+  preferred_room_size: { type: String, default: 'No preference' },
+  // Structured only - never free text describing a condition. Existing
+  // profiles without it are treated as "None" downstream, no backfill needed.
+  accessibility_need: { type: String, default: 'None' },
+
   sleep_time: { type: String },
   wake_time: { type: String },
   cleanliness: { type: String },

@@ -1,0 +1,24 @@
+# Non-secret env vars, mirroring docker-compose.yml's `environment:` blocks but with
+# in-cluster Service names (mongo/python-service/backend) instead of Compose service
+# names - same idea, different DNS.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: roomsync-config
+  namespace: roomsync
+data:
+  # backend
+  # NOTE: PORT is deliberately NOT set here - it's genuinely per-service, not
+  # shared. It's set directly in backend.yaml's own env: block instead. This
+  # bit once already: envFrom-ing a shared PORT into the frontend pod
+  # silently overrode the frontend image's own baked-in PORT=3000 default,
+  # making Next.js bind to 5000 while the Service/probes still expected 3000.
+  MONGO_URI: "mongodb://mongo:27017/hostel_allocator"
+  DEV_AUTH: "true"
+  PYTHON_SERVICE_URL: "http://python-service:8000"
+  USE_REST_ALLOCATION: "true"
+
+  # frontend (server-side; NEXT_PUBLIC_* are build-time-baked, see frontend
+  # Deployment's build args note - these two are the runtime-only ones)
+  BACKEND_URL: "http://backend:5000"
+  NEXTAUTH_URL: "http://localhost:3000"

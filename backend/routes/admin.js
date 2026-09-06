@@ -2,6 +2,11 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
 const hostelConfigController = require('../controllers/hostelConfigController');
+const { requireAuth, requireAdmin } = require('../middleware/requireAuth');
+
+// Every admin route requires a real, server-verified identity AND an actual
+// ADMIN role looked up from the User collection - never a client-asserted one.
+router.use(requireAuth, requireAdmin);
 
 // Sync Google Sheets CSV (Legacy, can keep it)
 router.post('/sync-csv', adminController.syncCsv);
@@ -34,6 +39,8 @@ router.post('/allocations/toggle-lock', adminController.toggleRoomLock);
 // Room change requests endpoints
 router.get('/requests', adminController.getChangeRequests);
 router.post('/requests/action', adminController.handleRequestAction);
+router.get('/requests/:requestId/eligible-rooms', adminController.getEligibleAccommodationRooms);
+router.post('/requests/accommodate', adminController.accommodateAccessibilityRequest);
 
 // Force allocate remaining unassigned students
 router.post('/force-allocate', adminController.forceAllocateRemaining);

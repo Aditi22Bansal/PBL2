@@ -71,6 +71,22 @@ export const questionnaireSteps: QuestionnaireStep[] = [
         options: ["CSE", "AIML", "RNA", "MECHANICAL", "ENTC", "CIVIL"],
         required: true,
         validationError: "Branch of study is required."
+      },
+      {
+        id: "preferred_room_size",
+        label: "Preferred Room Size",
+        type: "select",
+        options: ["2", "3", "4", "No preference"],
+        required: true,
+        validationError: "Please select a preferred room size (or No preference)."
+      },
+      {
+        id: "accessibility_need",
+        label: "Accessibility Need",
+        type: "select",
+        options: ["None", "Ground floor required"],
+        required: true,
+        validationError: "Please select an accessibility need (or None)."
       }
     ]
   },

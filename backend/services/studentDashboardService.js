@@ -10,9 +10,9 @@ const STABILITY_WEIGHTS = {
 /**
  * Aggregates and transforms student allocation, profile, and explainability data into a clean DTO
  */
-const getDashboardDTO = async (email) => {
+const getDashboardDTO = async (email, organizationId) => {
     // 1. Fetch current student profile
-    const profile = await Profile.findOne({ user_id: email }).lean();
+    const profile = await Profile.findOne({ user_id: email, organizationId }).lean();
     if (!profile) {
         return {
             status: 'NOT_SUBMITTED',
@@ -38,7 +38,7 @@ const getDashboardDTO = async (email) => {
     }
 
     // 2. Fetch room allocation
-    const allocation = await RoomAllocation.findOne({ members: email }).lean();
+    const allocation = await RoomAllocation.findOne({ members: email, organizationId }).lean();
     if (!allocation) {
         return {
             status: 'PENDING_ALLOCATION',
@@ -56,20 +56,27 @@ const getDashboardDTO = async (email) => {
 
     // 3. Find roommates details (excluding current user)
     const roommateEmails = allocation.members.filter(m => m !== email);
-    const roommatesDocs = await Profile.find({ user_id: { $in: roommateEmails } }).lean();
+    const roommatesDocs = await Profile.find({ user_id: { $in: roommateEmails }, organizationId }).lean();
 
     // 4. Run conflict & explainability matching service
     const allRoommateProfiles = [profile, ...roommatesDocs];
     const analysis = conflictService.analyzeRoom(allocation, allRoommateProfiles);
 
     // 5. Calculate Room Stability Score
+    // compScore is already floored at 0 (see conflictPredictionService.js), so
+    // this can't go negative from that side; the extra Math.max(0, ...) below is
+    // just defensive.
     const compScore = analysis.compatibilityScore;
     const conflictComponent = Math.max(0, 100 - analysis.conflictScore * 4);
-    const roomStabilityScore = Math.round(compScore * STABILITY_WEIGHTS.compatibility + conflictComponent * STABILITY_WEIGHTS.conflict);
+    const roomStabilityScore = Math.max(0, Math.round(compScore * STABILITY_WEIGHTS.compatibility + conflictComponent * STABILITY_WEIGHTS.conflict));
 
-    // Determine matching quality label
+    // Determine matching quality label. A negative raw score means the room only
+    // formed because 100% placement is a hard requirement, not because the match
+    // itself was decent - call that out specifically rather than lumping it in
+    // with an ordinary sub-70 "Needs Alignment" result.
     let matchLabel = 'Excellent Match';
-    if (analysis.compatibilityScore < 70) matchLabel = 'Needs Alignment';
+    if (analysis.rawCompatibilityScore < 0) matchLabel = 'Below Average Match';
+    else if (analysis.compatibilityScore < 70) matchLabel = 'Needs Alignment';
     else if (analysis.compatibilityScore < 80) matchLabel = 'Satisfactory Match';
     else if (analysis.compatibilityScore < 90) matchLabel = 'Good Match';
 
@@ -101,6 +108,23 @@ const getDashboardDTO = async (email) => {
         matchingExplanation = "Excellent matching indicator! You share key commonalities in resting patterns, with only minor schedule differences to discuss.";
     }
 
+    // Only meaningful when the student actually stated a preference (2/3/4) -
+    // "No preference" students get null, same as anyone whose room predates
+    // this feature and carries no preference_satisfaction entry for them.
+    const hasRoomSizePreference = !!profile.preferred_room_size && profile.preferred_room_size !== 'No preference';
+    const preferenceSatisfaction = allocation.preference_satisfaction || {};
+    const preferredRoomSizeSatisfied = hasRoomSizePreference && Object.prototype.hasOwnProperty.call(preferenceSatisfaction, email)
+        ? !!preferenceSatisfaction[email]
+        : null;
+
+    // Same pattern: null unless the student actually stated a need, exactly
+    // like room-size preference above.
+    const hasAccessibilityNeed = !!profile.accessibility_need && profile.accessibility_need !== 'None';
+    const accessibilitySatisfaction = allocation.accessibility_satisfaction || {};
+    const accessibilityNeedSatisfied = hasAccessibilityNeed && Object.prototype.hasOwnProperty.call(accessibilitySatisfaction, email)
+        ? !!accessibilitySatisfaction[email]
+        : null;
+
     return {
         status: 'ALLOCATED',
         profile: {
@@ -122,6 +146,10 @@ const getDashboardDTO = async (email) => {
             stabilityScore: roomStabilityScore,
             matchLabel,
             matchingExplanation,
+            preferredRoomSize: hasRoomSizePreference ? profile.preferred_room_size : null,
+            preferredRoomSizeSatisfied,
+            accessibilityNeed: hasAccessibilityNeed ? profile.accessibility_need : null,
+            accessibilityNeedSatisfied,
             roommates: roommatesDocs.map(r => ({
                 name: r.name,
                 branch: r.branch,

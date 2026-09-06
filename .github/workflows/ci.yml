@@ -1,0 +1,156 @@
+name: CI
+
+on:
+  push:
+    branches: [ahmad-dev]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: aditi22bansal
+
+jobs:
+  lint-backend:
+    name: Lint backend (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      # backend/package.json has no real lint/build script today (just a stub
+      # `test` that always exits 1) - this syntax-checks every source file
+      # instead of inventing tooling that doesn't exist in the repo.
+      - name: Syntax-check all JS sources
+        working-directory: backend
+        run: |
+          find . -name "*.js" -not -path "./node_modules/*" -not -path "./venv/*" -print0 \
+            | xargs -0 -n1 node --check
+
+  lint-frontend:
+    name: Build frontend (Next.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # Same production build command already proven in frontend/Dockerfile.
+      # NEXT_PUBLIC_* vars mirror that Dockerfile's ARG defaults - they're
+      # inlined at build time, so they must be present here too.
+      - name: Build (production)
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5000
+          NEXT_PUBLIC_DEV_AUTH: "true"
+        run: npm run build
+
+  python-check:
+    name: Python sanity check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # No pytest/flake8/etc. configured anywhere in backend/ - this compiles
+      # every source file (catches syntax errors) rather than inventing a
+      # test suite that doesn't exist. Doesn't need requirements.txt installed:
+      # py_compile only parses/compiles, it never executes imports.
+      - name: Compile-check all Python sources
+        working-directory: backend
+        run: python -m py_compile main.py run_pipeline.py domain/*.py ml_engine/*.py repositories/*.py
+
+  docker-build:
+    name: Docker build (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+          - name: python-service
+            context: ./backend
+            dockerfile: ./backend/Dockerfile.python
+          - name: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Proves each Dockerfile still builds. No live database or running
+      # service required - these are pure `docker build` steps (frontend's
+      # build stage runs `next build`, a static production build, not the app).
+      - name: Build ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: roomsync-${{ matrix.name }}:ci
+
+  push-images:
+    name: Push ${{ matrix.name }} to GHCR
+    needs: [lint-backend, lint-frontend, python-check, docker-build]
+    # Only push on an actual push to ahmad-dev, never from a pull_request -
+    # PRs only need docker-build's build-validity check above.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/ahmad-dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+          - name: python-service
+            context: ./backend
+            dockerfile: ./backend/Dockerfile.python
+          - name: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/pbl2-${{ matrix.name }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/pbl2-${{ matrix.name }}:latest

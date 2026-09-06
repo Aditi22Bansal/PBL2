@@ -324,7 +324,14 @@ const rules = [
  */
 const analyzeRoom = (room, roommateProfiles) => {
     const roomId = room.room_number || room._id.toString();
-    const compatibilityScore = Math.round((room.compatibility_score || 0) * 100);
+    // Raw compatibility can now be negative: rooms form even at very low/negative
+    // compatibility rather than being rejected (see matcher_greedy.py's removed
+    // score-threshold gates), since 100% placement is a hard requirement.
+    // rawCompatibilityScore keeps that number for internal ranking/debugging;
+    // compatibilityScore is floored at 0 so nothing student-facing ever shows a
+    // confusing negative percentage.
+    const rawCompatibilityScore = Math.round((room.compatibility_score || 0) * 100);
+    const compatibilityScore = Math.max(0, rawCompatibilityScore);
 
     const conflictReasons = [];
     const positiveFactors = [];
@@ -387,6 +394,7 @@ const analyzeRoom = (room, roommateProfiles) => {
     return {
         roomId,
         compatibilityScore,
+        rawCompatibilityScore,
         conflictRisk,
         conflictScore: totalConflictScore,
         conflictReasons: conflictReasons.sort((a, b) => b.score - a.score), // Rank by contribution score

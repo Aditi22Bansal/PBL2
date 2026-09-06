@@ -3,6 +3,9 @@ const csv = require('csv-parser');
 const Profile = require('../models/Profile');
 const RoomAllocation = require('../models/RoomAllocation');
 const ChangeRequest = require('../models/ChangeRequest');
+const Chat = require('../models/Chat');
+const Notification = require('../models/Notification');
+const Organization = require('../models/Organization');
 const { runPythonAllocation } = require('../services/allocationService');
 const analyticsService = require('../services/analyticsService');
 
@@ -10,6 +13,13 @@ exports.syncCsv = async (req, res) => {
     try {
         let { sheet_url } = req.body;
         if (!sheet_url) return res.status(400).json({ error: 'CSV sheet_url is required' });
+
+        // The org's own real domain for rows with no email column - was
+        // hardcoded to @sitpune.edu.in, which mislabeled every synthetic
+        // fallback email with a different institution's domain for any org
+        // other than the default one.
+        const org = await Organization.findById(req.currentUser.organizationId).lean();
+        const fallbackDomain = (org && org.allowedEmailDomains && org.allowedEmailDomains[0]) || 'example.com';
 
         sheet_url = sheet_url.trim();
         if (sheet_url.includes("/edit") || sheet_url.includes("/view")) {
@@ -50,7 +60,7 @@ exports.syncCsv = async (req, res) => {
                     const nameKey = keys.find(k => k.toLowerCase().includes('name'));
                     const branchKey = keys.find(k => k.toLowerCase().includes('branch'));
                     
-                    const email = emailKey && row[emailKey] ? row[emailKey].trim() : `student_${index}@sitpune.edu.in`;
+                    const email = emailKey && row[emailKey] ? row[emailKey].trim() : `student_${index}@${fallbackDomain}`;
                     if(!email) return null;
 
                     const fallbackName = nameKey && row[nameKey] ? row[nameKey] : email.split('@')[0];
@@ -65,10 +75,11 @@ exports.syncCsv = async (req, res) => {
 
                     return {
                         updateOne: {
-                            filter: { user_id: email },
+                            filter: { user_id: email, organizationId: req.currentUser.organizationId },
                             update: {
                                 $set: {
                                     user_id: email,
+                                    organizationId: req.currentUser.organizationId,
                                     name: fallbackName,
                                     age: age,
                                     branch: branchKey ? row[branchKey] : "Unknown",
@@ -126,10 +137,13 @@ exports.syncCsv = async (req, res) => {
                 }).filter(p => p !== null);
 
                 if (profilesToUpsert.length > 0) {
-                    await Profile.deleteMany({});
+                    // Scoped to the caller's own org - this used to be an
+                    // unscoped Profile.deleteMany({}), wiping every
+                    // organization's profiles on any admin's sync.
+                    await Profile.deleteMany({ organizationId: req.currentUser.organizationId });
                     await Profile.bulkWrite(profilesToUpsert);
                     // Only delete NOT locked ones from RoomAllocation if resetting
-                    await RoomAllocation.deleteMany({ isLocked: { $ne: true } });
+                    await RoomAllocation.deleteMany({ isLocked: { $ne: true }, organizationId: req.currentUser.organizationId });
                 }
                 
                 res.json({ message: `Successfully synced ${profilesToUpsert.length} profiles from CSV.` });
@@ -145,26 +159,38 @@ exports.triggerAllocation = async (req, res) => {
         const { config } = req.body || {};
         
         let activeConfig = config;
+        // Templates carrying their real admin-set floor, kept separately from
+        // activeConfig (which only ever needs capacity/count - the Python
+        // engine has no notion of floor) so the room-numbering step below can
+        // look up each capacity's actual configured floor(s).
+        let templatesForFloorLookup = [];
         if (!activeConfig) {
             const HostelConfiguration = require('../models/HostelConfiguration');
-            const dbConfig = await HostelConfiguration.findOne({ isActive: true }).lean();
-            if (dbConfig) {
+            // No more single-active exclusivity: an org can have several
+            // configs active at once (e.g. a Female wing config and a Male
+            // wing config), so aggregate room-template inventory across all
+            // of them rather than assuming exactly one.
+            const dbConfigs = await HostelConfiguration.find({ isActive: true, organizationId: req.currentUser.organizationId }).lean();
+            if (dbConfigs.length > 0) {
+                templatesForFloorLookup = dbConfigs.flatMap(c => c.roomTemplates);
                 activeConfig = {
-                    roomTemplates: dbConfig.roomTemplates.map(t => ({
+                    roomTemplates: templatesForFloorLookup.map(t => ({
                         capacity: t.capacity,
                         count: t.count
                     }))
                 };
             }
+        } else {
+            templatesForFloorLookup = activeConfig.roomTemplates || [];
         }
 
-        const profiles = await Profile.find({});
+        const profiles = await Profile.find({ organizationId: req.currentUser.organizationId });
         if (profiles.length < 3) {
             return res.status(400).json({ error: 'Not enough profiles to run allocation (minimum 3 required)' });
         }
-        
+
         // Exclude students who are already placed in locked allocations
-        const lockedAllocations = await RoomAllocation.find({ isLocked: true });
+        const lockedAllocations = await RoomAllocation.find({ isLocked: true, organizationId: req.currentUser.organizationId });
         const lockedEmails = new Set(lockedAllocations.flatMap(a => a.members));
         const activeProfiles = profiles.filter(p => !lockedEmails.has(p.user_id));
 
@@ -199,141 +225,278 @@ exports.triggerAllocation = async (req, res) => {
             pref_roommate_social: p.pref_roommate_social || 'Does not matter',
             cleanliness_expectation: p.cleanliness_expectation || 'Moderately Clean',
             light_preference: p.light_preference || 'Dim light is fine',
-            most_important_factor: p.most_important_factor || 'Cleanliness and Organization'
+            most_important_factor: p.most_important_factor || 'Cleanliness and Organization',
+            preferred_room_size: p.preferred_room_size || 'No preference',
+            accessibility_need: p.accessibility_need || 'None'
         }));
 
-        // Split active profiles into categories
-        const girlsFY = profilesJson.filter(p => 
-            (p.gender.toUpperCase().startsWith('F') || p.gender.toUpperCase() === 'FEMALE') && 
-            p.year_of_study === '1st Year'
-        );
-        const girlsSenior = profilesJson.filter(p => 
-            (p.gender.toUpperCase().startsWith('F') || p.gender.toUpperCase() === 'FEMALE') && 
-            p.year_of_study !== '1st Year'
-        );
-        const boysAll = profilesJson.filter(p => 
-            p.gender.toUpperCase().startsWith('M') || p.gender.toUpperCase() === 'MALE'
-        );
-        
-        const runPool = async (pool) => {
-            if (pool.length === 0) return { allocations: [], unassigned_ids: [] };
-            return await runPythonAllocation(pool, activeConfig);
-        };
+        // Send the full profile list to /allocate/v2 in a single call. Gender (and
+        // branch/year) partitioning happens ONLY inside compute_allocation()'s
+        // internal bucketing now — no manual pre-split here.
+        let result;
+        try {
+            result = await runPythonAllocation(profilesJson, activeConfig);
+        } catch (err) {
+            if (err.detail && err.detail.capacityShortfall) {
+                return res.status(422).json({
+                    error: err.detail.error || 'Insufficient bed capacity for submitted students.',
+                    capacityShortfall: err.detail.capacityShortfall
+                });
+            }
+            throw err;
+        }
 
-        // Execute sequentially to avoid memory spikes on the Python backend!
-        const resGFY = await runPool(girlsFY);
-        const resGSenior = await runPool(girlsSenior);
-        const resBoys = await runPool(boysAll);
-
-        let allUnassigned = [
-            ...(resGFY.unassigned_ids || []),
-            ...(resGSenior.unassigned_ids || []),
-            ...(resBoys.unassigned_ids || [])
-        ];
+        const profileMap = {};
+        profilesJson.forEach(p => profileMap[p.user_id] = p);
 
         const CAPACITY_PER_ROOM = 3;
-        const ROOMS_PER_FLOOR = 8;
-        const FLOORS_PER_BLOCK = 4;
 
-        // Build capacity pool from room templates
-        const capacityPool = [];
-        if (activeConfig && activeConfig.roomTemplates) {
-            for (const template of activeConfig.roomTemplates) {
-                for (let i = 0; i < (template.count || 0); i++) {
-                    capacityPool.push(template.capacity);
-                }
+        // Determine offset for numbering so we don't overlap with locked rooms
+        let nextRoomIdByBlockFloor = {};
+
+        // Per-capacity queue of the REAL admin-configured floor values, one
+        // entry per bed-slot the template represents, in template order. A
+        // capacity is the only signal available here to look this up by - the
+        // Python engine returns rooms, not which specific template each came
+        // from - which mirrors how capacity itself is already a flat,
+        // ungendered pool today (see the aggregation above); floor lookup is
+        // equally gender-blind, consistent with that existing simplification.
+        // Missing/blank floor (configs saved before this field existed)
+        // defaults to "Ground". A capacity with no matching template at all -
+        // i.e. a ceiling-expanded virtual room from an oversized misconfigured
+        // tier (see MAX_EFFECTIVE_ROOM_SIZE in matcher_greedy.py) - also falls
+        // through to "Ground"; there's no real per-template floor to
+        // attribute it to.
+        const floorQueueByCapacity = {};
+        for (const t of templatesForFloorLookup) {
+            const floorValue = (t.floor && String(t.floor).trim()) || 'Ground';
+            if (!floorQueueByCapacity[t.capacity]) floorQueueByCapacity[t.capacity] = [];
+            for (let i = 0; i < t.count; i++) {
+                floorQueueByCapacity[t.capacity].push(floorValue);
             }
         }
-        
-        // Determine offset for numbering so we don't overlap with locked rooms
-        let nextIds = { A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1 };
-        
-        const assignRoom = (allowedBlocks) => {
-            for (let blockId of allowedBlocks) {
-                let id = nextIds[blockId]++;
-                let f = Math.floor(id / ROOMS_PER_FLOOR) + 1;
-                let r = (id % ROOMS_PER_FLOOR) + 1;
-                const roomNumber = `${blockId}-${f}0${r}`;
-                return { block: blockId, floor: f, room_number: roomNumber };
+        // preferGround: a soft, best-effort preference - if any bed of this
+        // capacity is on "Ground", hand it out; otherwise fall through to
+        // whatever's next in the queue exactly as normal (never blocks
+        // placement, satisfaction just ends up marked false downstream).
+        const nextFloorForCapacity = (capacity, preferGround) => {
+            const queue = floorQueueByCapacity[capacity];
+            if (!queue || queue.length === 0) return 'Ground';
+            if (preferGround) {
+                const groundIdx = queue.findIndex(f => f.toLowerCase() === 'ground');
+                if (groundIdx !== -1) return queue.splice(groundIdx, 1)[0];
             }
-            return null; 
+            return queue.shift();
+        };
+
+        // A student's accessibility need doesn't affect WHO they're grouped
+        // with (compatibility matching is untouched) - it only affects WHICH
+        // physical room a formed group lands in, which is exactly the layer
+        // that already owns real floor data (the queue above, built in the
+        // room-floor-realism work). Process accessibility-needing groups
+        // FIRST, before any other group gets a turn at the floor queue - the
+        // same pass-ordering fix room-size preference needed, for the same
+        // reason: an earlier-processed group with no stake in the outcome
+        // could otherwise take the only ground-floor bed of that capacity
+        // before a group that actually needs it ever gets a look.
+        const needsGroundFloor = (alloc) => (alloc.members || []).some(uid => {
+            const p = profileMap[uid];
+            return p && p.accessibility_need === 'Ground floor required';
+        });
+        const allAllocs = result.allocations || [];
+        const orderedAllocs = [
+            ...allAllocs.filter(needsGroundFloor),
+            ...allAllocs.filter(a => !needsGroundFloor(a))
+        ];
+
+        // Block assignment now derives from each room's own members (via the
+        // profile map) instead of which pre-split pool it came from. One
+        // fixed block per gender/year group today - A (first-year female), B
+        // (other female), D (male) - and nothing else. This used to return a
+        // list per group (['B','C'], ['D','E','F','G']) implying overflow to
+        // a second/third block once the first filled up, but assignRoom
+        // never actually consumed anything past the first entry, so those
+        // extra letters were dead: every non-first-year female room was
+        // always 'B', every male room always 'D'. Real per-block capacity
+        // limits (and genuine overflow) don't exist anywhere in the data
+        // model - HostelConfiguration has no "block"/building concept at all
+        // - so this now just says what actually happens instead of implying
+        // logic that was never there. Multi-building/wing support is a real
+        // future feature, not attempted here (see CLAUDE.md backlog).
+        const getBlockForRoom = (alloc) => {
+            const firstMember = alloc.members && alloc.members[0];
+            const profile = firstMember ? profileMap[firstMember] : null;
+            const isFemale = ((profile && profile.gender) || '').toUpperCase().startsWith('F');
+            if (isFemale) {
+                const isFY = profile && profile.year_of_study === '1st Year';
+                return isFY ? 'A' : 'B';
+            }
+            return 'D';
+        };
+
+        const assignRoom = (blockId, capacity, preferGround) => {
+            const floorValue = nextFloorForCapacity(capacity, preferGround);
+            const floorSlug = floorValue.toLowerCase() === 'ground' ? 'G' : floorValue;
+            const key = `${blockId}::${floorValue}`;
+            const idOnFloor = nextRoomIdByBlockFloor[key] || 0;
+            nextRoomIdByBlockFloor[key] = idOnFloor + 1;
+            // No modulo/wraparound: the counter increments naturally so room
+            // numbers stay unique within a (block, floor) combination no
+            // matter how many rooms land there (was capped at ROOMS_PER_FLOOR=8,
+            // wrapping back to 01 and colliding with an earlier real room once
+            // a single block+floor held more than 8 rooms - e.g. every male
+            // room is block D today, so D+Ground alone can hold 20+ rooms).
+            const roomNumber = `${blockId}-${floorSlug}${String(idOnFloor + 1).padStart(2, '0')}`;
+            return { block: blockId, floor: floorValue, room_number: roomNumber };
         };
 
         const newAllocations = [];
-        
-        const processResults = (result, allowedBlocks) => {
-            if (!result || !result.allocations) return;
-            for (const alloc of result.allocations) {
-                const roomData = assignRoom(allowedBlocks);
-                if (roomData) {
-                    const roomCapacity = capacityPool.length > 0 ? capacityPool.shift() : (alloc.members ? alloc.members.length : CAPACITY_PER_ROOM);
-                    newAllocations.push({
-                        allocation_run_id: result.run_id || 'manual_id',
-                        gender_group: alloc.gender_group,
-                        compatibility_score: alloc.compatibility_score,
-                        members: alloc.members,
-                        block: roomData.block,
-                        floor: roomData.floor,
-                        room_number: roomData.room_number,
-                        room_capacity: roomCapacity,
-                        isLocked: false // Default to false
+        for (const alloc of orderedAllocs) {
+            const roomData = assignRoom(getBlockForRoom(alloc), alloc.capacity, needsGroundFloor(alloc));
+            if (roomData) {
+                // The actual capacity the algorithm decided for THIS room - not a
+                // FIFO queue popped in emission order (that was decoupled from
+                // reality: it could assign e.g. a template's capacity to a room
+                // that was actually filled to a completely different size).
+                const roomCapacity = alloc.capacity || (alloc.members ? alloc.members.length : CAPACITY_PER_ROOM);
+
+                // Post-hoc, same pattern as preference_satisfaction: only
+                // students who stated an explicit need get an entry at all: no
+                // key at all for "None" - nothing to satisfy.
+                const accessibilitySatisfaction = {};
+                for (const uid of alloc.members) {
+                    const need = profileMap[uid] && profileMap[uid].accessibility_need;
+                    if (need && need !== 'None') {
+                        accessibilitySatisfaction[uid] = need === 'Ground floor required' && roomData.floor.toLowerCase() === 'ground';
+                    }
+                }
+
+                newAllocations.push({
+                    organizationId: req.currentUser.organizationId,
+                    allocation_run_id: result.run_id || 'manual_id',
+                    gender_group: alloc.gender_group,
+                    compatibility_score: alloc.compatibility_score,
+                    members: alloc.members,
+                    block: roomData.block,
+                    floor: roomData.floor,
+                    room_number: roomData.room_number,
+                    room_capacity: roomCapacity,
+                    isLocked: false, // Default to false
+                    preference_satisfaction: alloc.preference_satisfaction || {},
+                    accessibility_satisfaction: accessibilitySatisfaction
+                });
+            }
+        }
+
+        // Validate the freshly computed allocation BEFORE touching any existing
+        // data. Nothing destructive happens above this line.
+        if (!Array.isArray(newAllocations) || newAllocations.length === 0) {
+            throw new Error('Allocation engine returned no valid rooms to save — aborting before touching existing data.');
+        }
+
+        // Snapshot which unlocked allocations exist right now, for the cascade
+        // delete below. Pure read, not destructive.
+        const oldAllocs = await RoomAllocation.find({ isLocked: { $ne: true }, organizationId: req.currentUser.organizationId }).lean();
+        const oldIds = oldAllocs.map(a => a._id);
+
+        // Safe swap: insert the new rooms FIRST, only delete the old ones after
+        // the insert has actually succeeded. This machine runs MongoDB as a
+        // standalone instance (confirmed via the `hello` command - no `setName`,
+        // so no replica set), which does not support multi-document
+        // transactions, so we can't wrap this in one. Insert-before-delete is
+        // the safer ordering without a transaction: if the insert fails, the
+        // catch below fires with nothing deleted yet and the old rooms are
+        // untouched. There's no unique index on room_number, so new/old rooms
+        // briefly coexisting during this window is harmless. The old failure
+        // mode (delete-then-insert with a crash in between, e.g. the
+        // previously-missing Chat import) could leave zero rooms in the DB;
+        // this ordering can't produce that outcome.
+        let insertedNewRooms = false;
+        try {
+            await RoomAllocation.insertMany(newAllocations);
+            insertedNewRooms = true;
+
+            await RoomAllocation.deleteMany({ _id: { $in: oldIds } });
+
+            // Cascade delete orphaned chat messages and change requests
+            if (oldIds.length > 0) {
+                await Chat.deleteMany({ room_id: { $in: oldIds } });
+                await ChangeRequest.deleteMany({ currentRoomId: { $in: oldIds } });
+            }
+        } catch (swapErr) {
+            console.error('[triggerAllocation] Mid-swap failure while replacing room allocations.', {
+                insertedNewRooms,
+                oldRoomIdsPendingCleanup: oldIds.map(id => id.toString()),
+                error: swapErr
+            });
+            throw new Error(
+                `Allocation swap failed partway (new rooms inserted: ${insertedNewRooms}). ` +
+                `${insertedNewRooms ? 'Old rooms may still be present alongside the new ones — manual cleanup may be required.' : 'No existing data was touched.'} ` +
+                `Root cause: ${swapErr.message}`
+            );
+        }
+
+        // Notify ONLY students whose status actually flipped to ALLOCATED in
+        // this run. A re-run re-places people who were already allocated (into
+        // the same or a different room) - their status never changed, so they
+        // must not be notified again. previouslyAllocated is the union of both
+        // pre-insert snapshots taken above: oldAllocs (unlocked rooms about to
+        // be replaced) and lockedEmails (locked rooms, excluded from this run
+        // entirely). Anyone in the new result outside that union is genuinely
+        // newly placed.
+        const previouslyAllocated = new Set([
+            ...oldAllocs.flatMap(a => a.members),
+            ...lockedEmails
+        ]);
+
+        try {
+            const io = req.app.get('socketio');
+            const newNotifications = [];
+
+            for (const alloc of newAllocations) {
+                for (const email of alloc.members) {
+                    if (previouslyAllocated.has(email)) continue;
+                    newNotifications.push({
+                        organizationId: req.currentUser.organizationId,
+                        recipient_email: email,
+                        type: 'ROOM_ALLOCATED',
+                        message: `You've been allocated room ${alloc.room_number}. Your roommate details are ready to view.`
                     });
-                } else {
-                    allUnassigned.push(...alloc.members);
                 }
             }
-        };
 
-        processResults(resGFY, ['A']);
-        processResults(resGSenior, ['B', 'C']);
-        processResults(resBoys, ['D', 'E', 'F', 'G']);
-
-        // Delete all UNLOCKED previous allocations
-        const deletedAllocs = await RoomAllocation.find({ isLocked: { $ne: true } }).lean();
-        const deletedIds = deletedAllocs.map(a => a._id);
-        await RoomAllocation.deleteMany({ isLocked: { $ne: true } });
-        
-        // Cascade delete orphaned chat messages and change requests
-        if (deletedIds.length > 0) {
-            await Chat.deleteMany({ room_id: { $in: deletedIds } });
-            await ChangeRequest.deleteMany({ currentRoomId: { $in: deletedIds } });
+            if (newNotifications.length > 0) {
+                const saved = await Notification.insertMany(newNotifications);
+                // Live push to whoever is online right now; anyone offline
+                // simply reads the persisted record on their next dashboard load.
+                for (const n of saved) {
+                    io.to(`user:${n.recipient_email}`).emit('room_allocated', {
+                        _id: n._id.toString(),
+                        type: n.type,
+                        message: n.message,
+                        createdAt: n.createdAt
+                    });
+                }
+            }
+            console.log(`[triggerAllocation] Notified ${newNotifications.length} newly allocated student(s).`);
+        } catch (notifyErr) {
+            // The allocation itself is already committed and correct at this
+            // point - a notification failure must not turn a successful run
+            // into a 500 for the admin.
+            console.error('[triggerAllocation] Allocation succeeded but notification step failed:', notifyErr);
         }
-        
-        await RoomAllocation.insertMany(newAllocations);
 
-        // Aggregate run ID and metrics from pools
-        const runId = resBoys.run_id || resGFY.run_id || resGSenior.run_id || `run_${Date.now().toString(16)}`;
-        
-        const runs = [resGFY, resGSenior, resBoys].filter(r => r.allocations && r.allocations.length > 0);
-        let combinedMetrics = null;
-        if (runs.length > 0) {
-            combinedMetrics = {
-                "Random": 0.7051,
-                "KMeans": Number((runs.reduce((sum, r) => sum + (r.metrics?.KMeans || 0), 0) / runs.length).toFixed(4)),
-                "Greedy Only": Number((runs.reduce((sum, r) => sum + (r.metrics?.["Greedy Only"] || 0), 0) / runs.length).toFixed(4)),
-                "Hybrid (Ours)": Number((runs.reduce((sum, r) => sum + (r.metrics?.["Hybrid (Ours)"] || 0), 0) / runs.length).toFixed(4))
-            };
-        }
-        
-        let combinedValidationMetrics = {
-            total_students: profilesJson.length,
-            total_beds: [resGFY, resGSenior, resBoys].reduce((sum, r) => sum + (r.validationMetrics?.total_beds || 0), 0),
-            insufficient_capacity: [resGFY, resGSenior, resBoys].reduce((sum, r) => sum + (r.validationMetrics?.insufficient_capacity || 0), 0),
-            unused_capacity: [resGFY, resGSenior, resBoys].reduce((sum, r) => sum + (r.validationMetrics?.unused_capacity || 0), 0),
-            remaining_empty_beds: [resGFY, resGSenior, resBoys].reduce((sum, r) => sum + (r.validationMetrics?.remaining_empty_beds || 0), 0),
-            remaining_empty_rooms: [resGFY, resGSenior, resBoys].reduce((sum, r) => sum + (r.validationMetrics?.remaining_empty_rooms || 0), 0),
-            unassigned_students: allUnassigned.length
-        };
+        const runId = result.run_id || `run_${Date.now().toString(16)}`;
 
         res.json({
             message: 'Allocation completed successfully',
             run_id: runId,
             total_rooms: newAllocations.length,
-            unassigned: allUnassigned.length,
-            metrics: combinedMetrics,
-            validationMetrics: combinedValidationMetrics
+            needsManualPlacement: result.needsManualPlacement || [],
+            metrics: result.metrics,
+            validationMetrics: result.validationMetrics
         });
-        
+
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Allocation failed', message: error.message });
@@ -342,8 +505,8 @@ exports.triggerAllocation = async (req, res) => {
 
 exports.downloadReport = async (req, res) => {
     try {
-        const allocs = await RoomAllocation.find({}).lean();
-        const profiles = await Profile.find({}).lean();
+        const allocs = await RoomAllocation.find({ organizationId: req.currentUser.organizationId }).lean();
+        const profiles = await Profile.find({ organizationId: req.currentUser.organizationId }).lean();
         
         const profileMap = {};
         profiles.forEach(p => profileMap[p.user_id] = p);
@@ -377,8 +540,8 @@ exports.downloadReport = async (req, res) => {
 
 exports.getAllocations = async (req, res) => {
     try {
-        const rawAllocs = await RoomAllocation.find({}).lean();
-        const allProfiles = await Profile.find({}).lean();
+        const rawAllocs = await RoomAllocation.find({ organizationId: req.currentUser.organizationId }).lean();
+        const allProfiles = await Profile.find({ organizationId: req.currentUser.organizationId }).lean();
         
         const profileMap = new Map();
         allProfiles.forEach(p => profileMap.set(p.user_id, p));
@@ -416,12 +579,12 @@ exports.getSubmissionStats = async (req, res) => {
         const Profile = require('../models/Profile');
 
         // Union of all student users and profiles to find total population
-        const studentsFromUsers = await User.find({ role: { $ne: 'ADMIN' } }).distinct('email');
-        const studentsFromProfiles = await Profile.distinct('user_id');
+        const studentsFromUsers = await User.find({ role: { $ne: 'ADMIN' }, organizationId: req.currentUser.organizationId }).distinct('email');
+        const studentsFromProfiles = await Profile.distinct('user_id', { organizationId: req.currentUser.organizationId });
         const allStudentEmails = new Set([...studentsFromUsers, ...studentsFromProfiles]);
 
         const totalStudents = allStudentEmails.size;
-        const profilesCompleted = await Profile.countDocuments({ profileCompleted: { $ne: false } });
+        const profilesCompleted = await Profile.countDocuments({ profileCompleted: { $ne: false }, organizationId: req.currentUser.organizationId });
         const profilesPending = Math.max(0, totalStudents - profilesCompleted);
         const submissionProgress = totalStudents > 0 ? Math.round((profilesCompleted / totalStudents) * 100) : 0;
 
@@ -439,12 +602,12 @@ exports.getSubmissionStats = async (req, res) => {
 
 exports.getAnalytics = async (req, res) => {
     try {
-        const payload = await analyticsService.calculateAnalytics();
-        
+        const payload = await analyticsService.calculateAnalytics(req.currentUser.organizationId);
+
         // Enrich with conflict analysis summary DTO
         const conflictService = require('../services/conflictPredictionService');
-        const allocationsDocs = await RoomAllocation.find({}).lean();
-        const completedProfilesDocs = await Profile.find({ profileCompleted: { $ne: false } }).lean();
+        const allocationsDocs = await RoomAllocation.find({ organizationId: req.currentUser.organizationId }).lean();
+        const completedProfilesDocs = await Profile.find({ profileCompleted: { $ne: false }, organizationId: req.currentUser.organizationId }).lean();
 
         const conflictAnalysis = conflictService.analyzeAllRooms(allocationsDocs, completedProfilesDocs);
         payload.conflictAnalysis = conflictAnalysis;
@@ -461,41 +624,59 @@ exports.getAnalytics = async (req, res) => {
     }
 };
 
+// Shared validated core behind every room-member move. Callers first
+// validate EVERYTHING they need (both rooms unlocked, member(s) actually
+// present, target has room if required) and only then apply mutations and
+// save - so a multi-step move (like a full swap, two of these in a row)
+// can't ever commit half of itself if a later check would have failed.
+function _assertUnlocked(room) {
+    if (room.isLocked) throw new Error(`Room ${room.room_number} is locked and cannot be modified.`);
+}
+function _resolveMember(room, memberFragment) {
+    const exact = room.members.find(m => m.includes(memberFragment));
+    if (!exact) throw new Error(`Could not find ${memberFragment} inside Room ${room.room_number}`);
+    return exact;
+}
+function _assertOpenSlot(room) {
+    const capacity = room.room_capacity || room.members.length;
+    if (room.members.length >= capacity) throw new Error(`Room ${room.room_number} has no open slot.`);
+}
+// Pure in-memory mutation - no fetching, no validation, no save. Validate
+// with the helpers above and save afterward.
+function _applyMove(fromRoom, exactMember, toRoom) {
+    fromRoom.members = fromRoom.members.filter(m => m !== exactMember);
+    toRoom.members.push(exactMember);
+}
+
 exports.manualSwap = async (req, res) => {
     try {
         const { roomAId, memberA, roomBId, memberB } = req.body;
         const validIdA = roomAId.match(/^[0-9a-fA-F]{24}$/) ? roomAId : null;
         const validIdB = roomBId.match(/^[0-9a-fA-F]{24}$/) ? roomBId : null;
-        
-        const roomA = await RoomAllocation.findOne({ $or: [{ room_number: roomAId }, { _id: validIdA }] });
-        const roomB = await RoomAllocation.findOne({ $or: [{ room_number: roomBId }, { _id: validIdB }] });
-        
+
+        const orgFilter = { organizationId: req.currentUser.organizationId };
+        const roomA = await RoomAllocation.findOne({ ...orgFilter, $or: [{ room_number: roomAId }, { _id: validIdA }] });
+        const roomB = await RoomAllocation.findOne({ ...orgFilter, $or: [{ room_number: roomBId }, { _id: validIdB }] });
+
         if (!roomA || !roomB) {
             return res.status(404).json({ error: 'Room not found. Make sure to use exact Room Number (e.g. D-101).' });
         }
 
-        if (roomA.isLocked) return res.status(400).json({ error: `Room ${roomA.room_number} is locked and cannot be modified.` });
-        if (roomB.isLocked) return res.status(400).json({ error: `Room ${roomB.room_number} is locked and cannot be modified.` });
+        _assertUnlocked(roomA);
+        _assertUnlocked(roomB);
+        const exactMemberA = _resolveMember(roomA, memberA);
+        const exactMemberB = _resolveMember(roomB, memberB);
 
-        const exactMemberA = roomA.members.find(m => m.includes(memberA));
-        const exactMemberB = roomB.members.find(m => m.includes(memberB));
+        _applyMove(roomA, exactMemberA, roomB);
+        _applyMove(roomB, exactMemberB, roomA);
 
-        if (!exactMemberA) return res.status(400).json({ error: `Could not find ${memberA} inside Room ${roomA.room_number}` });
-        if (!exactMemberB) return res.status(400).json({ error: `Could not find ${memberB} inside Room ${roomB.room_number}` });
-        
-        roomA.members = roomA.members.filter(m => m !== exactMemberA);
-        roomA.members.push(exactMemberB);
-        
-        roomB.members = roomB.members.filter(m => m !== exactMemberB);
-        roomB.members.push(exactMemberA);
-        
         await roomA.save();
         await roomB.save();
-        
+
         res.json({ message: 'Swap completed successfully' });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Swap failed internally' });
+        res.status(400).json({ error: err.message || 'Swap failed internally' });
     }
 };
 
@@ -508,7 +689,13 @@ exports.toggleRoomLock = async (req, res) => {
         if (typeof isLocked !== 'boolean') {
             return res.status(400).json({ error: 'isLocked must be a boolean' });
         }
-        await RoomAllocation.findByIdAndUpdate(roomId, { isLocked: isLocked });
+        const updated = await RoomAllocation.findOneAndUpdate(
+            { _id: roomId, organizationId: req.currentUser.organizationId },
+            { isLocked: isLocked }
+        );
+        if (!updated) {
+            return res.status(404).json({ error: 'Room not found' });
+        }
         res.json({ message: `Room ${isLocked ? 'locked' : 'unlocked'}` });
     } catch (err) {
         res.status(500).json({ error: 'Locking failed' });
@@ -517,10 +704,10 @@ exports.toggleRoomLock = async (req, res) => {
 
 exports.getChangeRequests = async (req, res) => {
     try {
-        const reqs = await ChangeRequest.find({}).populate('currentRoomId').sort({ createdAt: -1 }).lean();
-        
+        const reqs = await ChangeRequest.find({ organizationId: req.currentUser.organizationId }).populate('currentRoomId').sort({ createdAt: -1 }).lean();
+
         for (let r of reqs) {
-             const actualRoom = await RoomAllocation.findOne({ members: r.studentId });
+             const actualRoom = await RoomAllocation.findOne({ members: r.studentId, organizationId: req.currentUser.organizationId });
              if (actualRoom) {
                  r.actualRoomNumber = actualRoom.room_number || actualRoom.allocation_run_id;
                  r.actualRoomId = actualRoom._id;
@@ -538,7 +725,11 @@ exports.handleRequestAction = async (req, res) => {
         if (!requestId || !status) {
             return res.status(400).json({ error: 'requestId and status are required' });
         }
-        const cReq = await ChangeRequest.findByIdAndUpdate(requestId, { status }, { new: true });
+        const cReq = await ChangeRequest.findOneAndUpdate(
+            { _id: requestId, organizationId: req.currentUser.organizationId },
+            { status },
+            { new: true }
+        );
         if (!cReq) {
             return res.status(404).json({ error: 'Request not found' });
         }
@@ -548,92 +739,126 @@ exports.handleRequestAction = async (req, res) => {
     }
 };
 
-exports.forceAllocateRemaining = async (req, res) => {
+// GET /api/admin/requests/:requestId/eligible-rooms
+// Only meaningful for an ACCESSIBILITY request: finds rooms the student could
+// actually move into - same gender wing as their current room, floor matches
+// what they requested ("Ground floor" -> floor "Ground"), has an open slot,
+// not locked, and isn't the room they're already in. Read-only; doesn't touch
+// anything, just informs the admin's choice below.
+exports.getEligibleAccommodationRooms = async (req, res) => {
     try {
-        // 1. Find all currently allocated students
-        const allAllocations = await RoomAllocation.find({}).lean();
-        const allocatedEmails = new Set();
-        allAllocations.forEach(a => {
-            (a.members || []).forEach(m => allocatedEmails.add(m));
-        });
+        const { requestId } = req.params;
+        const orgFilter = { organizationId: req.currentUser.organizationId };
 
-        // 2. Find all profiles that are NOT allocated
-        const allProfiles = await Profile.find({}).lean();
-        const unassignedProfiles = allProfiles.filter(p => !allocatedEmails.has(p.user_id));
-
-        if (unassignedProfiles.length === 0) {
-            return res.json({ message: 'No unassigned students remaining!', total_new_rooms: 0 });
+        const cReq = await ChangeRequest.findOne({ _id: requestId, ...orgFilter });
+        if (!cReq) return res.status(404).json({ error: 'Request not found' });
+        if (cReq.requestType !== 'ACCESSIBILITY') {
+            return res.status(400).json({ error: 'Eligible-room suggestions only apply to ACCESSIBILITY requests' });
         }
 
-        // 3. Group unassigned students into rooms of 3 (last room may have 2)
-        const ROOMS_PER_FLOOR = 8;
-        
-        // Count existing force-allocated rooms in block Z to determine starting counter
-        const existingForceRooms = allAllocations.filter(a => a.block === 'Z').length;
+        const currentRoom = await RoomAllocation.findOne({ members: cReq.studentId, ...orgFilter });
+        if (!currentRoom) return res.status(404).json({ error: "Could not find the student's current room" });
 
-        const profileMap = {};
-        allProfiles.forEach(p => profileMap[p.user_id] = p);
+        // "Ground floor" is the only structured accommodation option today
+        // (mirrors accessibility_need's single "Ground floor required" value);
+        // matching is case-insensitive against the real, admin-configured
+        // floor value (see the room-floor-realism work).
+        const wantsGround = cReq.requestedAccommodation.toLowerCase().includes('ground');
 
-        // Sort unassigned by gender, branch, year for best grouping
-        unassignedProfiles.sort((a, b) => {
-            if (a.gender !== b.gender) return (a.gender || '').localeCompare(b.gender || '');
-            if (a.branch !== b.branch) return (a.branch || '').localeCompare(b.branch || '');
-            return (a.year_of_study || '').localeCompare(b.year_of_study || '');
-        });
+        // "Right gender" means gender only - the one real hard constraint
+        // (no mixed-gender rooms) - NOT the full gender_group cohort string
+        // (which also bakes in branch/year), so a student isn't blocked from
+        // an otherwise-eligible room just because it's a different cohort.
+        // gender_group is always formed as "<Gender>_<branch>_<year>" by the
+        // allocation engine, so its first token IS the gender.
+        const studentProfile = await Profile.findOne({ user_id: cReq.studentId, ...orgFilter }).lean();
+        const studentGender = ((studentProfile && studentProfile.gender) || '').toUpperCase().startsWith('F') ? 'Female' : 'Male';
 
-        const newRooms = [];
-        let roomCounter = existingForceRooms + 1;
-        const blockChar = 'Z'; // Use block Z for force-allocated rooms
+        const candidates = await RoomAllocation.find({
+            ...orgFilter,
+            _id: { $ne: currentRoom._id },
+            isLocked: { $ne: true }
+        }).lean();
 
-        for (let i = 0; i < unassignedProfiles.length; i += 3) {
-            const group = unassignedProfiles.slice(i, i + 3);
-            if (group.length < 2) {
-                // Single student left - skip (truly can't form a room alone)
-                continue;
-            }
-
-            const floor = Math.floor((roomCounter - 1) / ROOMS_PER_FLOOR) + 1;
-            const roomOnFloor = ((roomCounter - 1) % ROOMS_PER_FLOOR) + 1;
-            const roomNumber = `${blockChar}-${floor}0${roomOnFloor}`;
-
-            const members = group.map(p => p.user_id);
-            const memberDetails = members.map(email => {
-                const p = profileMap[email];
-                return p ? `${p.name} (${p.branch})` : email;
-            });
-
-            // Determine gender group label
-            const genders = group.map(p => (p.gender || 'Unknown').toLowerCase());
-            const isFemale = genders.every(g => g === 'f' || g === 'female');
-            const genderLabel = isFemale ? 'Female' : 'Male';
-            const branches = [...new Set(group.map(p => p.branch || 'Mixed'))];
-
-            newRooms.push({
-                allocation_run_id: 'force_allocated',
-                gender_group: `${genderLabel}_${branches.join('/')}_Force`,
-                compatibility_score: 0.50, // Mark as low-compatibility forced room
-                members: members,
-                block: blockChar,
-                floor: floor,
-                room_number: roomNumber,
-                room_capacity: 3,
-                isLocked: false
-            });
-
-            roomCounter++;
-        }
-
-        if (newRooms.length > 0) {
-            await RoomAllocation.insertMany(newRooms);
-        }
+        const eligibleRooms = candidates
+            .filter(r => (r.gender_group || '').startsWith(studentGender))
+            .filter(r => wantsGround ? (r.floor || '').toLowerCase() === 'ground' : false)
+            .filter(r => r.members.length < (r.room_capacity || r.members.length))
+            .map(r => ({
+                _id: r._id,
+                room_number: r.room_number,
+                block: r.block,
+                floor: r.floor,
+                room_capacity: r.room_capacity,
+                occupancy: r.members.length,
+                openSlots: (r.room_capacity || r.members.length) - r.members.length
+            }));
 
         res.json({
-            message: `Force-allocated ${newRooms.length} new rooms for remaining students.`,
-            total_new_rooms: newRooms.length,
-            total_students_placed: newRooms.reduce((sum, r) => sum + r.members.length, 0)
+            currentRoom: { _id: currentRoom._id, room_number: currentRoom.room_number },
+            eligibleRooms
         });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Force allocation failed', message: error.message });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to compute eligible rooms' });
     }
+};
+
+// POST /api/admin/requests/accommodate
+// Executes the actual move for an ACCESSIBILITY request: moves the student
+// out of their current room and into the admin-chosen targetRoomId (one of
+// the eligible rooms above), using the exact same validated move logic
+// manualSwap uses (_assertUnlocked/_resolveMember/_assertOpenSlot/_applyMove)
+// - just a single direction instead of two, since the target already has an
+// open slot rather than a reciprocal member to send back. Marks the request
+// Approved only once the move itself has actually succeeded.
+exports.accommodateAccessibilityRequest = async (req, res) => {
+    try {
+        const { requestId, targetRoomId } = req.body;
+        if (!requestId || !targetRoomId) {
+            return res.status(400).json({ error: 'requestId and targetRoomId are required' });
+        }
+        const orgFilter = { organizationId: req.currentUser.organizationId };
+
+        const cReq = await ChangeRequest.findOne({ _id: requestId, ...orgFilter });
+        if (!cReq) return res.status(404).json({ error: 'Request not found' });
+        if (cReq.requestType !== 'ACCESSIBILITY') {
+            return res.status(400).json({ error: 'Only ACCESSIBILITY requests can be accommodated this way' });
+        }
+
+        const currentRoom = await RoomAllocation.findOne({ members: cReq.studentId, ...orgFilter });
+        const targetRoom = await RoomAllocation.findOne({ _id: targetRoomId, ...orgFilter });
+        if (!currentRoom || !targetRoom) {
+            return res.status(404).json({ error: 'Room not found' });
+        }
+
+        _assertUnlocked(currentRoom);
+        _assertUnlocked(targetRoom);
+        const exactMember = _resolveMember(currentRoom, cReq.studentId);
+        _assertOpenSlot(targetRoom);
+
+        _applyMove(currentRoom, exactMember, targetRoom);
+        await currentRoom.save();
+        await targetRoom.save();
+
+        cReq.status = 'Approved';
+        await cReq.save();
+
+        res.json({ message: `Moved to ${targetRoom.room_number} and request approved`, room_number: targetRoom.room_number });
+    } catch (err) {
+        console.error(err);
+        res.status(400).json({ error: err.message || 'Failed to accommodate request' });
+    }
+};
+
+// The old sort-and-chunk force-allocation logic did zero hard-conflict checking
+// (grouped leftover students strictly by gender/branch/year proximity, with no
+// smoking/drinking check at all), so it could silently create incompatible
+// rooms. It's retired. Repointed to re-run the full allocation pipeline
+// instead — /allocate/v2 now includes Phase 2, which is precisely the
+// hard-constraint-safe version of "place remaining students" this endpoint
+// used to do unsafely. Kept as the same route/controller (not removed) so the
+// existing frontend "Force Allocate" button needs no changes.
+exports.forceAllocateRemaining = async (req, res) => {
+    return exports.triggerAllocation(req, res);
 };

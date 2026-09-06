@@ -5,18 +5,16 @@ const mongoose = require('mongoose');
 exports.getRoomChat = async (req, res) => {
     try {
         const { room_id } = req.params;
-        const { email } = req.query; // Sender's email to verify access
-
-        if (!email) {
-            return res.status(400).json({ error: 'Email is required to access chat' });
-        }
+        const email = req.currentUser.email;
 
         if (!mongoose.Types.ObjectId.isValid(room_id)) {
             return res.status(400).json({ error: 'Invalid room ID' });
         }
 
-        // Verify the user is actually part of this room
-        const room = await RoomAllocation.findById(room_id);
+        // Verify the user is actually part of this room (and that the room
+        // belongs to their org - a room ID from another org should read as
+        // not-found, not a membership failure).
+        const room = await RoomAllocation.findOne({ _id: room_id, organizationId: req.currentUser.organizationId });
         if (!room) {
             return res.status(404).json({ error: 'Room not found' });
         }
@@ -26,7 +24,7 @@ exports.getRoomChat = async (req, res) => {
         }
 
         // Fetch messages for this room
-        const messages = await Chat.find({ room_id }).sort({ createdAt: 1 });
+        const messages = await Chat.find({ room_id, organizationId: req.currentUser.organizationId }).sort({ createdAt: 1 });
         
         return res.json(messages);
 
@@ -39,18 +37,21 @@ exports.getRoomChat = async (req, res) => {
 exports.sendMessage = async (req, res) => {
     try {
         const { room_id } = req.params;
-        const { email, name, message } = req.body;
+        const { message } = req.body;
+        const email = req.currentUser.email;
+        const name = req.currentUser.name;
 
-        if (!email || !name || !message) {
-            return res.status(400).json({ error: 'Email, name, and message are required' });
+        if (!message) {
+            return res.status(400).json({ error: 'Message is required' });
         }
 
         if (!mongoose.Types.ObjectId.isValid(room_id)) {
             return res.status(400).json({ error: 'Invalid room ID' });
         }
 
-        // Verify the user is part of the room
-        const room = await RoomAllocation.findById(room_id);
+        // Verify the user is part of the room (and that the room belongs to
+        // their org)
+        const room = await RoomAllocation.findOne({ _id: room_id, organizationId: req.currentUser.organizationId });
         if (!room) {
             return res.status(404).json({ error: 'Room not found' });
         }
@@ -61,6 +62,7 @@ exports.sendMessage = async (req, res) => {
 
         // Save new message
         const newMsg = new Chat({
+            organizationId: req.currentUser.organizationId,
             room_id,
             sender_email: email,
             sender_name: name,

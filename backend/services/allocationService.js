@@ -35,9 +35,17 @@ const runPythonAllocationViaHTTP = async (profiles, config = null) => {
         return result;
     } catch (err) {
         if (err.response) {
-            // FastAPI HTTPException surfaces as { detail: "..." }
+            // FastAPI HTTPException surfaces as { detail: "..." } — detail can be a
+            // plain string (generic errors) or a structured object (e.g. the
+            // capacityShortfall pre-flight-reject payload from /allocate/v2).
             const detail = err.response.data && err.response.data.detail;
-            throw new Error(`Allocation service returned ${err.response.status}: ${detail || err.message}`);
+            const detailMsg = (detail && typeof detail === 'object')
+                ? (detail.error || JSON.stringify(detail))
+                : detail;
+            const wrapped = new Error(`Allocation service returned ${err.response.status}: ${detailMsg || err.message}`);
+            wrapped.status = err.response.status;
+            wrapped.detail = detail;
+            throw wrapped;
         }
         throw err;
     }

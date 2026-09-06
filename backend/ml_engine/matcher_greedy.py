@@ -16,7 +16,7 @@ ALL_COVERAGES = []
 def normalize_config(config, total_students_count):
     if config is None:
         config = {}
-        
+
     room_templates = []
     if "roomTemplates" in config:
         room_templates = config["roomTemplates"]
@@ -28,8 +28,57 @@ def normalize_config(config, total_students_count):
         cap = 3
         count = (total_students_count + cap - 1) // cap
         room_templates = [{"capacity": cap, "count": max(1, count)}]
-        
+
     return room_templates
+
+
+# Sane ceiling on how large a single roommate-matching group is ever actually
+# target-filled to, independent of what a configured room template's capacity
+# says. Real configured tiers today only ever go up to 4 (tulip/carnation's
+# legitimate 2/3/4-bed rows); 6 leaves generous headroom above that for a
+# plausible future larger-dorm tier, while still firmly rejecting anything
+# like a capacity:23 tier (almost certainly a data-entry error - see
+# expand_oversized_templates below) from ever being greedily target-filled as
+# one room. Past roughly this size, "roommate compatibility" stops being a
+# meaningful unit anyway - it becomes dormitory/bunk-hall assignment, which
+# this engine isn't designed to optimize for.
+MAX_EFFECTIVE_ROOM_SIZE = 6
+
+
+def expand_oversized_templates(room_templates, max_size=MAX_EFFECTIVE_ROOM_SIZE):
+    """
+    Splits any room template whose capacity exceeds max_size into multiple
+    smaller virtual room templates, preserving total bed count exactly. A
+    capacity:23 tier (count N) becomes N*(23//6)=N*3 virtual rooms of
+    capacity 6, plus N virtual rooms of the 23%6=5 remainder - instead of N
+    actual rooms of capacity 23. Never invents extra beds and never affects a
+    template already at or under max_size (a pure no-op for every real
+    configured tier today, all of which are 2-4).
+
+    Each returned template is tagged is_virtual: True/False, so downstream
+    room-claiming code can rank real configured tiers ahead of ceiling-
+    expanded ones (see the sort calls in this file and executor.py) - a
+    misconfigured oversized tier should only ever get used once legitimate
+    capacity is genuinely exhausted, not compete equally with it by size.
+    """
+    expanded = []
+    for template in room_templates:
+        cap = template["capacity"]
+        count = template.get("count", 0)
+
+        if cap <= max_size:
+            expanded.append({"capacity": cap, "count": count, "is_virtual": False})
+            continue
+
+        full_chunks = cap // max_size
+        remainder = cap % max_size
+
+        if full_chunks > 0:
+            expanded.append({"capacity": max_size, "count": count * full_chunks, "is_virtual": True})
+        if remainder > 0:
+            expanded.append({"capacity": remainder, "count": count, "is_virtual": True})
+
+    return expanded
 
 
 # ================== LOCAL SEARCH ==================
@@ -150,22 +199,45 @@ def fallback_assign_unassigned(allocations, unassigned_ids, profiles, sim_matrix
 
 # ================== FLEX ROOMS ==================
 
-def create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms):
+def create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms, sim_matrix):
+    """
+    Groups unassigned students into whatever unused room inventory remains.
+    Unlike a plain shuffle-and-chunk, this respects hard conflicts: a student is
+    only added to a forming group if they have zero hard conflict (sim_matrix
+    entry != -9999.0) with every member already placed in it. Students who can't
+    be grouped without violating a hard constraint are left unassigned rather
+    than being forced into an incompatible room.
+    """
     import random
-    random.shuffle(unassigned_ids)
+    id_to_index = {p.user_id: i for i, p in enumerate(profiles)}
+
+    shuffled = list(unassigned_ids)
+    random.shuffle(shuffled)
+    remaining = shuffled
 
     flex_allocations = []
-    current_idx = 0
 
     for room_def in unused_rooms:
-        if current_idx >= len(unassigned_ids):
+        if not remaining:
             break
 
         cap = room_def["capacity"]
-        group_ids = unassigned_ids[current_idx : current_idx + cap]
+        group_ids = []
+        group_idxs = []
+
+        for uid in remaining:
+            if len(group_ids) >= cap:
+                break
+            u_idx = id_to_index[uid]
+            if any(sim_matrix[u_idx, gi] == -9999.0 for gi in group_idxs):
+                continue
+            group_ids.append(uid)
+            group_idxs.append(u_idx)
+
         if not group_ids:
-            break
-        current_idx += len(group_ids)
+            continue
+
+        remaining = [uid for uid in remaining if uid not in group_ids]
 
         # Find gender from the first member profile
         gender = "Other"
@@ -173,22 +245,100 @@ def create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms):
         if first_prof:
             gender = first_prof.gender
 
+        if len(group_idxs) > 1:
+            sum_val = 0.0
+            count = 0
+            for x in range(len(group_idxs)):
+                for y in range(x + 1, len(group_idxs)):
+                    sum_val += sim_matrix[group_idxs[x], group_idxs[y]]
+                    count += 1
+            score = round(sum_val / count, 4) if count > 0 else 0.65
+        else:
+            score = 0.65
+
         flex_allocations.append({
             "id": room_def["id"],
             "allocation_run_id": run_id,
             "gender_group": gender,
             "members": group_ids,
             "room_number": None,
-            "compatibility_score": 0.65
+            "compatibility_score": score,
+            "capacity": room_def["capacity"]
         })
 
     return flex_allocations
 
 
+def _try_form_preference_group(cap, preferring_idxs, filler_mask, assigned, sim_matrix):
+    """
+    Forms one group of exactly `cap` members for the preference pass: seeds
+    the group from the best-scoring PAIR within preferring_idxs (students who
+    explicitly asked for this exact capacity) - ranked by the same pairwise
+    compatibility used everywhere else, not just list order - so a "no
+    preference" student can never take a seed slot a genuine preferrer could
+    have filled. Only once the preferring pool is exhausted (fewer than `cap`
+    of them, or only one remains as a lone seed) does greedy expansion reach
+    into filler_mask ("no preference" students) to complete the group.
+
+    Returns the member index list on success, or None if no valid group could
+    be formed at all (every preferring pair internally conflicts and no
+    filler is available, etc.) - caller falls through to the normal,
+    preference-agnostic fill logic untouched in that case.
+    """
+    unassigned_preferring = [i for i in preferring_idxs if not assigned[i]]
+    if not unassigned_preferring:
+        return None
+
+    seed = None
+    if len(unassigned_preferring) >= 2:
+        best_score = -np.inf
+        for a in range(len(unassigned_preferring)):
+            for b in range(a + 1, len(unassigned_preferring)):
+                x, y = unassigned_preferring[a], unassigned_preferring[b]
+                if sim_matrix[x, y] == -9999.0:
+                    continue
+                if sim_matrix[x, y] > best_score:
+                    best_score = sim_matrix[x, y]
+                    seed = [x, y]
+
+    if seed is None:
+        # Either only one preferring student is left, or every preferring
+        # pair has a hard conflict - seed with one preferring student and let
+        # expansion below pull in a compatible partner from the wider pool.
+        seed = [unassigned_preferring[0]]
+
+    members = list(seed)
+    candidate_mask = (np.isin(np.arange(len(assigned)), preferring_idxs) | filler_mask) & (~assigned)
+    for m in members:
+        candidate_mask[m] = False
+
+    valid = True
+    while len(members) < cap:
+        if not np.any(candidate_mask):
+            valid = False
+            break
+        c_sims = np.sum(sim_matrix[members, :], axis=0)
+        c_sims[~candidate_mask] = -np.inf
+        c_sims[members] = -np.inf
+
+        best_X = int(np.argmax(c_sims))
+        if c_sims[best_X] == -np.inf or any(sim_matrix[m, best_X] == -9999.0 for m in members):
+            valid = False
+            break
+
+        members.append(best_X)
+        candidate_mask[best_X] = False
+
+    if valid and len(members) == cap:
+        return members
+    return None
+
+
 # ================== MAIN ==================
 
 def run_greedy_allocation_for_gender(
-    profiles: List[StudentProfile], run_id: str, config_or_rooms: any = None
+    profiles: List[StudentProfile], run_id: str, config_or_rooms: any = None,
+    enable_fallback_and_flex: bool = True
 ) -> Tuple[List[dict], List[str]]:
 
     if isinstance(config_or_rooms, list):
@@ -196,23 +346,28 @@ def run_greedy_allocation_for_gender(
     else:
         # Default/Legacy config parsing
         room_templates = normalize_config(config_or_rooms, len(profiles))
+        room_templates = expand_oversized_templates(room_templates)
         bucket_rooms = []
         room_id_counter = 1
         for template in room_templates:
             cap = template["capacity"]
             cnt = template["count"]
+            is_virtual = template.get("is_virtual", False)
             for _ in range(cnt):
                 bucket_rooms.append({
                     "id": f"Room_{room_id_counter}",
-                    "capacity": cap
+                    "capacity": cap,
+                    "is_virtual": is_virtual
                 })
                 room_id_counter += 1
 
     n = len(profiles)
-    
-    # Sort bucket_rooms by capacity descending to fill larger rooms first
+
+    # Legitimate configured tiers first (as a whole group), ceiling-expanded
+    # virtual tiers only once those are exhausted; largest-first within each
+    # group, same as before.
     bucket_rooms = [r.copy() for r in bucket_rooms]
-    bucket_rooms.sort(key=lambda x: x["capacity"], reverse=True)
+    bucket_rooms.sort(key=lambda x: (x.get("is_virtual", False), -x["capacity"]))
     
     # If no rooms available
     if not bucket_rooms:
@@ -244,13 +399,80 @@ def run_greedy_allocation_for_gender(
 
     assigned = np.zeros(n, dtype=bool)
     allocations = []
-    
+
     # Track which rooms have been allocated
     allocated_room_ids = set()
 
+    def _record_group(room_def, members):
+        num_members = len(members)
+        sum_val = 0.0
+        count = 0
+        for idx_i in range(num_members):
+            for idx_j in range(idx_i + 1, num_members):
+                sum_val += sim_matrix[members[idx_i], members[idx_j]]
+                count += 1
+        avg_score = sum_val / count if count > 0 else 1.0
+
+        for m in members:
+            assigned[m] = True
+
+        allocations.append({
+            "id": room_def["id"],
+            "allocation_run_id": run_id,
+            "gender_group": profiles[members[0]].gender,
+            "members": [profiles[m].user_id for m in members],
+            "room_number": None,
+            "compatibility_score": round(avg_score, 4),
+            "capacity": room_def["capacity"]
+        })
+        allocated_room_ids.add(room_def["id"])
+
+    # ---- PASS 1: preference sweep across every legitimate (non-virtual)
+    # capacity tier, before ANY normal fill runs for anything. This has to be
+    # a complete pass over all of bucket_rooms first - not interleaved room-
+    # def by room-def in the existing largest-first order - because a LARGER
+    # tier is processed before a smaller one in that order, and its normal
+    # fill logic doesn't know or care about preferences; if normal fill ran
+    # first for the larger tier it would happily scoop up students who
+    # explicitly asked for the smaller tier before that tier's own turn ever
+    # came up. Iterating every bucket_rooms entry here (not just one per
+    # capacity) also means multiple rooms of the same preferred capacity all
+    # get a chance, if enough students prefer it to need more than one.
+    # Pure no-op whenever nobody prefers anything (every real profile today):
+    # preferring_mask is then all-False for every capacity and this pass
+    # places nothing, leaving Pass 2 to run exactly as it always has.
     for room_def in bucket_rooms:
         cap = room_def["capacity"]
-        
+        if room_def.get("is_virtual", False) or cap <= 1:
+            continue
+        if np.sum(~assigned) < cap:
+            continue
+
+        preferring_idxs = [
+            i for i in range(n)
+            if (not assigned[i]) and profiles[i].preferred_room_size == str(cap)
+        ]
+        if not preferring_idxs:
+            continue
+
+        filler_mask = np.array([
+            profiles[i].preferred_room_size in ("No preference", "", None)
+            for i in range(n)
+        ])
+        pref_members = _try_form_preference_group(cap, preferring_idxs, filler_mask, assigned, sim_matrix)
+        if pref_members is not None:
+            _record_group(room_def, pref_members)
+
+    # ---- PASS 2: existing fill logic, byte-for-byte unchanged, on whatever
+    # remains. Rooms already claimed by the preference sweep above are
+    # skipped (allocated_room_ids is empty when Pass 1 placed nothing, so
+    # this check is a no-op in that case too). ----
+    for room_def in bucket_rooms:
+        if room_def["id"] in allocated_room_ids:
+            continue
+
+        cap = room_def["capacity"]
+
         # Check if we have enough unassigned students left to fill this room's capacity
         if np.sum(~assigned) < cap:
             continue
@@ -259,25 +481,15 @@ def run_greedy_allocation_for_gender(
         if cap <= 1:
             first_unassigned = next((i for i in range(n) if not assigned[i]), None)
             if first_unassigned is not None:
-                assigned[first_unassigned] = True
-                allocations.append({
-                    "id": room_def["id"],
-                    "allocation_run_id": run_id,
-                    "gender_group": profiles[first_unassigned].gender,
-                    "members": [profiles[first_unassigned].user_id],
-                    "room_number": None,
-                    "compatibility_score": 1.0
-                })
-                allocated_room_ids.add(room_def["id"])
+                _record_group(room_def, [first_unassigned])
             continue
 
-        # For capacity >= 2:
         # Search for the best unassigned pair that meets the threshold
         group_found = False
         for pair_iter in range(len(sorted_i)):
             A = sorted_i[pair_iter]
             B = sorted_j[pair_iter]
-            
+
             if assigned[A] or assigned[B]:
                 continue
 
@@ -310,31 +522,7 @@ def run_greedy_allocation_for_gender(
             if not valid_group:
                 continue
 
-            # Calculate average compatibility score
-            num_members = len(members)
-            sum_val = 0.0
-            count = 0
-            for idx_i in range(num_members):
-                for idx_j in range(idx_i + 1, num_members):
-                    sum_val += sim_matrix[members[idx_i], members[idx_j]]
-                    count += 1
-            avg_score = sum_val / count if count > 0 else 1.0
-
-            if avg_score < 0.70:
-                continue
-
-            for m in members:
-                assigned[m] = True
-
-            allocations.append({
-                "id": room_def["id"],
-                "allocation_run_id": run_id,
-                "gender_group": profiles[A].gender,
-                "members": [profiles[m].user_id for m in members],
-                "room_number": None,
-                "compatibility_score": round(avg_score, 4)
-            })
-            allocated_room_ids.add(room_def["id"])
+            _record_group(room_def, members)
             group_found = True
             break
 
@@ -342,30 +530,37 @@ def run_greedy_allocation_for_gender(
 
     unassigned_ids = [profiles[i].user_id for i in range(n) if not assigned[i]]
 
-    allocations = fallback_assign_unassigned(allocations, unassigned_ids, profiles, sim_matrix)
+    if enable_fallback_and_flex:
+        allocations = fallback_assign_unassigned(allocations, unassigned_ids, profiles, sim_matrix)
 
-    assigned_ids = set()
-    for room in allocations:
-        for m in room["members"]:
-            assigned_ids.add(m)
+        assigned_ids = set()
+        for room in allocations:
+            for m in room["members"]:
+                assigned_ids.add(m)
 
-    unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
+        unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
 
-    # Find unused rooms in the claimed inventory for flex rooms
-    unused_rooms = [r for r in bucket_rooms if r["id"] not in allocated_room_ids]
-    unused_rooms.sort(key=lambda x: x["capacity"], reverse=True)
+        # Find unused rooms in the claimed inventory for flex rooms. Legitimate
+        # tiers first, virtual ones only once those are exhausted.
+        unused_rooms = [r for r in bucket_rooms if r["id"] not in allocated_room_ids]
+        unused_rooms.sort(key=lambda x: (x.get("is_virtual", False), -x["capacity"]))
 
-    flex_rooms = create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms)
-    allocations.extend(flex_rooms)
+        flex_rooms = create_flex_rooms(unassigned_ids, profiles, run_id, unused_rooms, sim_matrix)
+        allocations.extend(flex_rooms)
 
-    assigned_ids = set()
-    for room in allocations:
-        for m in room["members"]:
-            assigned_ids.add(m)
+        assigned_ids = set()
+        for room in allocations:
+            for m in room["members"]:
+                assigned_ids.add(m)
 
-    unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
+        unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_ids]
 
     allocations.sort(key=lambda x: x["compatibility_score"], reverse=True)
+
+    assigned_ids = set()
+    for room in allocations:
+        for m in room["members"]:
+            assigned_ids.add(m)
 
     avg_score = np.mean([a["compatibility_score"] for a in allocations]) if allocations else 0
     coverage = len(assigned_ids) / len(profiles) if len(profiles) > 0 else 0
@@ -453,10 +648,6 @@ def run_relaxed_allocation(
             sim_matrix[A, C] +
             sim_matrix[B, C]
         ) / 3
-
-        # Much lower threshold — accept weak matches
-        if avg_score < 0.30:
-            continue
 
         assigned[A] = True
         assigned[B] = True

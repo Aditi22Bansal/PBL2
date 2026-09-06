@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { ArrowLeft, Check, Loader2, Send, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
-import { API_URL } from "@/lib/api";
+import { PROXY_URL } from "@/lib/api";
 
 export default function StudentRequestPage() {
   const { data: session, status } = useSession();
@@ -15,6 +15,7 @@ export default function StudentRequestPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [allocation, setAllocation] = useState<any>(null);
   const [reason, setReason] = useState("");
+  const [requestType, setRequestType] = useState<"GENERAL" | "ACCESSIBILITY">("GENERAL");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -22,7 +23,7 @@ export default function StudentRequestPage() {
     try {
       const email = session?.user?.email;
       if (!email) return;
-      const res = await axios.get(`${API_URL}/api/student/dashboard/${email}`);
+      const res = await axios.get(`${PROXY_URL}/student/dashboard`);
       if (res.data.status === 'ALLOCATED') {
           setAllocation(res.data.allocation);
       } else {
@@ -41,24 +42,28 @@ export default function StudentRequestPage() {
     }
   }, [status, router, fetchAllocation]);
 
+  const canSubmit = allocation && (requestType === "ACCESSIBILITY" || reason.trim());
+
   const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!reason.trim() || !allocation) return;
-      
+      if (!canSubmit) return;
+
       const email = session?.user?.email;
       const name = session?.user?.name;
       if (!email || !name) {
           alert('Session expired. Please log in again.');
           return;
       }
-      
+
       setSubmitting(true);
       try {
-          await axios.post(`${API_URL}/api/student/change-request`, {
-              email,
-              name,
+          // email/name are derived server-side from the verified session by the
+          // proxy + backend now, not sent from the client.
+          await axios.post(`${PROXY_URL}/student/change-request`, {
               roomId: allocation.roomId,
-              reason
+              reason,
+              requestType,
+              requestedAccommodation: requestType === "ACCESSIBILITY" ? "Ground floor" : undefined
           });
           setSuccess(true);
       } catch {
@@ -100,20 +105,44 @@ export default function StudentRequestPage() {
                     </div>
 
                     <div>
-                        <label className="block text-[#1A3A2A] mb-2 font-medium">Reason for change</label>
-                        <textarea 
+                        <label className="block text-[#1A3A2A] mb-2 font-medium">What are you requesting?</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setRequestType("GENERAL")}
+                                className={`text-left p-4 rounded-xl border transition-all ${requestType === "GENERAL" ? "bg-[#FAF0EB] border-[#C4613A]/40" : "bg-[#F7F4EE] border-[#1A3A2A]/10 hover:border-[#1A3A2A]/20"}`}
+                            >
+                                <div className="font-medium text-[#1A3A2A]">General room change</div>
+                                <div className="text-[12px] text-[#7A9088] mt-1">Roommate conflict, personal reason, etc.</div>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setRequestType("ACCESSIBILITY")}
+                                className={`text-left p-4 rounded-xl border transition-all ${requestType === "ACCESSIBILITY" ? "bg-[#FAF0EB] border-[#C4613A]/40" : "bg-[#F7F4EE] border-[#1A3A2A]/10 hover:border-[#1A3A2A]/20"}`}
+                            >
+                                <div className="font-medium text-[#1A3A2A]">Ground floor accommodation</div>
+                                <div className="text-[12px] text-[#7A9088] mt-1">Structured accessibility request.</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-[#1A3A2A] mb-2 font-medium">
+                            {requestType === "ACCESSIBILITY" ? "Additional details (optional)" : "Reason for change"}
+                        </label>
+                        <textarea
                             value={reason}
                             onChange={(e) => setReason(e.target.value)}
-                            required
+                            required={requestType === "GENERAL"}
                             rows={6}
                             placeholder="Please provide a detailed explanation for your request..."
                             className="w-full bg-[#F7F4EE] border border-[#1A3A2A]/10 rounded-xl p-4 text-[#1A2820] focus:bg-white focus:border-[#C4613A] focus:ring-1 focus:ring-[#C4613A] outline-none transition-all resize-none placeholder:text-[#7A9088]/60"
                         />
                     </div>
 
-                    <button 
+                    <button
                         type="submit"
-                        disabled={submitting || !reason.trim()}
+                        disabled={submitting || !canSubmit}
                         className="w-full flex items-center justify-center gap-2 bg-[#C4613A] hover:bg-[#D4784F] hover:-translate-y-[2px] hover:shadow-[0_12px_36px_rgba(196,97,58,0.4)] disabled:opacity-50 disabled:transform-none text-white font-medium py-3.5 rounded-full transition-all shadow-[0_4px_24px_rgba(196,97,58,0.3)]"
                     >
                         {submitting ? <Loader2 className="animate-spin w-5 h-5"/> : <Send className="w-4 h-4 ml-[-4px]" />}

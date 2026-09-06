@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import uuid
@@ -13,7 +14,7 @@ from repositories.csv_repo import CSVRepository
 from ml_engine.matcher_greedy import run_greedy_allocation_for_gender, run_ablation_study, run_relaxed_allocation
 from ml_engine.executor import compute_allocation
 
-app = FastAPI(title="SIT Pune Hostel Allocator")
+app = FastAPI(title="RoomSync Allocation Engine")
 
 # To be secured by Supabase JWT later
 app.add_middleware(
@@ -23,6 +24,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Prometheus: request duration histogram + request count by status, both broken
+# down by method/handler, exposed at GET /metrics - the standard minimal
+# instrumentator setup, wired to the real app instance (not a static/fake metric).
+Instrumentator().instrument(app).expose(app)
 
 # Dependency Injection for DAL
 def get_repository():
@@ -469,9 +475,22 @@ def engine_allocate_v2(request: AllocateV2Request):
     the correct target for allocationService.js's config-aware allocation calls.
     Kept as a new route (v2) rather than changing /api/allocate so the legacy path
     is undisturbed.
+
+    Success path returns needsManualPlacement (students Phase 1 + Phase 2 could
+    not place under the hard constraints) instead of a plain unassigned_ids list.
+    capacityShortfall only ever appears on the pre-flight-reject path below - a
+    422 means matching never started because configured bed capacity is short.
     """
     try:
-        return compute_allocation(request.profiles, request.config)
+        result = compute_allocation(request.profiles, request.config)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    if result.get("status") == "REJECTED":
+        raise HTTPException(status_code=422, detail={
+            "error": "Insufficient bed capacity for submitted students.",
+            "capacityShortfall": result["capacityShortfall"]
+        })
+
+    return result
 

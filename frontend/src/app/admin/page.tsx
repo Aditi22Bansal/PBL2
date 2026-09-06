@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, Fragment } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { API_URL } from "@/lib/api";
+import { PROXY_URL } from "@/lib/api";
 import {
   LogOut, Home, Play, Upload, CheckCircle2, Database,
   Trash2, Plus, AlertTriangle, Download, FileText, Search, Filter, Sparkles,
@@ -18,7 +18,7 @@ import { motion, AnimatePresence } from "framer-motion";
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [sheetUrl, setSheetUrl] = useState("https://docs.google.com/spreadsheets/d/e/2PACX-1vTzPOiW7s1jbwfQlBcKpIuEDCmFqsI3uWZUNr3shrXuRlpsd6N_Jgdb34O3_pzgG_xCxn4cIBKbaNDr/pubhtml");
+  const [sheetUrl, setSheetUrl] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [allocating, setAllocating] = useState(false);
   const [allocations, setAllocations] = useState<any[]>([]);
@@ -39,10 +39,10 @@ export default function AdminDashboard() {
   const [formHostelName, setFormHostelName] = useState("");
   const [formHostelCode, setFormHostelCode] = useState("");
   const [formGender, setFormGender] = useState<"Male" | "Female" | "Mixed">("Mixed");
-  const [formTemplates, setFormTemplates] = useState<Array<{ capacity: number | ""; count: number | "" }>>([
-    { capacity: 2, count: 20 },
-    { capacity: 3, count: 40 },
-    { capacity: 4, count: 10 }
+  const [formTemplates, setFormTemplates] = useState<Array<{ capacity: number | ""; count: number | ""; floor: string }>>([
+    { capacity: 2, count: 20, floor: "Ground" },
+    { capacity: 3, count: 40, floor: "1" },
+    { capacity: 4, count: 10, floor: "2" }
   ]);
   const [formValidationError, setFormValidationError] = useState("");
 
@@ -87,7 +87,7 @@ export default function AdminDashboard() {
 
   const fetchAllocations = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/admin/allocations`);
+      const res = await axios.get(`${PROXY_URL}/admin/allocations`);
       setAllocations(res.data.allocations || []);
     } catch (error) {
       console.error("Failed to fetch allocations:", error);
@@ -96,7 +96,7 @@ export default function AdminDashboard() {
 
   const fetchConfigs = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/admin/hostel-configurations`);
+      const res = await axios.get(`${PROXY_URL}/admin/hostel-configurations`);
       setConfigs(res.data);
     } catch (error) {
       console.error("Failed to fetch configurations:", error);
@@ -105,7 +105,7 @@ export default function AdminDashboard() {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/admin/analytics`);
+      const res = await axios.get(`${PROXY_URL}/admin/analytics`);
       setAnalytics(res.data);
     } catch (error) {
       console.error("Failed to fetch analytics:", error);
@@ -121,14 +121,15 @@ export default function AdminDashboard() {
         gender: formGender,
         roomTemplates: formTemplates.map(t => ({
           capacity: Number(t.capacity),
-          count: Number(t.count)
+          count: Number(t.count),
+          floor: t.floor.trim() || 'Ground'
         }))
       };
 
       if (formConfigId) {
-        await axios.put(`${API_URL}/api/admin/hostel-configurations/${formConfigId}`, payload);
+        await axios.put(`${PROXY_URL}/admin/hostel-configurations/${formConfigId}`, payload);
       } else {
-        await axios.post(`${API_URL}/api/admin/hostel-configurations`, payload);
+        await axios.post(`${PROXY_URL}/admin/hostel-configurations`, payload);
       }
 
       setShowForm(false);
@@ -137,9 +138,9 @@ export default function AdminDashboard() {
       setFormHostelCode("");
       setFormGender("Mixed");
       setFormTemplates([
-        { capacity: 2, count: 20 },
-        { capacity: 3, count: 40 },
-        { capacity: 4, count: 10 }
+        { capacity: 2, count: 20, floor: "Ground" },
+        { capacity: 3, count: 40, floor: "1" },
+        { capacity: 4, count: 10, floor: "2" }
       ]);
       fetchConfigs();
       fetchAnalytics();
@@ -151,7 +152,7 @@ export default function AdminDashboard() {
 
   const handleActivateConfig = async (id: string) => {
     try {
-      await axios.patch(`${API_URL}/api/admin/hostel-configurations/${id}/activate`);
+      await axios.patch(`${PROXY_URL}/admin/hostel-configurations/${id}/activate`);
       fetchConfigs();
       fetchAnalytics();
     } catch (err: any) {
@@ -163,7 +164,7 @@ export default function AdminDashboard() {
   const handleDeleteConfig = async (id: string) => {
     if (!confirm("Are you sure you want to delete this configuration?")) return;
     try {
-      await axios.delete(`${API_URL}/api/admin/hostel-configurations/${id}`);
+      await axios.delete(`${PROXY_URL}/admin/hostel-configurations/${id}`);
       fetchConfigs();
       fetchAnalytics();
     } catch (err: any) {
@@ -177,7 +178,7 @@ export default function AdminDashboard() {
     setSyncing(true);
     setMessage("");
     try {
-      const res = await axios.post(`${API_URL}/api/admin/sync-csv`, { sheet_url: sheetUrl });
+      const res = await axios.post(`${PROXY_URL}/admin/sync-csv`, { sheet_url: sheetUrl });
       setMessage(res.data.message);
       fetchAllocations();
       fetchAnalytics();
@@ -192,13 +193,19 @@ export default function AdminDashboard() {
     setAllocating(true);
     setMessage("Running Similarity Matrix & Clustering... Please wait.");
     try {
-      const res = await axios.post(`${API_URL}/api/admin/trigger-allocation`);
+      const res = await axios.post(`${PROXY_URL}/admin/trigger-allocation`);
       setMessage(res.data.message + ` | Rooms Formed: ${res.data.total_rooms}`);
       if(res.data.metrics) setMetrics(res.data.metrics);
       fetchAllocations();
       fetchAnalytics();
     } catch (err: any) {
-      setMessage("Error: " + (err.response?.data?.message || err.message));
+      const data = err.response?.data;
+      let errMsg = data?.error || data?.message || err.message;
+      if (data?.capacityShortfall) {
+        const cs = data.capacityShortfall;
+        errMsg += ` (${cs.total_students} students, ${cs.total_beds} beds — short by ${cs.shortfall})`;
+      }
+      setMessage("Error: " + errMsg);
     } finally {
       setAllocating(false);
     }
@@ -543,8 +550,12 @@ export default function AdminDashboard() {
                   <div className="text-md font-bold text-slate-800 mt-1.5">
                     {analytics.allocationQuality.highestCompatibilityRoom ? (
                       <>
-                        <span className="text-blue-600">{analytics.allocationQuality.highestCompatibilityRoom.room_number}</span> 
-                        <span className="text-xs text-slate-400 font-medium ml-1">({analytics.allocationQuality.highestCompatibilityRoom.compatibility_score}%)</span>
+                        <span className="text-blue-600">{analytics.allocationQuality.highestCompatibilityRoom.room_number}</span>
+                        <span className="text-xs text-slate-400 font-medium ml-1">
+                          {analytics.allocationQuality.highestCompatibilityRoom.raw_compatibility_score < 0
+                            ? '(Below Average Match)'
+                            : `(${analytics.allocationQuality.highestCompatibilityRoom.compatibility_score}%)`}
+                        </span>
                       </>
                     ) : "N/A"}
                   </div>
@@ -554,8 +565,12 @@ export default function AdminDashboard() {
                   <div className="text-md font-bold text-slate-800 mt-1.5">
                     {analytics.allocationQuality.lowestCompatibilityRoom ? (
                       <>
-                        <span className="text-red-500">{analytics.allocationQuality.lowestCompatibilityRoom.room_number}</span> 
-                        <span className="text-xs text-slate-400 font-medium ml-1">({analytics.allocationQuality.lowestCompatibilityRoom.compatibility_score}%)</span>
+                        <span className="text-red-500">{analytics.allocationQuality.lowestCompatibilityRoom.room_number}</span>
+                        <span className="text-xs text-slate-400 font-medium ml-1">
+                          {analytics.allocationQuality.lowestCompatibilityRoom.raw_compatibility_score < 0
+                            ? '(Below Average Match)'
+                            : `(${analytics.allocationQuality.lowestCompatibilityRoom.compatibility_score}%)`}
+                        </span>
                       </>
                     ) : "N/A"}
                   </div>
@@ -878,9 +893,9 @@ export default function AdminDashboard() {
                   setFormHostelCode("");
                   setFormGender("Mixed");
                   setFormTemplates([
-                    { capacity: 2, count: 20 },
-                    { capacity: 3, count: 40 },
-                    { capacity: 4, count: 10 }
+                    { capacity: 2, count: 20, floor: "Ground" },
+                    { capacity: 3, count: 40, floor: "1" },
+                    { capacity: 4, count: 10, floor: "2" }
                   ]);
                   setShowForm(true);
                 }}
@@ -978,6 +993,7 @@ export default function AdminDashboard() {
                         <tr>
                           <th className="px-6 py-4">Room Bed Capacity</th>
                           <th className="px-6 py-4">Number of Rooms Available</th>
+                          <th className="px-6 py-4">Floor</th>
                           <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
                       </thead>
@@ -1012,6 +1028,19 @@ export default function AdminDashboard() {
                                 className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all"
                               />
                             </td>
+                            <td className="px-6 py-3">
+                              <input
+                                type="text"
+                                placeholder="e.g. Ground, 1, 2"
+                                value={t.floor}
+                                onChange={(e) => {
+                                  const updated = [...formTemplates];
+                                  updated[idx].floor = e.target.value;
+                                  setFormTemplates(updated);
+                                }}
+                                className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all w-28"
+                              />
+                            </td>
                             <td className="px-6 py-3 text-right">
                               <button
                                 onClick={() => {
@@ -1031,7 +1060,7 @@ export default function AdminDashboard() {
                   </div>
 
                   <button
-                    onClick={() => setFormTemplates([...formTemplates, { capacity: "", count: "" }])}
+                    onClick={() => setFormTemplates([...formTemplates, { capacity: "", count: "", floor: "" }])}
                     className="mt-4 px-4 py-2.5 border border-neutral-200 hover:border-primary-300 hover:bg-primary-50 text-neutral-600 hover:text-primary-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
                   >
                     <Plus className="w-4 h-4" />
@@ -1092,7 +1121,7 @@ export default function AdminDashboard() {
                     <div className="space-y-1.5 border-t border-slate-100/80 pt-4 mb-6">
                       {c.roomTemplates.map((t: any, idx: number) => (
                         <div key={idx} className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                          <span>{getCapacityLabel(t.capacity)} Rooms</span>
+                          <span>{getCapacityLabel(t.capacity)} Rooms <span className="text-slate-400 font-medium">· Floor {t.floor || 'Ground'}</span></span>
                           <span className="text-slate-500 font-bold">{t.count} Rooms</span>
                         </div>
                       ))}
@@ -1120,7 +1149,7 @@ export default function AdminDashboard() {
                         setFormHostelName(c.hostelName);
                         setFormHostelCode(c.hostelCode || "");
                         setFormGender(c.gender);
-                        setFormTemplates(c.roomTemplates.map((t: any) => ({ capacity: t.capacity, count: t.count })));
+                        setFormTemplates(c.roomTemplates.map((t: any) => ({ capacity: t.capacity, count: t.count, floor: t.floor || '' })));
                         setShowForm(true);
                       }}
                       className="py-2 px-3 border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold rounded-lg text-xs transition-all"
@@ -1256,7 +1285,14 @@ export default function AdminDashboard() {
                             (a.compatibility_score || 0) < 0.88 ? 'text-amber-500' :
                             'text-emerald-600'
                           }>
-                            {Math.round((a.compatibility_score || 0) * 100)}%
+                            {/* Raw score can be negative (rooms form even at very low
+                                compatibility rather than being rejected); floor the
+                                displayed percentage at 0 and use the same "Below
+                                Average Match" label as the student dashboard instead
+                                of a confusing negative number. */}
+                            {(a.compatibility_score || 0) < 0
+                              ? 'Below Average Match'
+                              : `${Math.round((a.compatibility_score || 0) * 100)}%`}
                           </span>
                         </td>
                         <td className="px-8 py-5 text-center">

@@ -3,16 +3,17 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
-import { 
-  LogOut, Home, Loader2, Sparkles, 
-  FileText, ShieldAlert, AlertCircle, RefreshCw, MessageSquare, Heart
+import {
+  LogOut, Home, Loader2, Sparkles,
+  FileText, ShieldAlert, AlertCircle, RefreshCw, MessageSquare, Heart, BellRing, X
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { io, Socket } from "socket.io-client";
 import RoomChat from "@/components/RoomChat";
 import QuestionnaireWizard from "@/components/QuestionnaireWizard";
-import { API_URL } from "@/lib/api";
+import { API_URL, PROXY_URL } from "@/lib/api";
 
 export default function StudentDashboard() {
   const { data: session, status } = useSession();
@@ -21,6 +22,8 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const socketRef = useRef<Socket | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
@@ -32,7 +35,7 @@ export default function StudentDashboard() {
           return;
       }
       
-      const res = await axios.get(`${API_URL}/api/student/dashboard/${email}`);
+      const res = await axios.get(`${PROXY_URL}/student/dashboard`);
       setDashboardData(res.data);
       
       // If student hasn't submitted questionnaire, auto-show wizard
@@ -49,6 +52,26 @@ export default function StudentDashboard() {
     }
   }, [session]);
 
+  // Unread notifications the student missed while offline (allocated when they
+  // weren't logged in). The live socket path below covers the online case.
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const res = await axios.get(`${PROXY_URL}/student/notifications`);
+      setNotifications(res.data);
+    } catch (err) {
+      console.error("Failed to fetch notifications", err);
+    }
+  }, []);
+
+  const dismissNotifications = async () => {
+    setNotifications([]);
+    try {
+      await axios.post(`${PROXY_URL}/student/notifications/read`, {});
+    } catch (err) {
+      console.error("Failed to mark notifications read", err);
+    }
+  };
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -57,9 +80,41 @@ export default function StudentDashboard() {
         router.push("/admin");
       } else {
         fetchDashboardData();
+        fetchNotifications();
       }
     }
-  }, [status, router, session, fetchDashboardData]);
+  }, [status, router, session, fetchDashboardData, fetchNotifications]);
+
+  // Live push channel. Opened from the dashboard itself rather than RoomChat,
+  // because RoomChat only mounts once a student already HAS a room - the
+  // student who most needs this event is the one who doesn't have one yet.
+  useEffect(() => {
+    const email = session?.user?.email;
+    if (status !== "authenticated" || !email) return;
+
+    if (!socketRef.current) {
+      socketRef.current = io(API_URL);
+    }
+    const socket = socketRef.current;
+
+    const joinChannel = () => socket.emit("join_user", email);
+    joinChannel();
+    // Re-join after a reconnect, otherwise the room membership is silently lost.
+    socket.on("connect", joinChannel);
+
+    socket.on("room_allocated", (data: any) => {
+      setNotifications(prev =>
+        prev.some(n => n._id === data._id) ? prev : [data, ...prev]
+      );
+      // Status just flipped to ALLOCATED server-side - pull the real room data in.
+      fetchDashboardData();
+    });
+
+    return () => {
+      socket.off("connect", joinChannel);
+      socket.off("room_allocated");
+    };
+  }, [status, session, fetchDashboardData]);
 
   const handleDownloadPDF = () => {
     window.print();
@@ -175,7 +230,38 @@ export default function StudentDashboard() {
 
       {/* Main Content */}
       <main className="w-full px-8 md:px-16 py-10 relative z-10 space-y-8">
-        
+
+        {/* Unread notifications - live socket pushes and anything that landed
+            while the student was offline both surface here. */}
+        <AnimatePresence>
+          {notifications.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex items-start gap-4 print-hidden"
+            >
+              <div className="w-10 h-10 bg-white border border-emerald-200 rounded-xl flex items-center justify-center shrink-0">
+                <BellRing className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div className="flex-1 space-y-1.5">
+                {notifications.map((n, idx) => (
+                  <p key={n._id || idx} className="text-sm font-semibold text-emerald-900">
+                    {n.message}
+                  </p>
+                ))}
+              </div>
+              <button
+                onClick={dismissNotifications}
+                aria-label="Dismiss notifications"
+                className="w-8 h-8 rounded-lg hover:bg-emerald-100 flex items-center justify-center shrink-0 transition-colors"
+              >
+                <X className="w-4 h-4 text-emerald-700" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* SECTION 1 & 2: Welcome Banner & Status Overview */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6">
           <div>
@@ -351,6 +437,34 @@ export default function StudentDashboard() {
                     ))
                   ) : (
                     <p className="text-xs text-slate-500 italic">Common preferences map complete.</p>
+                  )}
+                  {allocation.preferredRoomSizeSatisfied !== null && (
+                    <div className="flex items-center gap-2.5 text-xs text-slate-700 font-semibold">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${allocation.preferredRoomSizeSatisfied ? 'bg-emerald-50 border border-emerald-100' : 'bg-amber-50 border border-amber-100'}`}>
+                        <span className={`font-black ${allocation.preferredRoomSizeSatisfied ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {allocation.preferredRoomSizeSatisfied ? '✓' : '!'}
+                        </span>
+                      </div>
+                      <span>
+                        {allocation.preferredRoomSizeSatisfied
+                          ? 'You got your preferred room size.'
+                          : 'Your room size differs from what you requested.'}
+                      </span>
+                    </div>
+                  )}
+                  {allocation.accessibilityNeedSatisfied !== null && (
+                    <div className="flex items-center gap-2.5 text-xs text-slate-700 font-semibold">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${allocation.accessibilityNeedSatisfied ? 'bg-emerald-50 border border-emerald-100' : 'bg-amber-50 border border-amber-100'}`}>
+                        <span className={`font-black ${allocation.accessibilityNeedSatisfied ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {allocation.accessibilityNeedSatisfied ? '✓' : '!'}
+                        </span>
+                      </div>
+                      <span>
+                        {allocation.accessibilityNeedSatisfied
+                          ? 'Your accessibility request was honored.'
+                          : "We weren't able to accommodate your accessibility request this time."}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
