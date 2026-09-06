@@ -15,7 +15,10 @@ router.post('/sync-user', async (req, res) => {
         // DB promotion - never through login.
         const { email, name, image } = req.body;
 
-        if (!email) {
+        // Explicit check - email is used as a raw query filter value below (and
+        // split on '@' just above the query), so a non-string must be rejected
+        // outright rather than relying on .split() throwing on the wrong type.
+        if (!email || typeof email !== 'string') {
             return res.status(400).json({ error: 'Email is required' });
         }
 
@@ -76,7 +79,14 @@ router.post('/register-organization', async (req, res) => {
     try {
         const { orgName, domain, founderName, founderEmail } = req.body;
 
-        if (!orgName || !domain || !founderName || !founderEmail) {
+        // Explicit type checks - domain/founderEmail are used as raw query filter
+        // values below (and .trim()/.split() just above those queries), so a
+        // non-string must be rejected outright rather than relying on those
+        // string methods throwing on the wrong type.
+        if (!orgName || typeof orgName !== 'string' ||
+            !domain || typeof domain !== 'string' ||
+            !founderName || typeof founderName !== 'string' ||
+            !founderEmail || typeof founderEmail !== 'string') {
             return res.status(400).json({ error: 'orgName, domain, founderName, and founderEmail are all required.' });
         }
 

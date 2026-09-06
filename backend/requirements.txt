@@ -1,8 +1,15 @@
-fastapi==0.104.1
-uvicorn==0.24.0
-pydantic==2.5.2
+# fastapi/uvicorn/pydantic/requests bumped for known CVEs in the pinned web-framework
+# layer (old fastapi==0.104.1 locked in starlette~=0.27.x, vulnerable to CVE-2024-47874
+# among others - see SECURITY.md). Deliberately NOT bumping pandas/scikit-learn/numpy
+# in the same pass - those are the ML layer, and this project's whole verification
+# discipline for the allocation engine depends on byte-identical output against the
+# real dataset; bumping them isn't warranted by any known CVE and only adds
+# unnecessary risk to that guarantee.
+fastapi==0.116.1
+uvicorn==0.35.0
+pydantic==2.11.7
 pandas==2.1.3
 scikit-learn==1.3.2
 numpy==1.26.2
-requests==2.31.0
+requests==2.32.4
 prometheus-fastapi-instrumentator==6.1.0

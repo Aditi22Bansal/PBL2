@@ -62,10 +62,13 @@ against a real production host.
    set to `4000`/`6000`/`9000`/`28017`, deliberately distinct from the normal
    `3000`/`5000`/`8000`/`27017` (which were confirmed in use by an unrelated,
    already-running local dev stack before this task started).
-6. **Template `.env`** (`templates/env.j2`) — placeholder `NEXTAUTH_SECRET`, and the
-   correct internal `MONGO_URI`/`PYTHON_SERVICE_URL` (service-name DNS, not
-   `localhost` — these run on the deployed compose network, unaffected by whatever
-   host ports are chosen), mode `0600`.
+6. **Template `.env`** (`templates/env.j2`) — placeholder `NEXTAUTH_SECRET` and
+   `INTERNAL_SERVICE_KEY` (the shared secret python-service now requires on every
+   route except `/health`/`/metrics` — see [SECURITY.md](../SECURITY.md) §3, added
+   specifically because this deployment shape publishes python-service on a real
+   host port), and the correct internal `MONGO_URI`/`PYTHON_SERVICE_URL`
+   (service-name DNS, not `localhost` — these run on the deployed compose network,
+   unaffected by whatever host ports are chosen), mode `0600`.
 7. **Handler**: `docker compose pull && docker compose up -d` in `/opt/roomsync`, run
    as `roomsync_deploy` — fires only if step 5 or 6 actually changed something.
 
@@ -235,6 +238,25 @@ deployment shape without also rebuilding the frontend image with
 `NEXT_PUBLIC_API_URL=http://localhost:6000` — out of scope here, since the whole point
 of this task was deploying the existing CI-built `:latest` image as-is, not rebuilding
 it.
+
+### Publishing python-service on a host port is a real security-relevant choice, not just a networking detail
+
+Unlike the K8s deployment (`ClusterIP`-only — see
+[docs/k8s-deployment.md](k8s-deployment.md)), this deployment publishes python-service
+directly on host port `9000`. That service has no user-level auth of its own; it was
+only ever safe because nothing but the Node backend could reach it. A later security
+audit of this project caught that gap and closed it (see [SECURITY.md](../SECURITY.md)
+§3): every route now requires the `INTERNAL_SERVICE_KEY` shared secret this deployment
+already sets in `.env` (see above).
+
+**`ClusterIP`-only remains the correct, recommended shape for any real deployment.**
+The internal-service-key is defense in depth for a shape like this one that doesn't
+have that network isolation — it is not a substitute for it. Publishing this port was
+appropriate here specifically because the goal was local verification (confirming the
+GHCR images actually work when Ansible-deployed), on a machine only the operator
+themselves can reach. It should not be done against a real, network-reachable host
+without, at minimum, this key in place (now true) and a firewall rule restricting the
+port to trusted callers only.
 
 ## Bringing it up / tearing it down
 

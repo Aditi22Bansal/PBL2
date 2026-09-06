@@ -50,6 +50,23 @@ Manual dev servers (node server.js, npm run dev, uvicorn) commonly already occup
 3000/5000/8000/27017 locally. Don't kill processes on these ports without asking — report 
 conflicts and let the user decide.
 
+## Resource discipline
+Don't leave the Docker Compose stack AND the devops-lab kind cluster running
+simultaneously unless a task actually needs both at once (e.g. comparing behavior
+between them) — running both plus normal tooling (browser, editor, this session
+itself) has caused real resource-contention problems on this machine before: a live
+mongo `CrashLoopBackOff` in the K8s deployment, traced to a 1-second probe timeout
+being exceeded under load, not any real mongod failure (see `k8s/mongo.yaml`'s
+probe `timeoutSeconds` comment). `%UserProfile%\.wslconfig` now caps WSL2 (which
+Docker Desktop runs inside) to roughly half this machine's RAM/CPUs as a backstop,
+but the cheaper fix is just not running everything at once. Two scripts make
+"only run what's needed" the easy path instead of a habit to remember:
+- `scripts/dev-down-all.ps1` — releases the Compose stack and the `roomsync`/
+  `monitoring` K8s namespaces back to idle (leaves the shared kind cluster itself
+  and its other unrelated namespaces alone).
+- `scripts/dev-up-k8s.ps1` — re-applies all of `k8s/` in dependency order onto the
+  existing cluster; images are GHCR pulls, not rebuilds, so this is fast.
+
 ## Product direction (multi-tenant B2B SaaS — done)
 Hard constraints the allocation engine must NEVER violate: no mixed-gender rooms, no
 smoking/alcohol incompatibility — both enforced as absolute pre-filters (poisoned
@@ -92,6 +109,31 @@ never the client's own selection. The now-dead cookie-fallback and the pointless
 student selecting "Continue as Admin" is now redirected to `/unauthorized` instead
 of ever reaching the admin shell; the real admin and a freshly-created founding
 admin both still land on `/admin` correctly when they pick the right role.
+
+python-service had no auth of its own, closed. A dependency/security audit found
+`backend/main.py` trusted network isolation alone (K8s `ClusterIP`-only) with zero
+auth on any route - already broken once by the Ansible task publishing it on a host
+port. Fixed: every route except `/health`/`/metrics` now requires
+`X-Internal-Service-Key` (env `INTERNAL_SERVICE_KEY`, sent by
+`allocationService.js` on every call); CORS on both Node and Python narrowed from
+wildcard to an explicit `ALLOWED_ORIGINS`/`CORS_ALLOWED_ORIGINS` allowlist; both
+`sync-google-sheet` handlers (Node + Python) now reject any URL whose host isn't
+exactly `docs.google.com`/`spreadsheets.google.com` (closes a real SSRF vector).
+Also hardened three admin endpoints (`toggleRoomLock`, `handleRequestAction`,
+`accommodateAccessibilityRequest`) that validated `req.body` ID fields with a bare
+truthy check (`!roomId`) instead of a real format check - a crafted object like
+`{"$ne": null}` would have passed straight through as a Mongo query operator.
+Verified live end-to-end, in both Docker Compose and the real K8s cluster: a real
+allocation still completes successfully through the full Node→Python call in both
+(proving the new internal key plumbing works across the real container/pod network,
+not just in isolation - confirmed a direct unauthenticated pod-to-pod call gets a
+real 401), the role-escalation and cross-tenant-isolation exploits are both still
+blocked, and all 3 Dockerfiles now run as a non-root user (`node`/`appuser`) -
+confirmed via `docker exec ... whoami`, not just declared. Also fixed along the way:
+`k8s/mongo.yaml`'s probe `timeoutSeconds` (implicit 1s default -> 5s), found via a
+live `CrashLoopBackOff` under real resource contention while re-verifying this pass
+in the cluster - not a regression from this work, but a real robustness gap worth
+closing while there. Full record: [SECURITY.md](SECURITY.md).
 
 ## Org onboarding (done — founding-admin-only)
 `POST /api/auth/register-organization` (public, no auth) creates a brand-new

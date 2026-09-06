@@ -1,4 +1,5 @@
 const axios = require('axios');
+const mongoose = require('mongoose');
 const csv = require('csv-parser');
 const Profile = require('../models/Profile');
 const RoomAllocation = require('../models/RoomAllocation');
@@ -9,10 +10,37 @@ const Organization = require('../models/Organization');
 const { runPythonAllocation } = require('../services/allocationService');
 const analyticsService = require('../services/analyticsService');
 
+// Only these two real Google Sheets hostnames are ever legitimate here - anything
+// else (an internal address, a cloud metadata endpoint, an attacker-controlled
+// host) is rejected outright rather than fetched. Exact match, not a suffix check,
+// so "docs.google.com.attacker.com" can't sneak past a naive endsWith().
+const ALLOWED_SHEET_HOSTS = new Set(['docs.google.com', 'spreadsheets.google.com']);
+
+function assertAllowedSheetUrl(rawUrl) {
+    let parsed;
+    try {
+        parsed = new URL(rawUrl);
+    } catch {
+        throw new Error('sheet_url is not a valid URL.');
+    }
+    if (parsed.protocol !== 'https:' || !ALLOWED_SHEET_HOSTS.has(parsed.hostname)) {
+        throw new Error('sheet_url must be a real Google Sheets link (docs.google.com or spreadsheets.google.com).');
+    }
+}
+
 exports.syncCsv = async (req, res) => {
     try {
         let { sheet_url } = req.body;
-        if (!sheet_url) return res.status(400).json({ error: 'CSV sheet_url is required' });
+        if (!sheet_url || typeof sheet_url !== 'string') {
+            return res.status(400).json({ error: 'CSV sheet_url is required' });
+        }
+
+        sheet_url = sheet_url.trim();
+        try {
+            assertAllowedSheetUrl(sheet_url);
+        } catch (err) {
+            return res.status(400).json({ error: err.message });
+        }
 
         // The org's own real domain for rows with no email column - was
         // hardcoded to @sitpune.edu.in, which mislabeled every synthetic
@@ -21,7 +49,6 @@ exports.syncCsv = async (req, res) => {
         const org = await Organization.findById(req.currentUser.organizationId).lean();
         const fallbackDomain = (org && org.allowedEmailDomains && org.allowedEmailDomains[0]) || 'example.com';
 
-        sheet_url = sheet_url.trim();
         if (sheet_url.includes("/edit") || sheet_url.includes("/view")) {
             sheet_url = sheet_url.replace(/\/(edit|view).*$/, "/export?format=csv");
         } else if (sheet_url.includes("/pubhtml")) {
@@ -651,6 +678,13 @@ function _applyMove(fromRoom, exactMember, toRoom) {
 exports.manualSwap = async (req, res) => {
     try {
         const { roomAId, memberA, roomBId, memberB } = req.body;
+        // Explicit type checks - roomAId/roomBId are used as raw query filter
+        // values below, so a non-string (e.g. a crafted object) must be rejected
+        // outright rather than relying on .match() throwing on the wrong type.
+        if (typeof roomAId !== 'string' || typeof roomBId !== 'string' ||
+            typeof memberA !== 'string' || typeof memberB !== 'string') {
+            return res.status(400).json({ error: 'roomAId, memberA, roomBId, and memberB must all be strings' });
+        }
         const validIdA = roomAId.match(/^[0-9a-fA-F]{24}$/) ? roomAId : null;
         const validIdB = roomBId.match(/^[0-9a-fA-F]{24}$/) ? roomBId : null;
 
@@ -683,7 +717,7 @@ exports.manualSwap = async (req, res) => {
 exports.toggleRoomLock = async (req, res) => {
     try {
         const { roomId, isLocked } = req.body;
-        if (!roomId) {
+        if (!roomId || !mongoose.Types.ObjectId.isValid(roomId)) {
             return res.status(400).json({ error: 'Room ID is required' });
         }
         if (typeof isLocked !== 'boolean') {
@@ -719,11 +753,16 @@ exports.getChangeRequests = async (req, res) => {
     }
 };
 
+const VALID_REQUEST_STATUSES = new Set(['Pending', 'Approved', 'Rejected']);
+
 exports.handleRequestAction = async (req, res) => {
     try {
         const { requestId, status } = req.body;
-        if (!requestId || !status) {
+        if (!requestId || !mongoose.Types.ObjectId.isValid(requestId)) {
             return res.status(400).json({ error: 'requestId and status are required' });
+        }
+        if (typeof status !== 'string' || !VALID_REQUEST_STATUSES.has(status)) {
+            return res.status(400).json({ error: 'status must be one of Pending, Approved, Rejected' });
         }
         const cReq = await ChangeRequest.findOneAndUpdate(
             { _id: requestId, organizationId: req.currentUser.organizationId },
@@ -815,7 +854,8 @@ exports.getEligibleAccommodationRooms = async (req, res) => {
 exports.accommodateAccessibilityRequest = async (req, res) => {
     try {
         const { requestId, targetRoomId } = req.body;
-        if (!requestId || !targetRoomId) {
+        if (!requestId || !mongoose.Types.ObjectId.isValid(requestId) ||
+            !targetRoomId || !mongoose.Types.ObjectId.isValid(targetRoomId)) {
             return res.status(400).json({ error: 'requestId and targetRoomId are required' });
         }
         const orgFilter = { organizationId: req.currentUser.organizationId };

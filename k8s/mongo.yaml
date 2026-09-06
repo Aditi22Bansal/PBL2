@@ -41,17 +41,24 @@ spec:
           volumeMounts:
             - name: mongo-data
               mountPath: /data/db
-          # Same check docker-compose.yml already used.
+          # Same check docker-compose.yml already used. timeoutSeconds bumped from
+          # the implicit 1s default - an exec probe spawns a fresh mongosh (Node-based)
+          # process on every single check, which can exceed 1s under real resource
+          # contention (confirmed live: repeated CrashLoopBackOff from probe timeouts
+          # while another heavy workload was running on the same host, not any actual
+          # mongod failure - its own logs showed clean, graceful shutdowns each time).
           readinessProbe:
             exec:
               command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
             initialDelaySeconds: 5
-            periodSeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             exec:
               command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5
       volumes:
         - name: mongo-data
           persistentVolumeClaim:

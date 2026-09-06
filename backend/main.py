@@ -1,8 +1,10 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 from typing import List, Dict, Optional
+import os
 import uuid
 from datetime import datetime
 import pandas as pd
@@ -16,14 +18,46 @@ from ml_engine.executor import compute_allocation
 
 app = FastAPI(title="RoomSync Allocation Engine")
 
-# To be secured by Supabase JWT later
+# No browser ever calls this service directly (only the Node backend, server-to-server,
+# which isn't subject to CORS at all) - so the safe default is no allowed origins unless
+# an environment explicitly configures some. Comma-separated list via env var.
+_allowed_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS = [o.strip() for o in _allowed_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Internal-service auth: this API has no user-level auth of its own and was only ever
+# meant to be reachable from the Node backend inside a private network (K8s ClusterIP).
+# That assumption has already broken once in this project - the Ansible deployment
+# publishes this service on a host port for local verification (see
+# docs/ansible-deployment.md) - so every route now also requires a shared secret,
+# closing the gap for any deployment shape where the port ends up reachable.
+# /health and /metrics are exempt: K8s readiness/liveness probes and Prometheus's
+# scraper have no way to attach a custom header, and neither route exposes anything
+# beyond liveness/process metrics.
+INTERNAL_SERVICE_KEY = os.environ.get("INTERNAL_SERVICE_KEY", "")
+_EXEMPT_PATHS = {"/health", "/metrics"}
+
+
+@app.middleware("http")
+async def require_internal_service_key(request: Request, call_next):
+    if request.url.path in _EXEMPT_PATHS:
+        return await call_next(request)
+
+    provided = request.headers.get("x-internal-service-key", "")
+    if not INTERNAL_SERVICE_KEY or provided != INTERNAL_SERVICE_KEY:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Unauthorized: missing or invalid X-Internal-Service-Key"},
+        )
+    return await call_next(request)
+
 
 # Prometheus: request duration histogram + request count by status, both broken
 # down by method/handler, exposed at GET /metrics - the standard minimal
@@ -99,12 +133,30 @@ def get_my_allocation(user_id: str, repo: CSVRepository = Depends(get_repository
 class SyncRequest(BaseModel):
     sheet_url: str
 
+# Same allowlist as the Node backend's own syncCsv (see adminController.js) - only
+# these two real Google Sheets hostnames are ever legitimate here. Exact match, not
+# a suffix check, so a hostname like "docs.google.com.attacker.com" can't sneak past.
+_ALLOWED_SHEET_HOSTS = {"docs.google.com", "spreadsheets.google.com"}
+
+
+def _assert_allowed_sheet_url(raw_url: str):
+    from urllib.parse import urlparse
+    parsed = urlparse(raw_url)
+    if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_SHEET_HOSTS:
+        raise HTTPException(
+            status_code=400,
+            detail="sheet_url must be a real Google Sheets link (docs.google.com or spreadsheets.google.com).",
+        )
+
+
 @app.post("/admin/sync-google-sheet")
 def sync_google_sheet(request: SyncRequest, repo: CSVRepository = Depends(get_repository)):
     url = request.sheet_url
     if not url:
         raise HTTPException(status_code=400, detail="sheet_url is required")
-        
+
+    _assert_allowed_sheet_url(url)
+
     try:
         if "pubhtml" in url:
             url = url.replace("pubhtml", "pub?output=csv")

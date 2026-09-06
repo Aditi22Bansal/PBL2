@@ -45,4 +45,8 @@ ENV PORT=3000
 
 EXPOSE 3000
 
+# node:20-alpine ships a built-in non-root "node" user (uid 1000) - standard
+# hardening so a compromise inside this container doesn't run as root.
+USER node
+
 CMD ["npm", "start"]

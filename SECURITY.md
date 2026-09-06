@@ -73,6 +73,44 @@ even lands on the admin page shell. The real admin account and a newly-created
 founding admin (from organization registration) both still land on `/admin` correctly,
 confirming the fix didn't also break legitimate admin access.
 
+### 3. python-service had no authentication of its own
+
+**What was found.** A routine dependency/security audit (checking whether every
+route added since the original auth work still had real auth — see `docs/decisions.md`
+and `CLAUDE.md`) surfaced that `backend/main.py` (the FastAPI allocation engine) had
+**no auth mechanism at all** on any of its routes — `/allocate/v2`, `/admin/allocations`,
+`/admin/unassigned`, `/admin/sync-google-sheet`, etc. It was designed to be safe only
+because it's meant to be unreachable except from the Node backend (K8s deploys it as
+`ClusterIP`-only — see [docs/k8s-deployment.md](docs/k8s-deployment.md)). That
+assumption had already broken once in this project: the Ansible deployment publishes
+it directly on a host port for local verification (`docs/ansible-deployment.md`), with
+no auth of its own to fall back on if that port were ever reachable by anything else.
+CORS (`allow_origins=["*"]`) and an unrestricted outbound fetch in
+`/admin/sync-google-sheet` (a real SSRF vector — the URL was fetched with no allowlist
+at all) made the exposure worse in that scenario, not better.
+
+**Impact.** In any deployment shape where python-service's port ends up reachable
+beyond the Node backend, a caller could trigger allocations, read all allocation data,
+or abuse the sync-google-sheet endpoint to probe internal network addresses — with
+zero credentials.
+
+**The fix.** Every route in `main.py` now requires a shared secret
+(`X-Internal-Service-Key` header, checked against `INTERNAL_SERVICE_KEY`) via a single
+middleware — except `/health` and `/metrics`, which K8s probes and Prometheus's
+scraper have no way to attach a custom header to, and which expose nothing beyond
+liveness/process metrics. `backend/services/allocationService.js` sends this header on
+every call. CORS is now a configured allowlist (`CORS_ALLOWED_ORIGINS`, empty/deny-all
+by default) instead of `*`. Both `sync-google-sheet` handlers (Node and Python) now
+reject any URL whose hostname isn't exactly `docs.google.com` or
+`spreadsheets.google.com` before fetching anything.
+
+**Deployment guidance.** `ClusterIP`-only (the K8s shape) remains the correct,
+recommended way to run this service — the internal-service-key is defense in depth
+for any shape that doesn't have that isolation, not a replacement for it. The Ansible
+demo's host-port publishing was for local verification only and should not be pointed
+at a real reachable host without, at minimum, this key in place (now true) and a
+firewall rule restricting the port to trusted callers.
+
 ## Known, currently-safe limitation
 
 **The `join_user` Socket.IO channel is unauthenticated** — it accepts a client-asserted
