@@ -135,6 +135,22 @@ live `CrashLoopBackOff` under real resource contention while re-verifying this p
 in the cluster - not a regression from this work, but a real robustness gap worth
 closing while there. Full record: [SECURITY.md](SECURITY.md).
 
+Rate limiting, Helmet, and admin audit logging added. `express-rate-limit` on the two
+PUBLIC (no requireAuth) endpoints - `sync-user` (60/15min/IP) and
+`register-organization` (10/15min/IP, since it's a one-time action per real org) -
+skipped only under `NODE_ENV=test` (Jest sets this automatically; verified the real
+limiter genuinely 429s by briefly flipping NODE_ENV within a test). `helmet()` added
+with its defaults kept as-is - reviewed and live-tested against Socket.IO's real
+cross-origin browser handshake and the existing CORS setup, nothing broke, so nothing
+was disabled on guesswork. New `AuditLog` model + `logAuditEvent()` helper (same
+failure-isolation principle as the notification system - a logging failure can never
+block or fail the real admin action), wired into every admin action listed in the
+model's `action` enum, plus `GET /api/admin/audit-log` (admin-only, org-scoped,
+paginated - backend only, no frontend UI yet). Verified live: real admin actions
+produce exactly the right entries, a second org's log stays completely isolated, and
+a deliberately-broken audit write (monkeypatched to throw) still lets the real action
+return 201 with zero corrupted/partial log entries left behind.
+
 ## Org onboarding (done — founding-admin-only)
 `POST /api/auth/register-organization` (public, no auth) creates a brand-new
 Organization + its founding ADMIN User. Rejects if the domain is already claimed

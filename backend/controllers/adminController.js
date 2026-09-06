@@ -9,6 +9,7 @@ const Notification = require('../models/Notification');
 const Organization = require('../models/Organization');
 const { runPythonAllocation } = require('../services/allocationService');
 const analyticsService = require('../services/analyticsService');
+const { logAuditEvent } = require('../services/auditLogService');
 
 // Only these two real Google Sheets hostnames are ever legitimate here - anything
 // else (an internal address, a cloud metadata endpoint, an attacker-controlled
@@ -173,6 +174,14 @@ exports.syncCsv = async (req, res) => {
                     await RoomAllocation.deleteMany({ isLocked: { $ne: true }, organizationId: req.currentUser.organizationId });
                 }
                 
+                await logAuditEvent({
+                    organizationId: req.currentUser.organizationId,
+                    actorEmail: req.currentUser.email,
+                    actorRole: req.currentUser.role,
+                    action: 'CSV_SYNC',
+                    metadata: { profilesSynced: profilesToUpsert.length, sheet_url },
+                });
+
                 res.json({ message: `Successfully synced ${profilesToUpsert.length} profiles from CSV.` });
             });
     } catch (error) {
@@ -515,6 +524,14 @@ exports.triggerAllocation = async (req, res) => {
 
         const runId = result.run_id || `run_${Date.now().toString(16)}`;
 
+        await logAuditEvent({
+            organizationId: req.currentUser.organizationId,
+            actorEmail: req.currentUser.email,
+            actorRole: req.currentUser.role,
+            action: 'TRIGGER_ALLOCATION',
+            metadata: { run_id: runId, total_rooms: newAllocations.length },
+        });
+
         res.json({
             message: 'Allocation completed successfully',
             run_id: runId,
@@ -707,6 +724,14 @@ exports.manualSwap = async (req, res) => {
         await roomA.save();
         await roomB.save();
 
+        await logAuditEvent({
+            organizationId: req.currentUser.organizationId,
+            actorEmail: req.currentUser.email,
+            actorRole: req.currentUser.role,
+            action: 'MANUAL_SWAP',
+            metadata: { roomAId: roomA._id.toString(), roomBId: roomB._id.toString(), memberA: exactMemberA, memberB: exactMemberB },
+        });
+
         res.json({ message: 'Swap completed successfully' });
     } catch (err) {
         console.error(err);
@@ -730,6 +755,16 @@ exports.toggleRoomLock = async (req, res) => {
         if (!updated) {
             return res.status(404).json({ error: 'Room not found' });
         }
+
+        await logAuditEvent({
+            organizationId: req.currentUser.organizationId,
+            actorEmail: req.currentUser.email,
+            actorRole: req.currentUser.role,
+            action: 'ROOM_LOCK_TOGGLE',
+            targetId: roomId,
+            metadata: { isLocked },
+        });
+
         res.json({ message: `Room ${isLocked ? 'locked' : 'unlocked'}` });
     } catch (err) {
         res.status(500).json({ error: 'Locking failed' });
@@ -772,6 +807,16 @@ exports.handleRequestAction = async (req, res) => {
         if (!cReq) {
             return res.status(404).json({ error: 'Request not found' });
         }
+
+        await logAuditEvent({
+            organizationId: req.currentUser.organizationId,
+            actorEmail: req.currentUser.email,
+            actorRole: req.currentUser.role,
+            action: 'CHANGE_REQUEST_ACTION',
+            targetId: requestId,
+            metadata: { status },
+        });
+
         res.json({ message: `Request ${status}`, data: cReq });
     } catch(err) {
         res.status(500).json({ error: 'Failed' });
@@ -884,6 +929,15 @@ exports.accommodateAccessibilityRequest = async (req, res) => {
         cReq.status = 'Approved';
         await cReq.save();
 
+        await logAuditEvent({
+            organizationId: req.currentUser.organizationId,
+            actorEmail: req.currentUser.email,
+            actorRole: req.currentUser.role,
+            action: 'ACCOMMODATE_REQUEST',
+            targetId: requestId,
+            metadata: { targetRoomId, room_number: targetRoom.room_number },
+        });
+
         res.json({ message: `Moved to ${targetRoom.room_number} and request approved`, room_number: targetRoom.room_number });
     } catch (err) {
         console.error(err);
@@ -901,4 +955,30 @@ exports.accommodateAccessibilityRequest = async (req, res) => {
 // existing frontend "Force Allocate" button needs no changes.
 exports.forceAllocateRemaining = async (req, res) => {
     return exports.triggerAllocation(req, res);
+};
+
+// GET /api/admin/audit-log?page=1&limit=50 - org-scoped, most recent first.
+// Backend only - no dedicated frontend UI yet (see CLAUDE.md).
+exports.getAuditLog = async (req, res) => {
+    try {
+        const AuditLog = require('../models/AuditLog');
+
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+        const skip = (page - 1) * limit;
+
+        const [entries, total] = await Promise.all([
+            AuditLog.find({ organizationId: req.currentUser.organizationId })
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            AuditLog.countDocuments({ organizationId: req.currentUser.organizationId }),
+        ]);
+
+        res.json({ entries, page, limit, total, totalPages: Math.ceil(total / limit) });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to retrieve audit log', message: error.message });
+    }
 };

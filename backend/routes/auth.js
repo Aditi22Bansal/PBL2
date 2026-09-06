@@ -1,10 +1,39 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const User = require('../models/User');
 const Organization = require('../models/Organization');
+const { logAuditEvent } = require('../services/auditLogService');
+
+// Both of these routes are the two PUBLIC (no requireAuth) endpoints in this app -
+// the exact reason they need their own rate limit, since nothing else gates them.
+// Skipped entirely under NODE_ENV=test (Jest sets this automatically - confirmed via
+// `jest`'s own CLI, no extra config needed) so the test suite's own rapid-fire calls
+// against these routes never trip the limiter. This is a test-only carve-out, NOT a
+// weakening of the real limit - it does nothing at all outside of `npm test`/CI.
+const isTestEnv = () => process.env.NODE_ENV === 'test';
+
+// Generous: real users hit this on every legitimate login.
+const syncUserLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: isTestEnv,
+});
+
+// Stricter: a one-time action per real organization - no legitimate reason to hit
+// this often, and it's what prevents spam org creation.
+const registerOrgLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: isTestEnv,
+});
 
 // Sync user from NextAuth to MongoDB
-router.post('/sync-user', async (req, res) => {
+router.post('/sync-user', syncUserLimiter, async (req, res) => {
     try {
         // role is deliberately NEVER read from req.body - it used to be
         // client-supplied here (and re-written on every login via the
@@ -75,7 +104,7 @@ router.post('/sync-user', async (req, res) => {
 // dependents yet - nothing else could reference it in the time between
 // these two calls) is deleted as a compensating rollback, so a failed
 // registration never leaves a stranded org with nobody able to administer it.
-router.post('/register-organization', async (req, res) => {
+router.post('/register-organization', registerOrgLimiter, async (req, res) => {
     try {
         const { orgName, domain, founderName, founderEmail } = req.body;
 
@@ -145,6 +174,15 @@ router.post('/register-organization', async (req, res) => {
             }
             throw err;
         }
+
+        await logAuditEvent({
+            organizationId: org._id,
+            actorEmail: founder.email,
+            actorRole: founder.role,
+            action: 'ORG_REGISTRATION',
+            targetId: org._id.toString(),
+            metadata: { orgName: org.name, domain: cleanDomain },
+        });
 
         res.status(201).json({
             message: 'Organization created successfully.',
