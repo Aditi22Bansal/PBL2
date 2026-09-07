@@ -208,7 +208,7 @@ export default function StudentDashboard() {
             <Home className="text-white w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-extrabold text-slate-800 tracking-tight text-md">RoomSync Portal</h1>
+            <h1 className="font-extrabold text-slate-800 tracking-tight text-md">RoomFit Portal</h1>
             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Housing Placement Dashboard</p>
           </div>
         </div>

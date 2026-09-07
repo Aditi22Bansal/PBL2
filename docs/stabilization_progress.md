@@ -1,4 +1,4 @@
-# RoomSync v2.0 Stabilization Progress
+# RoomFit v2.0 Stabilization Progress
 
 ## Overall Status
 - Current Section: Part 8: Allocation Engine

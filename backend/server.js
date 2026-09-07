@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const helmet = require('helmet');
 const promClient = require('prom-client');
 
 // Import routes
@@ -32,6 +33,7 @@ const io = new Server(server, {
 });
 
 // Middleware
+app.use(helmet());
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json({ limit: '50mb' }));
 

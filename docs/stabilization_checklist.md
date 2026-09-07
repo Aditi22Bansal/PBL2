@@ -1,4 +1,4 @@
-# RoomSync v2.0 Stabilization Checklist
+# RoomFit v2.0 Stabilization Checklist
 
 - [x] Part 1: Dependency Audit
   - Status: COMPLETED

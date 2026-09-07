@@ -113,7 +113,7 @@ export default function LoginPage() {
                     className="space-y-6"
                   >
                     <h1 className="text-3xl font-bold text-slate-800">
-                      Welcome to RoomSync
+                      Welcome to RoomFit
                     </h1>
                     <p className="text-slate-500 text-sm leading-relaxed">
                       Select your role to quickly sign into the development portal.

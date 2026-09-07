@@ -1,7 +1,9 @@
-# RoomSync — Project Context for Claude Code
+# RoomFit — Project Context for Claude Code
+
+*(formerly RoomSync)*
 
 ## What this is
-RoomSync (GitHub: PBL2) — hostel roommate-allocation platform. BTech final year project, 
+RoomFit (GitHub: PBL2) — hostel roommate-allocation platform. BTech final year project, 
 being evolved into a generalized B2B SaaS while also satisfying a DevOps course rubric 
 (CI/CD, IaC, containers/K8s, monitoring, reflection report).
 
@@ -135,6 +137,22 @@ live `CrashLoopBackOff` under real resource contention while re-verifying this p
 in the cluster - not a regression from this work, but a real robustness gap worth
 closing while there. Full record: [SECURITY.md](SECURITY.md).
 
+Rate limiting, Helmet, and admin audit logging added. `express-rate-limit` on the two
+PUBLIC (no requireAuth) endpoints - `sync-user` (60/15min/IP) and
+`register-organization` (10/15min/IP, since it's a one-time action per real org) -
+skipped only under `NODE_ENV=test` (Jest sets this automatically; verified the real
+limiter genuinely 429s by briefly flipping NODE_ENV within a test). `helmet()` added
+with its defaults kept as-is - reviewed and live-tested against Socket.IO's real
+cross-origin browser handshake and the existing CORS setup, nothing broke, so nothing
+was disabled on guesswork. New `AuditLog` model + `logAuditEvent()` helper (same
+failure-isolation principle as the notification system - a logging failure can never
+block or fail the real admin action), wired into every admin action listed in the
+model's `action` enum, plus `GET /api/admin/audit-log` (admin-only, org-scoped,
+paginated - backend only, no frontend UI yet). Verified live: real admin actions
+produce exactly the right entries, a second org's log stays completely isolated, and
+a deliberately-broken audit write (monkeypatched to throw) still lets the real action
+return 201 with zero corrupted/partial log entries left behind.
+
 ## Org onboarding (done — founding-admin-only)
 `POST /api/auth/register-organization` (public, no auth) creates a brand-new
 Organization + its founding ADMIN User. Rejects if the domain is already claimed
@@ -257,6 +275,41 @@ generated traffic (incl. genuine 401s/404s) before screenshotting: Prometheus
 `/api/v1/targets` showed both services `up`, and the dashboard rendered real non-zero 
 latency and error-rate data, not an empty/zero one. Full writeup: 
 [docs/monitoring.md](docs/monitoring.md).
+
+### Autoscaling (done — python-service only, real load-tested)
+`k8s/python-service.yaml` now also carries `resources` (requests: 250m CPU/256Mi,
+limits: 500m CPU/512Mi - sized off a real `kubectl top pods` idle reading of ~2m
+CPU/128Mi, not guessed) and a `HorizontalPodAutoscaler` (min 1, max 5, target 55% CPU
+utilization). `backend`/`frontend` deliberately NOT given an HPA - they're mostly
+I/O-bound; `python-service` is the one genuinely CPU-bound service (cosine similarity +
+greedy matching), the one [docs/decisions.md](docs/decisions.md) #1's original
+subprocess→REST refactor was specifically justified by ("for independent scaling").
+Confirmed stateless before trusting horizontal scaling at all (no mutated module-level
+state, no DB/file writes on the live `/allocate/v2` path - see
+[docs/autoscaling.md](docs/autoscaling.md) for the actual grep-level verification).
+metrics-server was already present on this shared `devops-lab` cluster (turned out to
+be left over from the `social-media` lab exercise's own HPA, before that namespace was
+removed in an unrelated cleanup) - confirmed genuinely working via real `kubectl top`
+numbers, not just deployment presence.
+
+Real load test, not just a manifest that was never exercised: k6 (official
+`grafana/k6` image, run as a real Job inside the `roomsync` namespace rather than via
+`kubectl port-forward` - see the doc for why), 40 VUs sustained 6 minutes, hitting
+`/allocate/v2` directly with 300-profile synthetic payloads per call. Real, observed
+result: 1 → 5 replicas (the configured ceiling) within ~2.5 minutes under sustained
+117-150%/55% CPU pressure, held at 5 for the full plateau, then scaled back down to 1
+almost exactly 5 minutes after load eased (matching K8s's default HPA scale-down
+stabilization window precisely) - captured with real timestamped
+`kubectl get hpa`/`kubectl top pods` samples every 15s throughout, not just a
+before/after snapshot. `backend`/`frontend`/`mongo` stayed at exactly 1 pod each the
+entire time - the independent-scaling claim held for real, not just on paper.
+Correctness held too: 99.14% of 3851 load-test requests succeeded with a valid
+allocation shape, and a manually-inspected post-load request confirmed the actual
+hard-constraint logic (gender bucketing, smoking-conflict `needsManualPlacement`) still
+correct on the same scaled code path. Full methodology, the real replica-count
+timeline, and the honest caveat about uneven per-pod load distribution (a load-test
+connection-affinity artifact, not an HPA/architecture problem):
+[docs/autoscaling.md](docs/autoscaling.md).
 
 ## Recently added (features)
 - In-app notifications for room allocation. Socket.IO now has a per-student channel 

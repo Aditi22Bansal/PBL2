@@ -1,4 +1,5 @@
 const HostelConfiguration = require('../models/HostelConfiguration');
+const { logAuditEvent } = require('../services/auditLogService');
 
 // GET /api/admin/hostel-configurations
 exports.getHostelConfigurations = async (req, res) => {
@@ -59,6 +60,16 @@ exports.createHostelConfiguration = async (req, res) => {
         // (e.g. a Female config and a Male config both active simultaneously
         // is the correct, common case, not an edge case to guard against).
         await newConfig.save();
+
+        await logAuditEvent({
+            organizationId: req.currentUser.organizationId,
+            actorEmail: req.currentUser.email,
+            actorRole: req.currentUser.role,
+            action: 'HOSTEL_CONFIG_CREATE',
+            targetId: newConfig._id.toString(),
+            metadata: { hostelName, gender },
+        });
+
         res.status(201).json(newConfig);
     } catch (error) {
         console.error(error);
@@ -103,6 +114,16 @@ exports.updateHostelConfiguration = async (req, res) => {
 
         // No exclusivity: multiple configs can be active at once for an org.
         await config.save();
+
+        await logAuditEvent({
+            organizationId: req.currentUser.organizationId,
+            actorEmail: req.currentUser.email,
+            actorRole: req.currentUser.role,
+            action: 'HOSTEL_CONFIG_UPDATE',
+            targetId: config._id.toString(),
+            metadata: { hostelName, gender },
+        });
+
         res.json(config);
     } catch (error) {
         console.error(error);
@@ -136,6 +157,14 @@ exports.activateHostelConfiguration = async (req, res) => {
         // multiple configs can be active at once for an org.
         config.isActive = true;
         await config.save();
+
+        await logAuditEvent({
+            organizationId: req.currentUser.organizationId,
+            actorEmail: req.currentUser.email,
+            actorRole: req.currentUser.role,
+            action: 'HOSTEL_CONFIG_ACTIVATE',
+            targetId: config._id.toString(),
+        });
 
         res.json({ message: 'Hostel configuration activated successfully', config });
     } catch (error) {

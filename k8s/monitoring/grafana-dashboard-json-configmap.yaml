@@ -8,7 +8,7 @@ metadata:
 data:
   roomsync.json: |
     {
-      "title": "RoomSync",
+      "title": "RoomFit",
       "uid": "roomsync-overview",
       "timezone": "browser",
       "schemaVersion": 39,

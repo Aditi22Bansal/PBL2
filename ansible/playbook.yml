@@ -1,5 +1,5 @@
 ---
-- name: Provision RoomSync deployment target and deploy the real CI-built images
+- name: Provision RoomFit deployment target and deploy the real CI-built images
   hosts: target
   become: true
 

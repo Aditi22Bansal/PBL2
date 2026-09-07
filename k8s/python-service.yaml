@@ -27,6 +27,20 @@ spec:
                 secretKeyRef:
                   name: roomsync-secret
                   key: INTERNAL_SERVICE_KEY
+          # HPA scales off % of the CPU *request*, not the limit - real idle
+          # measurement (kubectl top pods) showed ~2m CPU / 128Mi memory once
+          # startup settled, so the request floor here is deliberately well
+          # above idle (leaves headroom for the HPA math to mean something)
+          # and the limit gives 2x burst room for the actual CPU-bound work
+          # (cosine similarity + greedy matching in ml_engine/). See
+          # docs/autoscaling.md.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           readinessProbe:
             httpGet:
               path: /health
@@ -54,3 +68,29 @@ spec:
   ports:
     - port: 8000
       targetPort: 8000
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: python-service
+  namespace: roomsync
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: python-service
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # % of the Deployment's own cpu *request* above (250m), not the
+          # limit - e.g. 55% here means "scale up once pods are averaging
+          # ~137m". This is the one service actually worth autoscaling
+          # (docs/decisions.md #1's "REST for independent scaling" bet) -
+          # cosine similarity + greedy matching is genuinely CPU-bound,
+          # unlike the mostly I/O-bound backend/frontend.
+          averageUtilization: 55

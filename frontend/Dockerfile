@@ -1,4 +1,4 @@
-# RoomSync — Next.js frontend.
+# RoomFit — Next.js frontend.
 #
 # PRODUCTION mode (npm run build + npm start), not `next dev`. Reasoning:
 #   - This is infra meant to model the real deployed shape of the app, not a live-reload

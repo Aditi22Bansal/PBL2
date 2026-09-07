@@ -131,7 +131,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: false
-          tags: roomsync-${{ matrix.name }}:ci
+          tags: roomfit-${{ matrix.name }}:ci
 
   push-images:
     name: Push ${{ matrix.name }} to GHCR

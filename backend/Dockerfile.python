@@ -1,4 +1,4 @@
-# RoomSync — Python ML microservice (FastAPI). This is now the real, live-traffic-serving
+# RoomFit — Python ML microservice (FastAPI). This is now the real, live-traffic-serving
 # allocation engine (POST /allocate/v2), called over HTTP by the Node backend — not the
 # legacy subprocess-spawned executor.py path.
 FROM python:3.12-slim

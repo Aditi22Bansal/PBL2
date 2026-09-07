@@ -45,4 +45,7 @@ router.post('/requests/accommodate', adminController.accommodateAccessibilityReq
 // Force allocate remaining unassigned students
 router.post('/force-allocate', adminController.forceAllocateRemaining);
 
+// Audit log - backend only, no dedicated frontend UI yet (see CLAUDE.md).
+router.get('/audit-log', adminController.getAuditLog);
+
 module.exports = router;

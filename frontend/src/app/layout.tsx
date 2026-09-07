@@ -3,7 +3,7 @@ import "./globals.css";
 import { NextAuthProvider } from "@/components/Providers";
 
 export const metadata: Metadata = {
-  title: "RoomSync — Hostel Room Allocation",
+  title: "RoomFit — Hostel Room Allocation",
   description: "Advanced AI-powered hostel allocation system for your institution.",
 };
 

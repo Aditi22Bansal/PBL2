@@ -1,9 +1,9 @@
 # DevOps Reflection Report
 
-**Project:** RoomSync — hostel roommate-allocation platform
+**Project:** RoomFit — hostel roommate-allocation platform
 **Track:** CI/CD, containers/Kubernetes, configuration management, monitoring
 
-This is a reflection on the DevOps work layered onto RoomSync alongside its evolution
+This is a reflection on the DevOps work layered onto RoomFit alongside its evolution
 from a single-institution BTech project into a multi-tenant SaaS. The two tracks
 turned out to be more intertwined than I expected going in — decisions made for the
 product (the REST microservice split, multi-tenant data isolation, real
