@@ -64,9 +64,19 @@
   --color-text-secondary: #94a3b8;
 }
 
+/*
+ * Landing page (Phase 2): light baseline — mint/teal primary, warm
+ * coral/amber secondary, deep charcoal text. Replaces Phase 1's
+ * dark-slate-violet system for this page. Deliberately separate from the
+ * primary/neutral pilot tokens above, which stay scoped to the
+ * (still-dark, still-violet) admin Hostel Configuration form — that pilot
+ * wasn't part of this revision and isn't touched here. Every
+ * text/background pairing introduced below was checked against WCAG
+ * contrast math before use, not eyeballed — see PR notes.
+ */
 :root {
-  --background: #0f172a;
-  --foreground: #f8fafc;
+  --background: #fafaf9; /* stone-50 - warm off-white, not stark white */
+  --foreground: #292524; /* stone-800 - deep charcoal, not pure black */
 }
 
 body {
@@ -79,7 +89,10 @@ body {
   overflow-x: hidden;
 }
 
-/* Dynamic background gradients */
+/* Dynamic background gradients - sits behind every page at z-index -1;
+   every real page (landing included) paints its own opaque background on
+   top, so this is a quiet fallback wash, not something text is ever
+   checked against directly. */
 body::before {
   content: '';
   position: absolute;
@@ -87,36 +100,53 @@ body::before {
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle at 15% 50%, rgba(56, 189, 248, 0.08), transparent 25%),
-              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.12), transparent 25%);
+  background: radial-gradient(circle at 15% 50%, rgba(45, 212, 191, 0.10), transparent 25%),
+              radial-gradient(circle at 85% 30%, rgba(251, 146, 60, 0.10), transparent 25%);
   z-index: -1;
   pointer-events: none;
 }
 
-/* Glassmorphism Utilities */
+/* Glassmorphism Utilities - frosted-white glass for a light backdrop.
+   Text placed inside these must use the stone-800/stone-600 pairing
+   below, never the old white/slate-300 dark-glass text colors. */
 @layer utilities {
   .glass-panel {
-    background: rgba(30, 41, 59, 0.4);
+    background: rgba(255, 255, 255, 0.6);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(41, 37, 36, 0.08);
+    box-shadow: 0 4px 30px rgba(41, 37, 36, 0.06);
   }
-  
+
   .glass-card {
-    background: linear-gradient(145deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.72) 100%);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(41, 37, 36, 0.07);
+    border-top: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 8px 32px rgba(41, 37, 36, 0.10);
   }
 
   .text-gradient {
-    background: linear-gradient(to right, #38bdf8, #818cf8);
+    background: linear-gradient(to right, #0d9488, #ea580c);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
     color: transparent;
+  }
+}
+
+/* Landing page: gentle float used by the hero's glass info-cards. Disabled
+   entirely under prefers-reduced-motion rather than just "made smaller" -
+   these cards read fine perfectly still. */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }
