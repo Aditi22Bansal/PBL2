@@ -1,4 +1,4 @@
-# RoomSync v2.0 Stabilization Report
+# RoomFit v2.0 Stabilization Report
 
 ## 1. Executive Summary
 *Pending completion of stabilization audit.*

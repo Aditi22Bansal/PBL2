@@ -1,6 +1,8 @@
-<p align="center"><img src="docs/assets/banner.svg" alt="RoomSync" width="680"></p>
+<p align="center"><img src="docs/assets/banner.svg" alt="RoomFit" width="680"></p>
 
-# RoomSync
+# RoomFit
+
+*(formerly RoomSync)*
 
 **Multi-tenant hostel roommate allocation — matched by compatibility, never in violation
 of the constraints that actually matter.**
@@ -11,7 +13,7 @@ of the constraints that actually matter.**
 
 ## What this is
 
-RoomSync started as a BTech final-year project (a single-institution hostel allocation
+RoomFit started as a BTech final-year project (a single-institution hostel allocation
 tool) and has since been rebuilt into a real multi-tenant SaaS: any institution can
 register its own organization, gated by its own email domain, and gets a fully isolated
 dataset — students, room configurations, allocations, chat — with zero visibility into
@@ -80,7 +82,7 @@ internals, and the reasoning behind the two-phase design:
 
 ## Quick Start
 
-There are exactly two ways to run RoomSync. Pick one — don't mix them.
+There are exactly two ways to run RoomFit. Pick one — don't mix them.
 
 ### Option A — Docker (one command, recommended for a quick look)
 
@@ -103,7 +105,7 @@ instead of failing confusingly.)
 First run builds all 3 images and takes a few minutes; every run after reuses the build
 cache and comes up in seconds.
 
-**Success looks like:** open **http://localhost:3000** — the RoomSync landing page, and
+**Success looks like:** open **http://localhost:3000** — the RoomFit landing page, and
 you can log in via the dev-login role picker (no password) and reach `/student` or
 `/admin`. `npm run dev:logs` tails all 4 services' logs; `npm run dev:down` stops
 everything; `npm run dev:clean` also wipes the container Mongo's data volume.

@@ -1,7 +1,9 @@
-# RoomSync — Project Context for Claude Code
+# RoomFit — Project Context for Claude Code
+
+*(formerly RoomSync)*
 
 ## What this is
-RoomSync (GitHub: PBL2) — hostel roommate-allocation platform. BTech final year project, 
+RoomFit (GitHub: PBL2) — hostel roommate-allocation platform. BTech final year project, 
 being evolved into a generalized B2B SaaS while also satisfying a DevOps course rubric 
 (CI/CD, IaC, containers/K8s, monitoring, reflection report).
 

@@ -25,7 +25,7 @@ if [ -f keys/id_rsa ]; then
   exit 0
 fi
 
-ssh-keygen -t ed25519 -f keys/id_rsa -N "" -C "roomsync-ansible-demo"
+ssh-keygen -t ed25519 -f keys/id_rsa -N "" -C "roomfit-ansible-demo"
 chmod 600 keys/id_rsa
 chmod 644 keys/id_rsa.pub
 

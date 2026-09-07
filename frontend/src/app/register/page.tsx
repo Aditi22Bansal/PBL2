@@ -83,7 +83,7 @@ export default function RegisterPage() {
               Create Your Organization
             </h1>
             <p className="text-slate-500 text-sm text-center leading-relaxed mb-8 px-2">
-              Set up RoomSync for your institution. Your email domain becomes the gate for
+              Set up RoomFit for your institution. Your email domain becomes the gate for
               everyone else who signs in — only your organization&apos;s addresses will be accepted.
             </p>
 

@@ -138,7 +138,7 @@ export default function AdminAllocations() {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.text('RoomSync — Hostel Room Allocation Report', 14, 14);
+    doc.text('RoomFit — Hostel Room Allocation Report', 14, 14);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(`Generated: ${now}  |  Total Rooms: ${allocations.length}  |  Unassigned: ${unassigned.length}`, 14, 22);
@@ -202,7 +202,7 @@ export default function AdminAllocations() {
             doc.setFontSize(8);
             doc.setTextColor(150);
             doc.text(
-                `Page ${data.pageNumber} of ${pageCount}  —  Hostel Allocation System  —  RoomSync`,
+                `Page ${data.pageNumber} of ${pageCount}  —  Hostel Allocation System  —  RoomFit`,
                 pageWidth / 2, doc.internal.pageSize.getHeight() - 8,
                 { align: 'center' }
             );

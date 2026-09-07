@@ -229,7 +229,7 @@ export default function AdminDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `RoomSync_Allotments_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `RoomFit_Allotments_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -311,7 +311,7 @@ export default function AdminDashboard() {
             <Home className="text-white w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-extrabold text-slate-800 tracking-tight text-lg">RoomSync Console</h1>
+            <h1 className="font-extrabold text-slate-800 tracking-tight text-lg">RoomFit Console</h1>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Admin Management portal</p>
           </div>
         </div>

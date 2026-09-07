@@ -262,7 +262,7 @@ under a sustained-concurrency synthetic load. Real production traffic against th
 specific project — an admin clicking "trigger allocation" — is bursty and low-volume
 (one request per org, occasionally), not 40 concurrent long-lived connections; the
 uneven per-pod load distribution noted above is a property of *this load test's shape*,
-not evidence against the architecture. For RoomSync's actual real-world traffic
+not evidence against the architecture. For RoomFit's actual real-world traffic
 pattern, this HPA is more a demonstrated capability than a load this specific app will
 routinely hit — but the point of the original architectural bet was exactly that
 capability existing when it's needed, and it does.

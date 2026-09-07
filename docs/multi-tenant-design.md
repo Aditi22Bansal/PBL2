@@ -1,4 +1,4 @@
-# RoomSync: Multi-Tenant + Hard-Constraint Allocation — Design Proposal
+# RoomFit: Multi-Tenant + Hard-Constraint Allocation — Design Proposal
 
 **Status:** Proposal for review. Nothing in this document has been implemented — no
 application code was changed to produce it. All line references are to the codebase

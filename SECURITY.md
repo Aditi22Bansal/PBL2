@@ -1,6 +1,6 @@
 # Security
 
-RoomSync is an academic project (BTech PBL), not a live public product — this document
+RoomFit is an academic project (BTech PBL), not a live public product — this document
 is written with that in mind. It's a factual record of the two real vulnerabilities
 found and fixed during development, the one known-but-currently-safe limitation, and
 how tenant data isolation is enforced, plus how to flag something if you find it.

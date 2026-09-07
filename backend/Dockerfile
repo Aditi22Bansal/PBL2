@@ -1,4 +1,4 @@
-# RoomSync — Node/Express backend (REST architecture: talks to python-service over HTTP,
+# RoomFit — Node/Express backend (REST architecture: talks to python-service over HTTP,
 # not by spawning a subprocess — see services/allocationService.js).
 FROM node:20-alpine
 

@@ -10,7 +10,7 @@ data:
   dashboard-provider.yml: |
     apiVersion: 1
     providers:
-      - name: RoomSync
+      - name: RoomFit
         orgId: 1
         folder: ""
         type: file

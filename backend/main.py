@@ -16,7 +16,7 @@ from repositories.csv_repo import CSVRepository
 from ml_engine.matcher_greedy import run_greedy_allocation_for_gender, run_ablation_study, run_relaxed_allocation
 from ml_engine.executor import compute_allocation
 
-app = FastAPI(title="RoomSync Allocation Engine")
+app = FastAPI(title="RoomFit Allocation Engine")
 
 # No browser ever calls this service directly (only the Node backend, server-to-server,
 # which isn't subject to CORS at all) - so the safe default is no allowed origins unless

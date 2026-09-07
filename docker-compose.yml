@@ -1,4 +1,4 @@
-# RoomSync — full stack via Docker Compose (REST architecture: backend <-HTTP-> python-service,
+# RoomFit — full stack via Docker Compose (REST architecture: backend <-HTTP-> python-service,
 # not the legacy subprocess path - see backend/services/allocationService.js).
 #
 # Host ports default EXACTLY to what's normally used locally (3000/5000/8000/27017), via

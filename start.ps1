@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    One-command launcher for the RoomSync Docker Compose stack (frontend, backend,
+    One-command launcher for the RoomFit Docker Compose stack (frontend, backend,
     python-service, mongo).
 
 .DESCRIPTION
@@ -14,7 +14,7 @@
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "== RoomSync launcher ==" -ForegroundColor Cyan
+Write-Host "== RoomFit launcher ==" -ForegroundColor Cyan
 Write-Host ""
 
 # --- Step 1: Docker Desktop running? ---
