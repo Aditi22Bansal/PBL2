@@ -91,9 +91,13 @@ export const questionnaireSteps: QuestionnaireStep[] = [
     ]
   },
   {
+    // Was one 14-question "Lifestyle & Daily Routine" step - a real wall of
+    // inputs on one screen. Split into three thematic steps (this one plus
+    // stepIndex 3 and 4 below) purely for UI pacing; the field set, ids, and
+    // validation are unchanged, so the submitted payload shape is identical.
     stepIndex: 2,
-    title: "Lifestyle & Daily Routine",
-    description: "Help us understand your day-to-day habits in the hostel.",
+    title: "Sleep & Study Routine",
+    description: "Help us understand your daily schedule.",
     questions: [
       {
         id: "sleep_time",
@@ -112,14 +116,6 @@ export const questionnaireSteps: QuestionnaireStep[] = [
         validationError: "Please select your usual wake-up time."
       },
       {
-        id: "cleanliness",
-        label: "How clean do you keep your room?",
-        type: "select",
-        options: ["Messy", "Average", "Moderately Clean", "Very Clean"],
-        required: true,
-        validationError: "Please select your cleanliness level."
-      },
-      {
         id: "study_env",
         label: "Preferred Study Environment",
         type: "select",
@@ -127,6 +123,29 @@ export const questionnaireSteps: QuestionnaireStep[] = [
         required: true,
         validationError: "Please select your study environment preference."
       },
+      {
+        id: "study_hours",
+        label: "Study hours per day",
+        type: "select",
+        options: ["0-2", "2-4", "4-6", "6+"],
+        required: true,
+        validationError: "Please select study hours."
+      },
+      {
+        id: "temp_preference",
+        label: "Room Temperature Preference",
+        type: "select",
+        options: ["Cold", "Moderate", "Warm"],
+        required: true,
+        validationError: "Please select temperature preference."
+      }
+    ]
+  },
+  {
+    stepIndex: 3,
+    title: "Habits & Social Life",
+    description: "A few honest habits that affect roommate compatibility.",
+    questions: [
       {
         id: "guest_frequency",
         label: "How frequently do you expect guests/friends in the room?",
@@ -160,36 +179,35 @@ export const questionnaireSteps: QuestionnaireStep[] = [
         validationError: "Please select alarm preference."
       },
       {
-        id: "first_time_hostel",
-        label: "Is this your first time living in a hostel?",
-        type: "radio",
-        options: ["No", "Yes"],
-        required: true,
-        validationError: "Please select this option."
-      },
-      {
-        id: "temp_preference",
-        label: "Room Temperature Preference",
-        type: "select",
-        options: ["Cold", "Moderate", "Warm"],
-        required: true,
-        validationError: "Please select temperature preference."
-      },
-      {
-        id: "study_hours",
-        label: "Study hours per day",
-        type: "select",
-        options: ["0-2", "2-4", "4-6", "6+"],
-        required: true,
-        validationError: "Please select study hours."
-      },
-      {
         id: "active_late",
         label: "Are you active late at night (calls, laptop, etc.)?",
         type: "radio",
         options: ["No", "Rarely", "Yes"],
         required: true,
         validationError: "Please select late night activity status."
+      }
+    ]
+  },
+  {
+    stepIndex: 4,
+    title: "Living Style",
+    description: "How you keep and share your space.",
+    questions: [
+      {
+        id: "cleanliness",
+        label: "How clean do you keep your room?",
+        type: "select",
+        options: ["Messy", "Average", "Moderately Clean", "Very Clean"],
+        required: true,
+        validationError: "Please select your cleanliness level."
+      },
+      {
+        id: "first_time_hostel",
+        label: "Is this your first time living in a hostel?",
+        type: "radio",
+        options: ["No", "Yes"],
+        required: true,
+        validationError: "Please select this option."
       },
       {
         id: "conflict_style",
@@ -215,7 +233,7 @@ export const questionnaireSteps: QuestionnaireStep[] = [
     ]
   },
   {
-    stepIndex: 3,
+    stepIndex: 5,
     title: "Personality Traits",
     description: "Rate yourself on the following behavioral scales (1 = Strongly Disagree/Low, 5 = Strongly Agree/High).",
     questions: [
@@ -276,7 +294,7 @@ export const questionnaireSteps: QuestionnaireStep[] = [
     ]
   },
   {
-    stepIndex: 4,
+    stepIndex: 6,
     title: "Preferred Roommate",
     description: "What are you looking for in an ideal roommate?",
     questions: [

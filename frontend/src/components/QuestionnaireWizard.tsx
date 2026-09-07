@@ -11,6 +11,13 @@ interface QuestionnaireWizardProps {
   onSubmitSuccess: () => void;
 }
 
+// Derived from the config, not hardcoded - questionnaireSteps was split from
+// 5 steps into 7 (see questionnaireConfig.ts) specifically so no single step
+// shows a wall of inputs; hardcoding the old "5" here would have silently
+// broken navigation instead of just looking wrong.
+const REVIEW_STEP = questionnaireSteps.length + 1;
+const TOTAL_STEPS = REVIEW_STEP;
+
 export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<any>({
@@ -121,7 +128,7 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
 
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep((prev) => Math.min(prev + 1, 5));
+      setCurrentStep((prev) => Math.min(prev + 1, TOTAL_STEPS));
     }
   };
 
@@ -145,7 +152,7 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
   const handleSubmit = async () => {
     // Validate all steps first
     let allValid = true;
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i < REVIEW_STEP; i++) {
       if (!validateStep(i)) {
         allValid = false;
         setCurrentStep(i); // Go to the first step with error
@@ -176,14 +183,14 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
     switch (q.type) {
       case "checkbox":
         return (
-          <label className="flex items-start gap-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-100/50 transition-colors">
+          <label className="flex items-start gap-4 p-4 bg-stone-50 border border-stone-200 rounded-2xl cursor-pointer hover:bg-stone-100/60 transition-colors">
             <input
               type="checkbox"
               checked={!!value}
               onChange={(e) => handleChange(q.id, e.target.checked)}
-              className="mt-1 w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+              className="mt-1 w-5 h-5 rounded text-teal-700 focus:ring-teal-600 border-stone-300"
             />
-            <span className="text-slate-600 text-sm leading-relaxed">{q.label}</span>
+            <span className="text-stone-700 text-sm leading-relaxed">{q.label}</span>
           </label>
         );
 
@@ -192,7 +199,7 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
           <select
             value={value || ""}
             onChange={(e) => handleChange(q.id, e.target.value)}
-            className={`w-full bg-slate-50 border ${hasError ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'} rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none transition-all`}
+            className={`w-full bg-stone-50 border ${hasError ? 'border-red-300 focus:border-red-500' : 'border-stone-200 focus:border-teal-600'} rounded-xl px-4 py-3 text-sm text-stone-800 focus:outline-none transition-all`}
           >
             <option value="" disabled>Select option...</option>
             {q.options?.map((opt) => (
@@ -211,8 +218,8 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
                 onClick={() => handleChange(q.id, opt)}
                 className={`px-5 py-3 rounded-xl border text-sm font-semibold transition-all ${
                   value === opt
-                    ? "bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-100"
-                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                    ? "bg-teal-700 border-teal-700 text-white shadow-sm shadow-teal-900/15"
+                    : "bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100"
                 }`}
               >
                 {opt}
@@ -225,9 +232,9 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
         return (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Strongly Disagree</span>
-              <span className="text-2xl font-black text-blue-600">{value}</span>
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Strongly Agree</span>
+              <span className="text-xs text-stone-600 font-bold uppercase tracking-wider">Strongly Disagree</span>
+              <span className="text-2xl font-black text-teal-700">{value}</span>
+              <span className="text-xs text-stone-600 font-bold uppercase tracking-wider">Strongly Agree</span>
             </div>
             <input
               type="range"
@@ -236,7 +243,7 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
               step={q.step || 1}
               value={value || 3}
               onChange={(e) => handleChange(q.id, parseInt(e.target.value))}
-              className="w-full h-2 bg-slate-150 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              className="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-teal-700"
             />
           </div>
         );
@@ -250,21 +257,21 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
             placeholder={q.placeholder}
             value={value || ""}
             onChange={(e) => handleChange(q.id, e.target.value)}
-            className={`w-full bg-slate-50 border ${hasError ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'} rounded-xl px-4 py-3.5 text-sm text-slate-800 focus:outline-none transition-all placeholder:text-slate-400`}
+            className={`w-full bg-stone-50 border ${hasError ? 'border-red-300 focus:border-red-500' : 'border-stone-200 focus:border-teal-600'} rounded-xl px-4 py-3.5 text-sm text-stone-800 focus:outline-none transition-all placeholder:text-stone-600`}
           />
         );
     }
   };
 
-  // Render Step 5 (Review and Submit)
+  // Render the final review-and-submit step
   const renderReviewStep = () => {
     return (
       <div className="space-y-8">
-        <div className="bg-blue-50/50 border border-blue-100 rounded-3xl p-6">
-          <h3 className="text-lg font-bold text-blue-800 mb-2 flex items-center gap-2">
+        <div className="bg-teal-50 border border-teal-200 rounded-3xl p-6">
+          <h3 className="text-lg font-bold text-teal-900 mb-2 flex items-center gap-2">
             <AlertCircle className="w-5 h-5" /> Please review your responses
           </h3>
-          <p className="text-blue-700 text-sm leading-relaxed">
+          <p className="text-teal-800 text-sm leading-relaxed">
             Ensure all answers are accurate before submitting. Once submitted, your profile will be frozen for matching. You can click any card&apos;s title to edit that section.
           </p>
         </div>
@@ -274,19 +281,19 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
             <div
               key={step.stepIndex}
               onClick={() => setCurrentStep(step.stepIndex)}
-              className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:border-blue-300 transition-all cursor-pointer group relative"
+              className="glass-card rounded-[2rem] p-6 hover:border-teal-300 transition-all cursor-pointer group relative"
             >
-              <div className="absolute top-4 right-4 text-xs font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute top-4 right-4 text-xs font-bold text-teal-700 opacity-0 group-hover:opacity-100 transition-opacity">
                 Edit Section →
               </div>
-              <h4 className="font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">
+              <h4 className="font-bold text-stone-800 mb-4 border-b border-stone-200 pb-2">
                 Step {step.stepIndex}: {step.title}
               </h4>
               <div className="space-y-2">
                 {step.questions.map((q) => (
                   <div key={q.id} className="flex justify-between items-start gap-4 text-xs">
-                    <span className="text-slate-500 font-medium">{q.label.split(" (")[0]}</span>
-                    <span className="text-slate-800 font-bold text-right shrink-0">
+                    <span className="text-stone-600 font-medium">{q.label.split(" (")[0]}</span>
+                    <span className="text-stone-800 font-bold text-right shrink-0">
                       {q.id === "consent" ? "Consented" : String(formData[q.id] || "Not answered")}
                     </span>
                   </div>
@@ -299,45 +306,41 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
     );
   };
 
-  const progressPct = ((currentStep - 1) / 4) * 100;
   const currentStepDef = questionnaireSteps.find((s) => s.stepIndex === currentStep);
+  const isReview = currentStep === REVIEW_STEP;
 
   return (
     <div className="w-full space-y-8 max-w-4xl mx-auto">
       {/* Top Wizard Indicator */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center font-black text-blue-600 text-lg">
-            {currentStep}/5
-          </div>
+      <div className="glass-card rounded-3xl p-6 space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h2 className="font-bold text-slate-800 text-lg">
-              {currentStep === 5 ? "Submit & Finalize" : currentStepDef?.title}
+            <p className="text-xs font-bold text-teal-700 uppercase tracking-widest">
+              Step {currentStep} of {TOTAL_STEPS}
+            </p>
+            <h2 className="font-bold text-stone-800 text-lg mt-0.5">
+              {isReview ? "Submit & Finalize" : currentStepDef?.title}
             </h2>
-            <p className="text-slate-500 text-xs mt-0.5">
-              {currentStep === 5 ? "Verify all details and submit your application." : currentStepDef?.description}
+            <p className="text-stone-600 text-xs mt-0.5">
+              {isReview ? "Verify all details and submit your application." : currentStepDef?.description}
             </p>
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="flex-1 max-w-[200px] md:max-w-[300px]">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-1.5">
-            <span>Overall Progress</span>
-            <span>{Math.round(progressPct)}%</span>
-          </div>
-          <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden border border-slate-250/30">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${progressPct}%` }}
-              className="bg-blue-600 h-full rounded-full"
+        {/* Segmented step indicator - reads clearly at 7 steps without the
+            wall-of-numbers a full numbered stepper would need at this count. */}
+        <div className="flex items-center gap-1.5" role="progressbar" aria-valuenow={currentStep} aria-valuemin={1} aria-valuemax={TOTAL_STEPS}>
+          {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((step) => (
+            <div
+              key={step}
+              className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${step <= currentStep ? "bg-teal-600" : "bg-stone-200"}`}
             />
-          </div>
+          ))}
         </div>
       </div>
 
       {/* Main Form Content */}
-      <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 md:p-12 shadow-sm min-h-[400px] flex flex-col justify-between">
+      <div className="glass-card rounded-[2.5rem] p-8 md:p-12 min-h-[400px] flex flex-col justify-between">
         <AnimatePresence mode="wait">
           <motion.div
             key={currentStep}
@@ -347,13 +350,13 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
             transition={{ duration: 0.25 }}
             className="space-y-8 flex-1"
           >
-            {currentStep === 5 ? (
+            {isReview ? (
               renderReviewStep()
             ) : (
               <div className="space-y-6">
                 {currentStepDef?.questions.map((q) => (
                   <div key={q.id} className="space-y-2">
-                    <label className="block text-sm font-bold text-slate-700 ml-1">
+                    <label className="block text-sm font-bold text-stone-700 ml-1">
                       {q.label} {q.required && <span className="text-red-500">*</span>}
                     </label>
                     <div className="relative">
@@ -373,30 +376,30 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
         </AnimatePresence>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 pt-8 mt-12 gap-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between border-t border-stone-200 pt-8 mt-12 gap-4">
           <div className="flex gap-3">
             <button
               onClick={handlePrev}
               disabled={currentStep === 1}
-              className="px-5 py-3 border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold rounded-xl text-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              className="px-5 py-3 border border-stone-300 hover:bg-stone-50 text-stone-700 font-semibold rounded-xl text-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
             >
               <ChevronLeft className="w-4 h-4" /> Previous
             </button>
-            
-            {currentStep < 5 && (
+
+            {!isReview && (
               <button
                 onClick={handleNext}
-                className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all flex items-center gap-1.5 shadow-md shadow-blue-150"
+                className="px-5 py-3 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-sm transition-all flex items-center gap-1.5 shadow-md shadow-teal-900/15"
               >
                 Next <ChevronRight className="w-4 h-4" />
               </button>
             )}
 
-            {currentStep === 5 && (
+            {isReview && (
               <button
                 onClick={handleSubmit}
                 disabled={submitStatus === "submitting" || submitStatus === "success"}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all flex items-center gap-1.5 shadow-md shadow-blue-150 disabled:opacity-50"
+                className="px-6 py-3 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-sm transition-all flex items-center gap-1.5 shadow-md shadow-teal-900/15 disabled:opacity-50"
               >
                 {submitStatus === "submitting" ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -412,12 +415,12 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
 
           <div className="flex items-center gap-3">
             {saveStatus === "saved" && (
-              <span className="text-emerald-600 text-xs font-bold flex items-center gap-1 bg-emerald-50 border border-emerald-250/20 px-3 py-1.5 rounded-lg">
+              <span className="text-emerald-700 text-xs font-bold flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Draft Saved
               </span>
             )}
             {saveStatus === "error" && (
-              <span className="text-red-600 text-xs font-bold flex items-center gap-1 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg">
+              <span className="text-red-700 text-xs font-bold flex items-center gap-1 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg">
                 <AlertCircle className="w-3.5 h-3.5" /> Save Failed
               </span>
             )}
@@ -425,7 +428,7 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
             <button
               onClick={handleSaveDraft}
               disabled={saveStatus === "saving"}
-              className="px-5 py-3 border border-slate-200 hover:bg-slate-50 text-slate-500 font-semibold rounded-xl text-sm transition-all flex items-center gap-2"
+              className="px-5 py-3 border border-stone-300 hover:bg-stone-50 text-stone-600 font-semibold rounded-xl text-sm transition-all flex items-center gap-2"
               title="Save draft and resume later"
             >
               <Save className="w-4 h-4" />

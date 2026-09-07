@@ -39,7 +39,7 @@ export default function HeroVisual() {
           Same principle as the 3D->static fallback: a clean, simpler mobile
           view beats a cluttered attempt at the full desktop composition. */}
       <div className="hidden sm:block absolute left-2 top-[14%] glass-card rounded-2xl px-4 py-3 shadow-xl shadow-stone-900/10 animate-[float_6s_ease-in-out_infinite]">
-        <p className="text-[10px] uppercase tracking-wider text-stone-500 font-medium">Room 204</p>
+        <p className="text-[10px] uppercase tracking-wider text-stone-600 font-medium">Room 204</p>
         <p className="text-sm font-semibold text-stone-800 mt-0.5">4 beds · Block A</p>
       </div>
 
@@ -50,7 +50,7 @@ export default function HeroVisual() {
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center text-[10px] sm:text-[11px] font-bold text-white flex-shrink-0">98%</div>
           <div>
-            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-stone-500 font-medium">Match score</p>
+            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-stone-600 font-medium">Match score</p>
             <p className="text-[11px] sm:text-xs font-medium text-stone-700">Great fit</p>
           </div>
         </div>
