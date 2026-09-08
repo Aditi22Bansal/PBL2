@@ -73,61 +73,61 @@ export default function StudentRequestPage() {
       }
   }
 
-  if (status === "loading" || !allocation) return <div className="min-h-screen bg-[#F7F4EE]" />;
+  if (status === "loading" || !allocation) return <div className="min-h-screen bg-stone-50" />;
 
   return (
-    <div className="min-h-screen bg-[#F7F4EE] font-['Outfit'] text-[#1A2820] flex justify-center p-6 md:p-[6vw] pb-20">
+    <div className="min-h-screen bg-stone-50 text-stone-800 flex justify-center p-6 md:p-[6vw] pb-20">
 
-        <motion.div 
+        <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-full max-w-5xl bg-white rounded-[20px] p-10 md:p-14 border border-[#1A3A2A]/10 shadow-[0_8px_40px_rgba(26,56,42,0.07)] relative z-10"
+            className="w-full max-w-5xl glass-card rounded-[2rem] p-10 md:p-14 relative z-10"
         >
-            <button onClick={() => router.push('/student')} className="flex items-center gap-2 text-[#7A9088] hover:text-[#1A3A2A] font-medium transition-colors mb-8 text-sm">
+            <button onClick={() => router.push('/student')} className="flex items-center gap-2 text-stone-600 hover:text-stone-800 font-medium transition-colors mb-8 text-sm">
                 <ArrowLeft size={16}/> Back to Dashboard
             </button>
 
-            <h1 className="text-4xl font-['Cormorant_Garamond'] font-semibold text-[#1A3A2A] mb-3 leading-tight">Request Room Change</h1>
-            <p className="text-[#3A4F44] mb-8 font-light">Current Assignment: <span className="text-[#C4613A] font-medium bg-[#FAF0EB] px-2 py-0.5 rounded-md border border-[#C4613A]/20">{allocation.room_number}</span> (Block {allocation.block})</p>
+            <h1 className="text-4xl font-semibold text-stone-900 mb-3 leading-tight">Request Room Change</h1>
+            <p className="text-stone-600 mb-8">Current Assignment: <span className="text-orange-800 font-medium bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200">{allocation.room_number}</span> (Block {allocation.block})</p>
 
             {success ? (
-                <div className="bg-[#EBF4EF] border border-[#7BAE94]/30 text-[#2E6347] p-8 rounded-2xl text-center">
-                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border border-[#7BAE94]/20 shadow-sm">
-                        <Check size={20} className="text-[#2E6347]" />
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-8 rounded-2xl text-center">
+                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-200 shadow-sm">
+                        <Check size={20} className="text-emerald-700" />
                     </div>
                     Your request has been successfully submitted to the administration. You will be notified of any structural changes on your dashboard.
                 </div>
             ) : (
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="bg-[#FAF0EB] border border-[#C4613A]/20 p-5 rounded-2xl flex items-start gap-4">
-                        <AlertTriangle className="text-[#C4613A] shrink-0 mt-0.5" size={20} />
-                        <p className="text-[13px] text-[#C4613A]/90 font-medium leading-relaxed">Room changes are subject to availability and administration approval. Only submit a request if you have a valid, irreconcilable reason.</p>
+                    <div className="bg-orange-50 border border-orange-200 p-5 rounded-2xl flex items-start gap-4">
+                        <AlertTriangle className="text-orange-700 shrink-0 mt-0.5" size={20} />
+                        <p className="text-[13px] text-orange-800 font-medium leading-relaxed">Room changes are subject to availability and administration approval. Only submit a request if you have a valid, irreconcilable reason.</p>
                     </div>
 
                     <div>
-                        <label className="block text-[#1A3A2A] mb-2 font-medium">What are you requesting?</label>
+                        <label className="block text-stone-800 mb-2 font-medium">What are you requesting?</label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <button
                                 type="button"
                                 onClick={() => setRequestType("GENERAL")}
-                                className={`text-left p-4 rounded-xl border transition-all ${requestType === "GENERAL" ? "bg-[#FAF0EB] border-[#C4613A]/40" : "bg-[#F7F4EE] border-[#1A3A2A]/10 hover:border-[#1A3A2A]/20"}`}
+                                className={`text-left p-4 rounded-xl border transition-all ${requestType === "GENERAL" ? "bg-orange-50 border-orange-300" : "bg-stone-50 border-stone-200 hover:border-stone-300"}`}
                             >
-                                <div className="font-medium text-[#1A3A2A]">General room change</div>
-                                <div className="text-[12px] text-[#7A9088] mt-1">Roommate conflict, personal reason, etc.</div>
+                                <div className="font-medium text-stone-800">General room change</div>
+                                <div className="text-[12px] text-stone-600 mt-1">Roommate conflict, personal reason, etc.</div>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setRequestType("ACCESSIBILITY")}
-                                className={`text-left p-4 rounded-xl border transition-all ${requestType === "ACCESSIBILITY" ? "bg-[#FAF0EB] border-[#C4613A]/40" : "bg-[#F7F4EE] border-[#1A3A2A]/10 hover:border-[#1A3A2A]/20"}`}
+                                className={`text-left p-4 rounded-xl border transition-all ${requestType === "ACCESSIBILITY" ? "bg-orange-50 border-orange-300" : "bg-stone-50 border-stone-200 hover:border-stone-300"}`}
                             >
-                                <div className="font-medium text-[#1A3A2A]">Ground floor accommodation</div>
-                                <div className="text-[12px] text-[#7A9088] mt-1">Structured accessibility request.</div>
+                                <div className="font-medium text-stone-800">Ground floor accommodation</div>
+                                <div className="text-[12px] text-stone-600 mt-1">Structured accessibility request.</div>
                             </button>
                         </div>
                     </div>
 
                     <div>
-                        <label className="block text-[#1A3A2A] mb-2 font-medium">
+                        <label className="block text-stone-800 mb-2 font-medium">
                             {requestType === "ACCESSIBILITY" ? "Additional details (optional)" : "Reason for change"}
                         </label>
                         <textarea
@@ -136,14 +136,14 @@ export default function StudentRequestPage() {
                             required={requestType === "GENERAL"}
                             rows={6}
                             placeholder="Please provide a detailed explanation for your request..."
-                            className="w-full bg-[#F7F4EE] border border-[#1A3A2A]/10 rounded-xl p-4 text-[#1A2820] focus:bg-white focus:border-[#C4613A] focus:ring-1 focus:ring-[#C4613A] outline-none transition-all resize-none placeholder:text-[#7A9088]/60"
+                            className="w-full bg-stone-50 border border-stone-200 rounded-xl p-4 text-stone-800 focus:bg-white focus:border-teal-600 focus:ring-1 focus:ring-teal-600 outline-none transition-all resize-none placeholder:text-stone-400"
                         />
                     </div>
 
                     <button
                         type="submit"
                         disabled={submitting || !canSubmit}
-                        className="w-full flex items-center justify-center gap-2 bg-[#C4613A] hover:bg-[#D4784F] hover:-translate-y-[2px] hover:shadow-[0_12px_36px_rgba(196,97,58,0.4)] disabled:opacity-50 disabled:transform-none text-white font-medium py-3.5 rounded-full transition-all shadow-[0_4px_24px_rgba(196,97,58,0.3)]"
+                        className="w-full flex items-center justify-center gap-2 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white font-medium py-3.5 rounded-full transition-all shadow-md shadow-teal-900/15"
                     >
                         {submitting ? <Loader2 className="animate-spin w-5 h-5"/> : <Send className="w-4 h-4 ml-[-4px]" />}
                         Submit Request

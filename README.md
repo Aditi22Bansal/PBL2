@@ -49,6 +49,13 @@ students unplaced.
   manual room swaps and locks, and a structured accommodation-request workflow (an
   admin approving an accessibility request gets shown actual eligible rooms to move the
   student into, not a blank text box).
+- **A real, cohesive UI.** Light theme throughout (landing, student, and admin), built
+  around a documented teal/coral/charcoal palette with every text/background pairing
+  checked against real WCAG contrast math, not eyeballed. The landing page's hero is a
+  genuine Three.js scene with a static SVG fallback under `prefers-reduced-motion`/on
+  narrow or low-power devices; the student dashboard deliberately does not reuse it (see
+  [CLAUDE.md](CLAUDE.md) for the bundle-size reasoning) in favor of a lightweight, real
+  bed-occupancy visualization.
 
 ## Architecture
 
@@ -181,6 +188,10 @@ Minor, low-priority pre-existing issues, tracked here rather than silently fixed
 Real items, not aspirational ones — pulled directly from the project's own tracked
 backlog:
 
+- **Deep admin UX redesign.** The admin pages were brought onto the same light
+  palette as the rest of the app (color/typography only), but sortable/filterable
+  tables, refined data density, and a proper dark mode toggle are a separate,
+  larger redesign effort — deliberately deferred, not forgotten.
 - **Multi-admin invite.** Org onboarding today is founding-admin-only; every
   organization has exactly one admin until an invite flow exists.
 - **Dynamic per-org branch/department list.** The branch dropdown is a static hardcoded

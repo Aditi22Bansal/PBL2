@@ -127,27 +127,27 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
   };
 
   return (
-    <div className="bg-[#F7F4EE] border border-[#1A3A2A]/10 rounded-[20px] overflow-hidden flex flex-col h-[500px]">
+    <div className="glass-card rounded-[2rem] overflow-hidden flex flex-col h-[500px]">
       {/* Header */}
-      <div className="px-6 py-5 bg-white border-b border-[#1A3A2A]/10 flex items-center gap-4">
-        <div className="w-10 h-10 bg-[#EBF4EF] rounded-[10px] flex items-center justify-center">
-          <MessageSquare className="w-5 h-5 text-[#2E6347]" />
+      <div className="px-6 py-5 bg-white/70 border-b border-stone-200 flex items-center gap-4">
+        <div className="w-10 h-10 bg-teal-50 rounded-[10px] flex items-center justify-center">
+          <MessageSquare className="w-5 h-5 text-teal-700" />
         </div>
         <div>
-          <h3 className="font-semibold text-[#1A3A2A] text-[15px]">Private Roommate Chat</h3>
-          <p className="text-[12px] text-[#7A9088] mt-0.5">Only you and your roommates can see this.</p>
+          <h3 className="font-semibold text-stone-800 text-[15px]">Private Roommate Chat</h3>
+          <p className="text-[12px] text-stone-600 mt-0.5">Only you and your roommates can see this.</p>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-[#1A3A2A]/10">
+      <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-stone-300">
         {loading ? (
-          <div className="h-full flex items-center justify-center text-[#7A9088]">
-            <Loader2 className="w-6 h-6 animate-spin text-[#1A3A2A]" />
+          <div className="h-full flex items-center justify-center text-stone-600">
+            <Loader2 className="w-6 h-6 animate-spin text-stone-700" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-[#7A9088]">
-            <div className="w-16 h-16 bg-white border border-[#1A3A2A]/10 rounded-2xl flex items-center justify-center mb-4 text-[#1A3A2A]/20">
+          <div className="h-full flex flex-col items-center justify-center text-stone-600">
+            <div className="w-16 h-16 bg-white border border-stone-200 rounded-2xl flex items-center justify-center mb-4 text-stone-300">
                 <MessageSquare className="w-8 h-8" />
             </div>
             <p className="text-sm">Say hello to your new roommates!</p>
@@ -167,7 +167,7 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
                     className={clsx("flex flex-col w-full", isMe ? "items-end" : "items-start")}
                   >
                     {showHeader && (
-                      <span className="text-[11px] font-medium text-[#7A9088] mb-1.5 ml-1 mr-1">
+                      <span className="text-[11px] font-medium text-stone-600 mb-1.5 ml-1 mr-1">
                         {isMe ? "You" : msg.sender_name}
                       </span>
                     )}
@@ -175,15 +175,15 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
                       className={clsx(
                         "max-w-[75%] px-4 py-3 rounded-[14px]",
                         isMe
-                          ? "bg-[#1A3A2A] text-white rounded-tr-sm"
-                          : "bg-white border border-[#1A3A2A]/10 text-[#3A4F44] rounded-tl-sm shadow-sm"
+                          ? "bg-teal-700 text-white rounded-tr-sm"
+                          : "bg-white border border-stone-200 text-stone-700 rounded-tl-sm shadow-sm"
                       )}
                     >
                       <p className="text-[14px] leading-relaxed">{msg.message}</p>
                       <span
                         className={clsx(
                           "text-[10px] mt-1.5 flex",
-                          isMe ? "text-white/40 justify-end" : "text-[#7A9088] justify-end"
+                          isMe ? "text-white/60 justify-end" : "text-stone-600 justify-end"
                         )}
                       >
                         {formatTime(msg.createdAt)}
@@ -199,11 +199,11 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
       </div>
 
       {/* Input */}
-      <div className="p-4 bg-white border-t border-[#1A3A2A]/10">
+      <div className="p-4 bg-white/70 border-t border-stone-200">
         <form onSubmit={handleSend} className="relative flex items-center">
           <input
             type="text"
-            className="w-full bg-[#F7F4EE] outline-none border border-[#1A3A2A]/10 focus:border-[#C4613A] focus:bg-white transition-all rounded-full py-3.5 pl-6 pr-14 text-[#1A2820] placeholder:text-[#7A9088] text-[14px]"
+            className="w-full bg-stone-50 outline-none border border-stone-200 focus:border-teal-600 focus:bg-white transition-all rounded-full py-3.5 pl-6 pr-14 text-stone-800 placeholder:text-stone-400 text-[14px]"
             placeholder="Type a message..."
             value={newMessage}
             onChange={e => setNewMessage(e.target.value)}
@@ -211,7 +211,7 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
           <button
             type="submit"
             disabled={!newMessage.trim()}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-[#C4613A] hover:bg-[#D4784F] disabled:opacity-50 transition-all rounded-full flex items-center justify-center shadow-md scale-95 hover:scale-100"
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-orange-700 hover:bg-orange-800 disabled:opacity-50 transition-all rounded-full flex items-center justify-center shadow-md scale-95 hover:scale-100"
           >
             <Send className="w-4 h-4 text-white -ml-0.5 mt-0.5" />
           </button>

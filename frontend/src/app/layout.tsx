@@ -4,7 +4,7 @@ import { NextAuthProvider } from "@/components/Providers";
 
 export const metadata: Metadata = {
   title: "RoomFit — Hostel Room Allocation",
-  description: "Advanced AI-powered hostel allocation system for your institution.",
+  description: "Multi-tenant hostel roommate allocation, matched by compatibility.",
 };
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`bg-slate-950 text-slate-50 min-h-screen antialiased`}>
+      <body className={`bg-stone-50 text-stone-800 min-h-screen antialiased`}>
         <NextAuthProvider>
           {children}
         </NextAuthProvider>

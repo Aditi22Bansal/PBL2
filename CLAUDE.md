@@ -311,6 +311,76 @@ timeline, and the honest caveat about uneven per-pod load distribution (a load-t
 connection-affinity artifact, not an HPA/architecture problem):
 [docs/autoscaling.md](docs/autoscaling.md).
 
+## Frontend redesign (done — light theme, Three.js landing hero, student + admin UI unification)
+Shipped on `ahmad-frontend` (three phases: landing, student, admin re-theme), PR into
+`main` pending review as of this commit — see the PR for the exact merge commit once
+it lands.
+
+- **Phase 1 (landing page).** Replaced the old dark-slate-violet system with a light,
+  warm palette — off-white/stone background, teal primary, coral/orange secondary,
+  deep charcoal (stone-800+) text, violet kept only as a rare tertiary accent (one
+  timeline dot in "Our story", nowhere else). The Three.js hero (`HeroScene3D.tsx`)
+  was re-lit and recolored for the new light backdrop, not just recolored via CSS —
+  ambient/directional intensity, contact-shadow color, and room material palette all
+  changed; its `HeroSceneFallback.tsx` static SVG (shown under
+  `prefers-reduced-motion`, on narrow viewports, or low core-count devices) was
+  rebuilt to match, so it's never a leftover dark-themed fallback. Added "For
+  Students"/"For Admins"/"Our story" sections grounded in this project's real
+  history and features — no fabricated social proof, no logos/testimonials/press
+  mentions.
+- **Phase 2 (student).** `/student`, `/student/request`, `QuestionnaireWizard`, and
+  `RoomChat` rebuilt onto the same palette. Dashboard hierarchy reordered so room
+  assignment is the clear hero moment (real bed-occupancy visual, match/stability
+  rings as supporting evidence, then roommates, then Why-We-Matched/Things-to-
+  Discuss, then chat, then actions) — every existing entry point (preference-
+  satisfaction notes, change-request flow, accessibility flow) still works
+  unchanged. `QuestionnaireWizard` split from 5 steps to 7 (the old 14-question
+  "Lifestyle & Daily Routine" step was a real wall of inputs) with a segmented step
+  indicator; step count is now derived from `questionnaireConfig.ts` rather than
+  hardcoded. `/student/request` and `RoomChat` had drifted onto a third, completely
+  separate cream/terracotta/forest-green "editorial" theme with `font-['Outfit']`/
+  `font-['Cormorant_Garamond']` classes that were never actually loaded anywhere
+  (confirmed — no `@font-face`/Google Fonts link existed for either, so they were
+  silently falling back to the default sans-serif the whole time) — unified onto the
+  shared palette, dead font classes removed.
+- **Deliberate call: no Three.js on the dashboard.** The landing hero's 942.5KB
+  Three.js chunk is a one-time, once-per-session cost a marketing page can justify;
+  a dashboard is visited every login, often as the very first page a session loads
+  (never having passed through the landing page at all), so the same cost would be
+  paid repeatedly for a smaller payoff. `RoomOccupancyVisual.tsx` is a small, data-
+  driven 2D SVG instead — real bed-by-bed occupancy from the actual
+  `room_capacity`/roommates data, zero bundle cost, no reduced-motion/mobile
+  fallback needed because there's nothing heavy to fall back from. Confirmed via
+  build output that the Three.js chunk exists in exactly one chunk (the landing
+  page's) both before and after this work.
+- **Admin re-theme (color/typography only, zero functional or layout change).**
+  `/admin`, `/admin/allocations`, `/admin/requests`, and the Hostel Configuration
+  form's separate `--color-primary-*`/`--color-neutral-*` pilot tokens (see
+  `globals.css` — previously an independent violet/slate scale, formalized early on
+  and never revisited) all swapped onto the same shared palette. This retires the
+  third distinct color system this app had accumulated (violet/blue/indigo/pink
+  admin classes, the pilot tokens, and the terracotta/forest-green pages) down to
+  one. Every admin page verified functionally identical afterward: trigger-
+  allocation, CSV sync, hostel-config create/edit, room lock/unlock, manual swap,
+  request approve/reject, the accommodation eligible-rooms flow, and audit-log
+  access all still work. One real bug found and fixed along the way (not
+  introduced by this pass, but caught by it): a "Good" conflict-risk badge used
+  white text on `emerald-500` (2.54:1, well under the 4.5:1 floor this app holds
+  everywhere else) — bumped to `emerald-700` (5.48:1). A second issue, this one
+  self-inflicted by the recolor script: a hardcoded hex color array feeding an
+  inline SVG donut chart had its *comment* text auto-corrected by a blanket find/
+  replace pass (the comment literally said `// teal-700` while the code next to it
+  still held the old violet hex) without the actual color value being touched —
+  found by screenshot review, fixed, and swept for other instances of the same
+  class of mistake (any raw hex value a class-name-based find/replace can't see).
+- **Contrast discipline.** Every text/background pairing introduced across all
+  three phases was checked with real WCAG contrast math (a small Node script using
+  the standard relative-luminance formula), not eyeballed — this project shipped a
+  real invisible-text bug once already from exactly this kind of theme change.
+  Caught and fixed several near-miss pairings along the way (e.g. `stone-500` at
+  4.56:1, `orange-700` on `orange-100` at 4.52:1) by standardizing on `stone-600`/
+  `-700`-weight-or-darker as the real floor rather than the bare legal minimum.
+
 ## Recently added (features)
 - In-app notifications for room allocation. Socket.IO now has a per-student channel 
   (`join_user` -> room `user:<email>`) alongside the existing chat `join_room`, because 
@@ -333,6 +403,13 @@ connection-affinity artifact, not an HPA/architecture problem):
   just a room number — but it MUST be authenticated before anything sensitive goes on it.
 
 ## Backlog (deferred, not attempted)
+- Deep admin UX redesign — sortable/filterable tables (today's admin tables are
+  dense but not sortable beyond the existing search/risk/occupancy filters),
+  refined data density for the analytics dashboard, and a proper dark mode toggle.
+  Originally scoped as Phase 3 of the frontend redesign; deliberately deferred, not
+  forgotten — the admin re-theme done in this pass was a color/typography swap
+  onto the shared palette specifically to avoid scope-creeping into this larger,
+  separate redesign effort.
 - Branch dropdown (`frontend/src/lib/questionnaireConfig.ts`) is a static hardcoded list 
   (CSE/AIML/RNA/MECHANICAL/ENTC/CIVIL) with zero algorithm coupling (matcher_greedy.py only 
   ever compares branch for equality, never against a specific value) - purely a frontend 
