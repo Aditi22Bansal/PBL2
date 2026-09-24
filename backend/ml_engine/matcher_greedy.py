@@ -81,6 +81,29 @@ def expand_oversized_templates(room_templates, max_size=MAX_EFFECTIVE_ROOM_SIZE)
     return expanded
 
 
+# ================== SCALABILITY CONFIG ==================
+# Full N x N cosine matrix + sorted-pair list is fine for ~108 profiles but
+# blows up for 20k (20k^2 = 400M floats ~3.2GB + 200M sorted pairs). Above
+# this threshold we switch to a row-wise scalable path with no full matrix.
+LARGE_N_THRESHOLD = 2500
+SCALABLE_BATCH = 1000
+LOCAL_SEARCH_MAX_ROOMS = 500  # above this, sample room pairs instead of O(R^2)
+
+_FREQ_MAP = {"No": 0, "Rarely": 1, "Occasionally": 2, "Weekly": 3, "Frequently": 4, "Yes": 4}
+
+
+def _smoke_drink_arrays(profiles):
+    smoke = np.array([_FREQ_MAP.get(p.smoking_habit, 0) for p in profiles], dtype=np.int8)
+    drink = np.array([_FREQ_MAP.get(p.drinking_habit, 0) for p in profiles], dtype=np.int8)
+    return smoke, drink
+
+
+def _hard_conflict_mask(smoke, drink):
+    # Vectorized: (n,n) bool via broadcasting. Caller should only use this
+    # for n <= LARGE_N_THRESHOLD (6.25M bools ~6MB, fine). Never for 20k.
+    return (np.abs(smoke[:, None] - smoke[None, :]) >= 3) | (np.abs(drink[:, None] - drink[None, :]) >= 3)
+
+
 # ================== LOCAL SEARCH ==================
 
 def improve_allocations_local_search(allocations, profiles, sim_matrix):
@@ -107,41 +130,65 @@ def improve_allocations_local_search(allocations, profiles, sim_matrix):
                     return False
         return True
 
+    # O(R^2) room-pair scan kills large runs (6.6k rooms = 22M pairs).
+    # Cap the pairs examined per pass via sampling; small runs unaffected.
+    import random as _rand
+    id_to_index = {p.user_id: k for k, p in enumerate(profiles)}
+    num_rooms = len(allocations)
+    if num_rooms > LOCAL_SEARCH_MAX_ROOMS:
+        max_pairs = LOCAL_SEARCH_MAX_ROOMS * 4
+        pair_sample = set()
+        attempts = 0
+        while len(pair_sample) < max_pairs and attempts < max_pairs * 5:
+            a = _rand.randrange(num_rooms)
+            b = _rand.randrange(num_rooms)
+            attempts += 1
+            if a == b:
+                continue
+            if a > b:
+                a, b = b, a
+            pair_sample.add((a, b))
+        room_pairs = sorted(pair_sample)
+    else:
+        room_pairs = [(i, j) for i in range(num_rooms) for j in range(i + 1, num_rooms)]
+
     while improved and passes < 5:
         improved = False
         passes += 1
 
-        for i in range(len(allocations)):
-            for j in range(i + 1, len(allocations)):
-                if abs(allocations[i]["compatibility_score"] - allocations[j]["compatibility_score"]) < 0.05:
-                    continue
+        for i, j in room_pairs:
+            if abs(allocations[i]["compatibility_score"] - allocations[j]["compatibility_score"]) < 0.05:
+                continue
 
-                room1 = allocations[i]["members"]
-                room2 = allocations[j]["members"]
+            room1 = allocations[i]["members"]
+            room2 = allocations[j]["members"]
 
-                for a in range(len(room1)):
-                    for b in range(len(room2)):
+            for a in range(len(room1)):
+                for b in range(len(room2)):
 
-                        new_room1 = room1.copy()
-                        new_room2 = room2.copy()
+                    new_room1 = room1.copy()
+                    new_room2 = room2.copy()
 
-                        new_room1[a], new_room2[b] = new_room2[b], new_room1[a]
+                    new_room1[a], new_room2[b] = new_room2[b], new_room1[a]
 
-                        idx1 = [next(k for k, p in enumerate(profiles) if p.user_id == uid) for uid in new_room1]
-                        idx2 = [next(k for k, p in enumerate(profiles) if p.user_id == uid) for uid in new_room2]
+                    try:
+                        idx1 = [id_to_index[uid] for uid in new_room1]
+                        idx2 = [id_to_index[uid] for uid in new_room2]
+                    except KeyError:
+                        continue
 
-                        if not is_valid_room(idx1) or not is_valid_room(idx2):
-                            continue
+                    if not is_valid_room(idx1) or not is_valid_room(idx2):
+                        continue
 
-                        old_score = allocations[i]["compatibility_score"] + allocations[j]["compatibility_score"]
-                        new_score = calculate_room_score(idx1) + calculate_room_score(idx2)
+                    old_score = allocations[i]["compatibility_score"] + allocations[j]["compatibility_score"]
+                    new_score = calculate_room_score(idx1) + calculate_room_score(idx2)
 
-                        if new_score > old_score:
-                            allocations[i]["members"] = new_room1
-                            allocations[j]["members"] = new_room2
-                            allocations[i]["compatibility_score"] = round(calculate_room_score(idx1), 4)
-                            allocations[j]["compatibility_score"] = round(calculate_room_score(idx2), 4)
-                            improved = True
+                    if new_score > old_score:
+                        allocations[i]["members"] = new_room1
+                        allocations[j]["members"] = new_room2
+                        allocations[i]["compatibility_score"] = round(calculate_room_score(idx1), 4)
+                        allocations[j]["compatibility_score"] = round(calculate_room_score(idx2), 4)
+                        improved = True
 
     return allocations
 
@@ -334,6 +381,181 @@ def _try_form_preference_group(cap, preferring_idxs, filler_mask, assigned, sim_
     return None
 
 
+# ================== SCALABLE PATH (no N x N matrix) ==================
+
+def _run_greedy_scalable(profiles, run_id, bucket_rooms, enable_fallback_and_flex):
+    """Row-wise greedy for n > LARGE_N_THRESHOLD. Never builds (n,n) matrix.
+
+    Per room: seed = first unassigned, then greedily attach best partners by
+    scanning one cosine row at a time (O(n) numpy ops per slot). Memory O(n*d).
+    Local search is intentionally skipped here (executor Phase-2 / sampling
+    covers quality); fallback = simple conflict-safe grouping into leftover
+    rooms so 20k still finishes in seconds, not hours.
+    """
+    import random as _rand
+    n = len(profiles)
+    bucket_rooms = [r.copy() for r in bucket_rooms]
+    bucket_rooms.sort(key=lambda x: (x.get("is_virtual", False), -x["capacity"]))
+    if not bucket_rooms:
+        return [], [p.user_id for p in profiles]
+
+    M = np.array([encode_profile(p) for p in profiles], dtype=np.float32)
+    norms = np.linalg.norm(M, axis=1).astype(np.float32)
+    norms[norms == 0] = 1.0
+    Mn = M / norms[:, None]
+    smoke, drink = _smoke_drink_arrays(profiles)
+    branches = np.array([p.branch for p in profiles])
+    years = np.array([p.year_of_study for p in profiles])
+    genders = [p.gender for p in profiles]
+
+    assigned = np.zeros(n, dtype=bool)
+    allocations = []
+    allocated_ids = set()
+
+    def _row_sims(seed_idx, cands):
+        # cosine row against candidates + branch/year penalty, -inf on hard conflict
+        v = Mn[seed_idx]
+        sims = Mn[cands] @ v
+        sims = sims.astype(np.float32)
+        sims -= (branches[cands] != branches[seed_idx]) * 5.0
+        sims -= (years[cands] != years[seed_idx]) * 5.0
+        hc = (np.abs(smoke[cands] - smoke[seed_idx]) >= 3) | (np.abs(drink[cands] - drink[seed_idx]) >= 3)
+        sims[hc] = -np.inf
+        return sims
+
+    def _group_score(idxs):
+        if len(idxs) <= 1:
+            return 1.0
+        s = 0.0
+        c = 0
+        for x in range(len(idxs)):
+            vx = Mn[idxs[x]]
+            for y in range(x + 1, len(idxs)):
+                s += float(vx @ Mn[idxs[y]])
+                c += 1
+        return s / c if c else 1.0
+
+    def _compatible_with_all(cand, members):
+        return not any(
+            (abs(int(smoke[cand]) - int(smoke[m])) >= 3) or (abs(int(drink[cand]) - int(drink[m])) >= 3)
+            for m in members
+        )
+
+    # Preference-aware ordering: process rooms grouped by capacity so students
+    # who asked for that size get first chance (cheap approximation of Pass 1).
+    for room_def in bucket_rooms:
+        cap = room_def["capacity"]
+        if int(np.sum(~assigned)) < cap:
+            continue
+        if cap <= 1:
+            nxt = next((i for i in range(n) if not assigned[i]), None)
+            if nxt is not None:
+                assigned[nxt] = True
+                allocations.append({
+                    "id": room_def["id"], "allocation_run_id": run_id,
+                    "gender_group": genders[nxt],
+                    "members": [profiles[nxt].user_id], "room_number": None,
+                    "compatibility_score": 1.0, "capacity": cap,
+                })
+                allocated_ids.add(room_def["id"])
+            continue
+        unassigned = np.flatnonzero(~assigned)
+        if len(unassigned) == 0:
+            break
+        # Seed: prefer someone who asked for this cap, else first unassigned
+        seed = None
+        for i in unassigned:
+            if profiles[i].preferred_room_size == str(cap):
+                seed = int(i)
+                break
+        if seed is None:
+            seed = int(unassigned[0])
+        members = [seed]
+        # Greedily attach best partner one slot at a time
+        while len(members) < cap:
+            cands = np.flatnonzero(~assigned)
+            cands = cands[~np.isin(cands, np.array(members))]
+            if len(cands) == 0:
+                break
+            # score = sum of row-sims against current members
+            total = np.zeros(len(cands), dtype=np.float32)
+            valid = np.ones(len(cands), dtype=bool)
+            for m in members:
+                rs = _row_sims(m, cands)
+                total += np.where(np.isneginf(rs), -1e9, rs)
+                valid &= ~np.isneginf(rs)
+            total[~valid] = -np.inf
+            # filler preference: deprioritise explicit other-size askers
+            for k, ci in enumerate(cands):
+                pr = profiles[int(ci)].preferred_room_size
+                if pr not in ("No preference", "", None, str(cap)):
+                    total[k] -= 2.0
+            if not np.any(valid) or np.all(np.isneginf(total)):
+                break
+            best = int(cands[int(np.argmax(total))])
+            if not _compatible_with_all(best, members):
+                break
+            members.append(best)
+        if len(members) == cap:
+            for m in members:
+                assigned[m] = True
+            allocations.append({
+                "id": room_def["id"], "allocation_run_id": run_id,
+                "gender_group": profiles[members[0]].gender,
+                "members": [profiles[m].user_id for m in members],
+                "room_number": None,
+                "compatibility_score": round(_group_score(members), 4),
+                "capacity": cap,
+            })
+            allocated_ids.add(room_def["id"])
+
+    unassigned_ids = [profiles[i].user_id for i in range(n) if not assigned[i]]
+    if enable_fallback_and_flex and unassigned_ids:
+        # Cheap flex: pack leftovers into unused rooms, conflict-safe.
+        _rand.shuffle(unassigned_ids)
+        id_to_pos = {p.user_id: i for i, p in enumerate(profiles)}
+        remaining = list(unassigned_ids)
+        for room_def in bucket_rooms:
+            if not remaining or room_def["id"] in allocated_ids:
+                continue
+            cap = room_def["capacity"]
+            group, gidx = [], []
+            for uid in list(remaining):
+                if len(group) >= cap:
+                    break
+                ui = id_to_pos[uid]
+                if any((abs(int(smoke[ui]) - int(smoke[g])) >= 3) or (abs(int(drink[ui]) - int(drink[g])) >= 3) for g in gidx):
+                    continue
+                group.append(uid)
+                gidx.append(ui)
+            if not group:
+                continue
+            remaining = [u for u in remaining if u not in group]
+            allocations.append({
+                "id": room_def["id"], "allocation_run_id": run_id,
+                "gender_group": profiles[id_to_pos[group[0]]].gender,
+                "members": group, "room_number": None,
+                "compatibility_score": round(_group_score(gidx), 4) if len(gidx) > 1 else 0.65,
+                "capacity": cap,
+            })
+            allocated_ids.add(room_def["id"])
+        assigned_set = set()
+        for a in allocations:
+            assigned_set.update(a["members"])
+        unassigned_ids = [p.user_id for p in profiles if p.user_id not in assigned_set]
+
+    allocations.sort(key=lambda x: x["compatibility_score"], reverse=True)
+    assigned_set = set()
+    for a in allocations:
+        assigned_set.update(a["members"])
+    avg = float(np.mean([a["compatibility_score"] for a in allocations])) if allocations else 0
+    print("\n[Evaluation Metrics] (scalable path)")
+    print("Average Compatibility Score:", round(avg, 4))
+    print("Coverage:", round(len(assigned_set) / len(profiles) * 100, 2) if profiles else 0, "%")
+    print("Final Unassigned:", len(unassigned_ids))
+    return allocations, unassigned_ids
+
+
 # ================== MAIN ==================
 
 def run_greedy_allocation_for_gender(
@@ -373,7 +595,11 @@ def run_greedy_allocation_for_gender(
     if not bucket_rooms:
         return [], [p.user_id for p in profiles]
 
-    encoded_matrix = np.array([encode_profile(p) for p in profiles])
+    # Large input: row-wise scalable path, no (n,n) matrix at all.
+    if n > LARGE_N_THRESHOLD:
+        return _run_greedy_scalable(profiles, run_id, bucket_rooms, enable_fallback_and_flex)
+
+    encoded_matrix = np.array([encode_profile(p) for p in profiles], dtype=np.float32)
     sim_matrix = cosine_similarity(encoded_matrix)
 
     branches = np.array([p.branch for p in profiles])
@@ -382,11 +608,11 @@ def run_greedy_allocation_for_gender(
     sim_matrix -= (branches[:, None] != branches[None, :]) * 5
     sim_matrix -= (years[:, None] != years[None, :]) * 5
 
-    # Apply hard conflict penalties (dealbreakers)
-    for i in range(n):
-        for j in range(n):
-            if i != j and has_hard_conflict(profiles[i], profiles[j]):
-                sim_matrix[i, j] = -9999.0
+    # Apply hard conflict penalties (dealbreakers) - vectorized, not O(n^2) Python loops
+    smoke_arr, drink_arr = _smoke_drink_arrays(profiles)
+    hc_mask = _hard_conflict_mask(smoke_arr, drink_arr)
+    np.fill_diagonal(hc_mask, False)
+    sim_matrix[hc_mask] = -9999.0
 
     np.fill_diagonal(sim_matrix, -np.inf)
 

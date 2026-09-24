@@ -7,12 +7,35 @@ services:
     rootDir: backend
     buildCommand: npm install
     startCommand: node server.js
+    # NOTE: do NOT hardcode PORT here - Render injects its own $PORT and routes
+    # ingress to it; server.js already listens on process.env.PORT.
     envVars:
-      - key: PORT
-        value: 5000
       - key: MONGO_URI
         sync: false # You must set this manually in the Render Dashboard!
-        
+      - key: PYTHON_SERVICE_URL
+        fromService:
+          type: web
+          name: pbl2-python-backend
+          property: url
+      - key: USE_REST_ALLOCATION
+        value: "true"
+      # Must be IDENTICAL on pbl2-python-backend. Render cannot share one
+      # generated value across services, so set the same random string on both
+      # manually in the dashboard (e.g. `openssl rand -base64 32`). Fails
+      # closed if unset: python-service 401s allocation calls instead of
+      # silently running unauthenticated.
+      - key: INTERNAL_SERVICE_KEY
+        sync: false
+      # Browser-facing frontend origin for CORS + Socket.IO handshake. Must be
+      # the real frontend URL or direct browser calls break (login/dashboards
+      # go through the Next.js proxy and are unaffected, but Socket.IO and
+      # org-registration call this backend straight from the browser).
+      - key: ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: pbl2-frontend
+          property: url
+
   # 2. Python Backend (FastAPI + ML Engine)
   - type: web
     name: pbl2-python-backend
@@ -21,11 +44,13 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    # NOTE: do NOT hardcode PORT - same reason as above; $PORT is injected.
     envVars:
-      - key: PORT
-        value: 8000
       - key: PYTHON_VERSION
         value: 3.10.0
+      # Must match pbl2-node-backend's INTERNAL_SERVICE_KEY exactly (see above).
+      - key: INTERNAL_SERVICE_KEY
+        sync: false
 
   # 3. Frontend (Next.js App)
   - type: web
@@ -41,9 +66,25 @@ services:
           type: web
           name: pbl2-node-backend
           property: url
+      # Server-side proxy + NextAuth callbacks run inside this service, so
+      # this MUST be the backend's URL. Missing this was the cause of every
+      # /api/proxy/* call returning 502 "Backend unreachable" in production
+      # (it fell back to http://localhost:5000, which doesn't exist here).
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: pbl2-node-backend
+          property: url
       - key: NEXTAUTH_URL
-        # We temporarily set this to localhost, Render will overwrite it if we configure custom domains later. 
-        # But you should update this in the dashboard to the final frontend URL.
-        sync: false 
+        fromService:
+          type: web
+          name: pbl2-frontend
+          property: url
       - key: NEXTAUTH_SECRET
         generateValue: true
+      # NEXT_PUBLIC_* is baked into the client bundle at build time (which
+      # runs with these env vars present). Explicitly false in production so
+      # the dev-login bypass never ships live (backend DEV_AUTH is unset here
+      # too, so the pair stays consistent).
+      - key: NEXT_PUBLIC_DEV_AUTH
+        value: "false"

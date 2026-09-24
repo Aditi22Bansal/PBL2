@@ -47,7 +47,16 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
 
   let backendRes: Response;
   try {
-    backendRes = await fetch(targetUrl, { method, headers, body });
+    // Allocation of 20k profiles takes minutes; without a long timeout the
+    // proxy aborts first and the UI shows "Backend unreachable" (502) even
+    // though the backend is still working.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 600000);
+    try {
+      backendRes = await fetch(targetUrl, { method, headers, body, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
   } catch (error: any) {
     console.error("Proxy request to backend failed:", error.message);
     return NextResponse.json({ error: "Backend unreachable" }, { status: 502 });

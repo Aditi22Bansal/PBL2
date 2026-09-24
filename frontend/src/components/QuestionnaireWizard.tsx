@@ -267,7 +267,7 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
   const renderReviewStep = () => {
     return (
       <div className="space-y-8">
-        <div className="bg-teal-50 border border-teal-200 rounded-3xl p-6">
+        <div className="bg-teal-50 border border-teal-200 rounded-xl p-5">
           <h3 className="text-lg font-bold text-teal-900 mb-2 flex items-center gap-2">
             <AlertCircle className="w-5 h-5" /> Please review your responses
           </h3>
@@ -281,7 +281,7 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
             <div
               key={step.stepIndex}
               onClick={() => setCurrentStep(step.stepIndex)}
-              className="glass-card rounded-[2rem] p-6 hover:border-teal-300 transition-all cursor-pointer group relative"
+              className="card rounded-xl p-5 hover:border-stone-400 transition-colors cursor-pointer group relative"
             >
               <div className="absolute top-4 right-4 text-xs font-bold text-teal-700 opacity-0 group-hover:opacity-100 transition-opacity">
                 Edit Section →
@@ -312,7 +312,7 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
   return (
     <div className="w-full space-y-8 max-w-4xl mx-auto">
       {/* Top Wizard Indicator */}
-      <div className="glass-card rounded-3xl p-6 space-y-5">
+      <div className="card rounded-2xl shadow-soft p-5 sm:p-6 space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <p className="text-xs font-bold text-teal-700 uppercase tracking-widest">
@@ -340,7 +340,7 @@ export default function QuestionnaireWizard({ onSubmitSuccess }: QuestionnaireWi
       </div>
 
       {/* Main Form Content */}
-      <div className="glass-card rounded-[2.5rem] p-8 md:p-12 min-h-[400px] flex flex-col justify-between">
+      <div className="card rounded-2xl shadow-soft p-6 sm:p-8 min-h-[400px] flex flex-col justify-between">
         <AnimatePresence mode="wait">
           <motion.div
             key={currentStep}

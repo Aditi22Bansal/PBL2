@@ -19,6 +19,10 @@ ENV PORT=5000
 ENV MONGO_URI=mongodb://127.0.0.1:27017/hostel_allocator
 ENV PYTHON_SERVICE_URL=http://python-service:8000
 ENV USE_REST_ALLOCATION=true
+# Real org data is 20k profiles / 6.6k rooms; a single allocations/analytics
+# request materializes large working sets. Default container heap (~2GB) was
+# tight enough to risk a crash loop under concurrent admin requests.
+ENV NODE_OPTIONS=--max-old-space-size=3072
 
 EXPOSE 5000
 

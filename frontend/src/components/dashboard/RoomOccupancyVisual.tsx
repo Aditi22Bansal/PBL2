@@ -57,7 +57,7 @@ export default function RoomOccupancyVisual({ capacity, occupants }: RoomOccupan
   const emptySlots = Math.max(safeCapacity - occupants.length, 0);
 
   return (
-    <div className="relative rounded-2xl bg-gradient-to-b from-stone-100 to-stone-200/60 border border-stone-200 px-4 pt-6 pb-4">
+    <div className="relative rounded-lg bg-stone-50 border border-stone-200 px-4 pt-5 pb-4">
       <div className="flex flex-wrap items-end justify-center gap-3">
         {occupants.map((o, i) => (
           <Bed key={i} label={o.isMe ? "You" : o.name.split(" ")[0]} colorKey={o.isMe ? "me" : "mate"} name={o.name} />

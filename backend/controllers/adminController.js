@@ -10,6 +10,14 @@ const Organization = require('../models/Organization');
 const { runPythonAllocation } = require('../services/allocationService');
 const analyticsService = require('../services/analyticsService');
 const { logAuditEvent } = require('../services/auditLogService');
+const {
+    acquireAllocationLock,
+    releaseAllocationLock,
+    isAllocationLocked,
+    supersedeStaleNotifications,
+    findDuplicatePlacements,
+    assertPlacementIntegrity,
+} = require('../services/allocationIntegrity');
 
 // Only these two real Google Sheets hostnames are ever legitimate here - anything
 // else (an internal address, a cloud metadata endpoint, an attacker-controlled
@@ -30,6 +38,10 @@ function assertAllowedSheetUrl(rawUrl) {
 }
 
 exports.syncCsv = async (req, res) => {
+    // Held while this sync owns the room set, so a concurrent allocation
+    // run (or second sync) can't interleave with the delete/recreate below.
+    let lockHeld = false;
+    const orgIdForLock = () => req.currentUser.organizationId;
     try {
         let { sheet_url } = req.body;
         if (!sheet_url || typeof sheet_url !== 'string') {
@@ -41,6 +53,13 @@ exports.syncCsv = async (req, res) => {
             assertAllowedSheetUrl(sheet_url);
         } catch (err) {
             return res.status(400).json({ error: err.message });
+        }
+
+        // A sync rewrites profiles AND deletes every unlocked room - it must
+        // mutually exclude allocation runs, which rewrite the same room set.
+        lockHeld = await acquireAllocationLock(orgIdForLock(), req.currentUser.email);
+        if (!lockHeld) {
+            return res.status(429).json({ error: 'An allocation run or sync is already in progress. Please wait for it to finish and try again.' });
         }
 
         // The org's own real domain for rows with no email column - was
@@ -61,7 +80,12 @@ exports.syncCsv = async (req, res) => {
             sheet_url += (sheet_url.endsWith("/") ? "" : "/") + "export?format=csv";
         }
 
-        const response = await axios.get(sheet_url, { responseType: 'stream' });
+        const response = await axios.get(sheet_url, {
+            responseType: 'stream',
+            // Docker Desktop may advertise IPv6 routes that are unreachable on
+            // the host network; Google Sheets is reachable reliably over IPv4.
+            family: 4
+        });
 
         if (response.headers['content-type'] && response.headers['content-type'].includes('text/html')) {
             return res.status(400).json({ error: 'URL Error', details: 'Google returned an HTML webpage instead of a raw CSV.' });
@@ -69,8 +93,17 @@ exports.syncCsv = async (req, res) => {
 
         const results = [];
         response.data.pipe(csv())
+            .on('error', async (streamErr) => {
+                console.error('CSV stream error:', streamErr);
+                await releaseAllocationLock(orgIdForLock());
+                lockHeld = false;
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Failed to sync CSV', details: streamErr.message });
+                }
+            })
             .on('data', (data) => results.push(data))
             .on('end', async () => {
+              try {
                 const getValue = (row, ...substrings) => {
                     const keys = Object.keys(row);
                     for (let sub of substrings) {
@@ -172,8 +205,13 @@ exports.syncCsv = async (req, res) => {
                     await Profile.bulkWrite(profilesToUpsert);
                     // Only delete NOT locked ones from RoomAllocation if resetting
                     await RoomAllocation.deleteMany({ isLocked: { $ne: true }, organizationId: req.currentUser.organizationId });
+                    // The unlocked rooms these notifications referenced no
+                    // longer exist - retire ALL of them (not just older
+                    // duplicates): even the newest unread points at a dead
+                    // room now, and the next run will notify afresh.
+                    await supersedeStaleNotifications(req.currentUser.organizationId, null, { retireAll: true });
                 }
-                
+
                 await logAuditEvent({
                     organizationId: req.currentUser.organizationId,
                     actorEmail: req.currentUser.email,
@@ -183,14 +221,35 @@ exports.syncCsv = async (req, res) => {
                 });
 
                 res.json({ message: `Successfully synced ${profilesToUpsert.length} profiles from CSV.` });
+              } catch (endErr) {
+                console.error('CSV sync failed while processing rows:', endErr);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Failed to sync CSV', details: endErr.message });
+                }
+              } finally {
+                await releaseAllocationLock(orgIdForLock());
+                lockHeld = false;
+              }
             });
     } catch (error) {
+        if (lockHeld) {
+            await releaseAllocationLock(orgIdForLock());
+        }
         console.error(error);
         res.status(500).json({ error: 'Failed to sync CSV', details: error.message });
     }
 };
 
 exports.triggerAllocation = async (req, res) => {
+    // This run is about to rewrite the org's entire unlocked room set - it
+    // must mutually exclude other runs and CSV syncs. Without this, two
+    // overlapping runs each snapshot the pre-run rooms, each concludes every
+    // student is newly placed, and each writes its own notification (the
+    // "3 notifications for 2 rooms" incident).
+    const lockAcquired = await acquireAllocationLock(req.currentUser.organizationId, req.currentUser.email);
+    if (!lockAcquired) {
+        return res.status(429).json({ error: 'An allocation run or sync is already in progress for your institution. Please wait for it to finish and try again.' });
+    }
     try {
         const { config } = req.body || {};
         
@@ -430,6 +489,12 @@ exports.triggerAllocation = async (req, res) => {
             throw new Error('Allocation engine returned no valid rooms to save — aborting before touching existing data.');
         }
 
+        // Fail-closed integrity check, still before anything is written: no
+        // student may appear in two new rooms, and nobody locked in place may
+        // be re-placed by this run. Throws before the swap, so a bad engine
+        // result can never corrupt the room set.
+        assertPlacementIntegrity(newAllocations, lockedEmails);
+
         // Snapshot which unlocked allocations exist right now, for the cascade
         // delete below. Pure read, not destructive.
         const oldAllocs = await RoomAllocation.find({ isLocked: { $ne: true }, organizationId: req.currentUser.organizationId }).lean();
@@ -502,7 +567,13 @@ exports.triggerAllocation = async (req, res) => {
             }
 
             if (newNotifications.length > 0) {
+                // Insert first, THEN collapse stacks keeping the newest per
+                // recipient - the just-inserted rows are the newest, so any
+                // older unread for the same students retires and each student
+                // only ever sees their latest room.
                 const saved = await Notification.insertMany(newNotifications);
+                const newlyPlaced = [...new Set(newNotifications.map(n => n.recipient_email))];
+                await supersedeStaleNotifications(req.currentUser.organizationId, newlyPlaced);
                 // Live push to whoever is online right now; anyone offline
                 // simply reads the persisted record on their next dashboard load.
                 for (const n of saved) {
@@ -532,18 +603,36 @@ exports.triggerAllocation = async (req, res) => {
             metadata: { run_id: runId, total_rooms: newAllocations.length },
         });
 
+        // Post-swap verification: the committed room set must place every
+        // member exactly once. This is advisory (the data is already
+        // committed) - a violation is reported, never silently ignored.
+        let integrityWarning = null;
+        try {
+            const finalRooms = await RoomAllocation.find({ organizationId: req.currentUser.organizationId }).lean();
+            const dups = findDuplicatePlacements(finalRooms);
+            if (dups.length > 0) {
+                integrityWarning = `${dups.length} student(s) appear in more than one room after this run. See GET /api/admin/allocation-health for details.`;
+                console.error('[triggerAllocation] Post-swap integrity violation:', dups);
+            }
+        } catch (verifyErr) {
+            console.error('[triggerAllocation] Post-swap verification failed to run:', verifyErr.message);
+        }
+
         res.json({
             message: 'Allocation completed successfully',
             run_id: runId,
             total_rooms: newAllocations.length,
             needsManualPlacement: result.needsManualPlacement || [],
             metrics: result.metrics,
-            validationMetrics: result.validationMetrics
+            validationMetrics: result.validationMetrics,
+            ...(integrityWarning ? { integrityWarning } : {})
         });
 
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Allocation failed', message: error.message });
+    } finally {
+        await releaseAllocationLock(req.currentUser.organizationId);
     }
 };
 
@@ -596,14 +685,22 @@ exports.getAllocations = async (req, res) => {
         const allocs = [];
         
         for (let a of rawAllocs) {
-            a.memberDetails = a.members.map(email => {
+            // Resolve ONLY this room's members for conflict analysis. The
+            // conflict rules run pairwise (O(n^2)) over whatever they're
+            // given, so passing allProfiles here OOM-crashed the backend on
+            // real data (20k profiles x 6.6k rooms -> heap exhaustion and a
+            // restart loop, surfacing as 502 "Backend unreachable" on every
+            // admin endpoint). Roommates are typically ~3 profiles.
+            const roommates = [];
+            a.memberDetails = (a.members || []).map(email => {
                 allocatedEmails.add(email);
                 const p = profileMap.get(email);
+                if (p) roommates.push(p);
                 return p ? `${p.name} (${p.branch})` : email;
             });
 
             // Run conflict prediction and attach result
-            a.conflict_analysis = conflictService.analyzeRoom(a, allProfiles);
+            a.conflict_analysis = conflictService.analyzeRoom(a, roommates);
             allocs.push(a);
         }
 
@@ -694,6 +791,11 @@ function _applyMove(fromRoom, exactMember, toRoom) {
 
 exports.manualSwap = async (req, res) => {
     try {
+        // A full allocation run rewrites the room set - a swap landing
+        // mid-run could split a move across the old and new sets.
+        if (await isAllocationLocked(req.currentUser.organizationId)) {
+            return res.status(409).json({ error: 'An allocation run or sync is in progress. Please wait for it to finish before swapping.' });
+        }
         const { roomAId, memberA, roomBId, memberB } = req.body;
         // Explicit type checks - roomAId/roomBId are used as raw query filter
         // values below, so a non-string (e.g. a crafted object) must be rejected
@@ -741,6 +843,11 @@ exports.manualSwap = async (req, res) => {
 
 exports.toggleRoomLock = async (req, res) => {
     try {
+        // Lock state is snapshotted at the start of an allocation run - a
+        // toggle landing mid-run would apply to the wrong generation of rooms.
+        if (await isAllocationLocked(req.currentUser.organizationId)) {
+            return res.status(409).json({ error: 'An allocation run or sync is in progress. Please wait for it to finish before changing locks.' });
+        }
         const { roomId, isLocked } = req.body;
         if (!roomId || !mongoose.Types.ObjectId.isValid(roomId)) {
             return res.status(400).json({ error: 'Room ID is required' });
@@ -898,6 +1005,11 @@ exports.getEligibleAccommodationRooms = async (req, res) => {
 // Approved only once the move itself has actually succeeded.
 exports.accommodateAccessibilityRequest = async (req, res) => {
     try {
+        // Same reason as manualSwap: moving a member while a run rewrites
+        // the room set can strand them between generations.
+        if (await isAllocationLocked(req.currentUser.organizationId)) {
+            return res.status(409).json({ error: 'An allocation run or sync is in progress. Please wait for it to finish before moving students.' });
+        }
         const { requestId, targetRoomId } = req.body;
         if (!requestId || !mongoose.Types.ObjectId.isValid(requestId) ||
             !targetRoomId || !mongoose.Types.ObjectId.isValid(targetRoomId)) {
@@ -980,5 +1092,83 @@ exports.getAuditLog = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Failed to retrieve audit log', message: error.message });
+    }
+};
+
+// POST /api/admin/repair-notifications - one-time/infrequent cleanup for
+// notification stacks accumulated before superseding existed (e.g. the
+// "3 notifications for 2 rooms" incident: repeated sync-wipe + re-run
+// cycles). Keeps each recipient's newest unread notification, retires the
+// rest as superseded. Safe and idempotent - run it twice and the second run
+// reports zero changes.
+exports.repairNotifications = async (req, res) => {
+    try {
+        const { recipientsFixed, superseded } =
+            await supersedeStaleNotifications(req.currentUser.organizationId);
+
+        await logAuditEvent({
+            organizationId: req.currentUser.organizationId,
+            actorEmail: req.currentUser.email,
+            actorRole: req.currentUser.role,
+            action: 'REPAIR_NOTIFICATIONS',
+            metadata: { recipientsFixed, superseded },
+        });
+
+        res.json({
+            message: superseded === 0
+                ? 'Notifications are already clean - nothing to repair.'
+                : `Retired ${superseded} stale notification(s). Each student now sees only their latest placement.`,
+            recipientsFixed,
+            superseded,
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to repair notifications', message: error.message });
+    }
+};
+
+// GET /api/admin/allocation-health - read-only integrity report for the
+// org's current room set. Never mutates anything; the admin decides what to
+// do about findings using the existing lock/swap/request tools.
+exports.allocationHealth = async (req, res) => {
+    try {
+        const orgFilter = { organizationId: req.currentUser.organizationId };
+        const [rooms, profiles, unreadStacks] = await Promise.all([
+            RoomAllocation.find(orgFilter).lean(),
+            Profile.find(orgFilter).lean(),
+            Notification.aggregate([
+                { $match: { ...orgFilter, type: 'ROOM_ALLOCATED', read: false } },
+                { $group: { _id: '$recipient_email', count: { $sum: 1 } } },
+                { $match: { count: { $gt: 1 } } },
+            ]),
+        ]);
+
+        const profileEmails = new Set(profiles.map(p => p.user_id));
+        const membersWithoutProfile = [];
+        const seenMembers = new Set();
+        for (const r of rooms) {
+            for (const m of r.members || []) {
+                if (!profileEmails.has(m) && !seenMembers.has(m)) {
+                    seenMembers.add(m);
+                    membersWithoutProfile.push(m);
+                }
+            }
+        }
+
+        const duplicatePlacements = findDuplicatePlacements(rooms);
+        const healthy = duplicatePlacements.length === 0 &&
+            membersWithoutProfile.length === 0 &&
+            unreadStacks.length === 0;
+
+        res.json({
+            healthy,
+            roomCount: rooms.length,
+            duplicatePlacements,
+            membersWithoutProfile,
+            stackedNotifications: unreadStacks.map(s => ({ email: s._id, unreadCount: s.count })),
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to check allocation health', message: error.message });
     }
 };

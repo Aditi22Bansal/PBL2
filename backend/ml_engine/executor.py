@@ -161,21 +161,29 @@ def compute_allocation(profiles_dict, config=None):
     needs_manual_placement = []
 
     if all_unassigned:
-        encoded_matrix = np.array([encode_profile(p) for p in profiles])
-        full_sim_matrix = cosine_similarity(encoded_matrix)
+        # Lazy row-wise cosine (no (N,N) matrix: 20k^2 = 400M floats OOMs).
+        _M = np.array([encode_profile(p) for p in profiles], dtype=np.float32)
+        _n = np.linalg.norm(_M, axis=1).astype(np.float32)
+        _n[_n == 0] = 1.0
+        _Mn = _M / _n[:, None]
         pos_by_id = {p.user_id: i for i, p in enumerate(profiles)}
 
         def pair_similarity(uid_a, uid_b):
-            return float(full_sim_matrix[pos_by_id[uid_a], pos_by_id[uid_b]])
+            ia = pos_by_id[uid_a]
+            ib = pos_by_id[uid_b]
+            return float(_Mn[ia] @ _Mn[ib])
 
         room_capacity_by_id = {r["id"]: r["capacity"] for r in global_rooms}
 
         # ---- Step A: existing under-capacity rooms, zero hard-conflict, best compatibility ----
+        # Bound scan: U x R can explode (20k x 6k). Sample candidate rooms per student.
+        _MAX_ROOM_SCAN = 200
         still_unplaced = []
         for uid in all_unassigned:
             student = profiles_by_id[uid]
             best_room = None
             best_score = None
+            scanned = 0
 
             for room in all_allocs:
                 cap = room_capacity_by_id.get(room["id"])
@@ -196,6 +204,10 @@ def compute_allocation(profiles_dict, config=None):
                 if best_score is None or avg_sim > best_score:
                     best_score = avg_sim
                     best_room = room
+
+                scanned += 1
+                if scanned >= _MAX_ROOM_SCAN and len(all_unassigned) * len(all_allocs) > 2000000:
+                    break
 
             if best_room is not None:
                 best_room["members"].append(uid)

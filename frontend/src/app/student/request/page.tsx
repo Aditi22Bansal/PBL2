@@ -73,15 +73,15 @@ export default function StudentRequestPage() {
       }
   }
 
-  if (status === "loading" || !allocation) return <div className="min-h-screen bg-stone-50" />;
+  if (status === "loading" || !allocation) return <div className="min-h-screen bg-[#faf9f7]" />;
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800 flex justify-center p-6 md:p-[6vw] pb-20">
+    <div className="min-h-screen bg-[#faf9f7] text-stone-800 flex justify-center p-5 sm:p-8 md:p-[4vw] pb-20">
 
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-full max-w-5xl glass-card rounded-[2rem] p-10 md:p-14 relative z-10"
+            className="w-full max-w-3xl card-premium rounded-[24px] shadow-soft p-6 sm:p-10 relative z-10"
         >
             <button onClick={() => router.push('/student')} className="flex items-center gap-2 text-stone-600 hover:text-stone-800 font-medium transition-colors mb-8 text-sm">
                 <ArrowLeft size={16}/> Back to Dashboard
@@ -110,7 +110,7 @@ export default function StudentRequestPage() {
                             <button
                                 type="button"
                                 onClick={() => setRequestType("GENERAL")}
-                                className={`text-left p-4 rounded-xl border transition-all ${requestType === "GENERAL" ? "bg-orange-50 border-orange-300" : "bg-stone-50 border-stone-200 hover:border-stone-300"}`}
+                                className={`text-left p-5 rounded-2xl border transition-all ${requestType === "GENERAL" ? "bg-orange-50 border-orange-300 shadow-soft" : "bg-stone-50 border-stone-200 hover:border-stone-400 hover:-translate-y-px"}`}
                             >
                                 <div className="font-medium text-stone-800">General room change</div>
                                 <div className="text-[12px] text-stone-600 mt-1">Roommate conflict, personal reason, etc.</div>
@@ -118,7 +118,7 @@ export default function StudentRequestPage() {
                             <button
                                 type="button"
                                 onClick={() => setRequestType("ACCESSIBILITY")}
-                                className={`text-left p-4 rounded-xl border transition-all ${requestType === "ACCESSIBILITY" ? "bg-orange-50 border-orange-300" : "bg-stone-50 border-stone-200 hover:border-stone-300"}`}
+                                className={`text-left p-5 rounded-2xl border transition-all ${requestType === "ACCESSIBILITY" ? "bg-orange-50 border-orange-300 shadow-soft" : "bg-stone-50 border-stone-200 hover:border-stone-400 hover:-translate-y-px"}`}
                             >
                                 <div className="font-medium text-stone-800">Ground floor accommodation</div>
                                 <div className="text-[12px] text-stone-600 mt-1">Structured accessibility request.</div>

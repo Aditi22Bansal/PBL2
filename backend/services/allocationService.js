@@ -32,7 +32,12 @@ const runPythonAllocationViaHTTP = async (profiles, config = null) => {
 
     try {
         const response = await axios.post(`${PYTHON_SERVICE_URL}/allocate/v2`, payload, {
-            headers: { 'X-Internal-Service-Key': INTERNAL_SERVICE_KEY }
+            headers: { 'X-Internal-Service-Key': INTERNAL_SERVICE_KEY },
+            // 20k profiles can take minutes in Python; default (no timeout)
+            // used to hang then surface as generic failure. 10 min + big body.
+            timeout: 600000,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
         });
         const result = response.data;
         if (result.error) {

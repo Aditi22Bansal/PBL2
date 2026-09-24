@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import {
-  LogOut, Home, Loader2, Sparkles,
+  LogOut, Loader2, Sparkles,
   FileText, ShieldAlert, AlertCircle, RefreshCw, MessageSquare, Heart, BellRing, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,6 +14,8 @@ import { io, Socket } from "socket.io-client";
 import RoomChat from "@/components/RoomChat";
 import QuestionnaireWizard from "@/components/QuestionnaireWizard";
 import RoomOccupancyVisual from "@/components/dashboard/RoomOccupancyVisual";
+import RoomFitLogo from "@/components/landing/RoomFitLogo";
+import { AnimatedRing, EyebrowBadge } from "@/components/premium";
 import { API_URL, PROXY_URL } from "@/lib/api";
 
 export default function StudentDashboard() {
@@ -123,28 +125,28 @@ export default function StudentDashboard() {
 
   if (status === "loading" || (status === "authenticated" && loading)) {
     return (
-      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-[#faf9f7] flex flex-col items-center justify-center">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
         >
           <Loader2 className="w-10 h-10 text-teal-700 animate-spin" />
         </motion.div>
-        <p className="text-stone-600 mt-4 font-bold tracking-wide animate-pulse">Initializing Allocation Portal...</p>
+        <p className="text-stone-600 mt-4 text-sm">Loading your dashboard…</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6">
-        <div className="glass-card p-8 rounded-3xl max-w-md text-center space-y-6">
+      <div className="min-h-screen bg-[#faf9f7] flex flex-col items-center justify-center p-6">
+        <div className="card p-8 rounded-xl max-w-md text-center space-y-5">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto" />
           <h2 className="text-2xl font-bold text-stone-800">Connection Error</h2>
           <p className="text-stone-600 text-sm">{error}</p>
           <button
             onClick={fetchDashboardData}
-            className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-3 rounded-2xl text-sm transition-all flex items-center justify-center gap-2 shadow-md shadow-teal-900/15"
+            className="w-full btn-primary font-semibold py-3 rounded-lg text-sm flex items-center justify-center gap-2"
           >
             <RefreshCw className="w-4 h-4" /> Try Again
           </button>
@@ -176,7 +178,7 @@ export default function StudentDashboard() {
     : [];
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800 relative overflow-hidden font-sans pb-16">
+    <div className="min-h-screen bg-[#faf9f7] text-stone-800 relative overflow-hidden font-sans pb-16">
 
       {/* PDF Print CSS overrides */}
       <style dangerouslySetInnerHTML={{ __html: `
@@ -207,19 +209,16 @@ export default function StudentDashboard() {
         }
       `}} />
 
-      {/* Decorative background blur elements */}
-      <div className="absolute top-0 right-0 w-full h-[60vh] bg-gradient-to-b from-teal-100/40 to-transparent pointer-events-none print-hidden" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[40vw] h-[40vw] rounded-full bg-orange-100/30 blur-[100px] pointer-events-none print-hidden" />
+      {/* Decorative background - kept flat and print-hidden */}
+      <div className="hidden" aria-hidden="true" />
 
       {/* Navbar (hidden in print) */}
-      <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-stone-200 px-8 py-5 flex items-center justify-between shadow-sm print-hidden">
+      <nav className="sticky top-0 z-50 bg-white border-b border-stone-200 px-5 sm:px-6 py-3 flex items-center justify-between print-hidden">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-teal-700 flex items-center justify-center shadow-lg shadow-teal-900/15">
-            <Home className="text-white w-5 h-5" />
-          </div>
+          <RoomFitLogo className="w-7 h-7" />
           <div>
-            <h1 className="font-extrabold text-stone-800 tracking-tight text-md">RoomFit Portal</h1>
-            <p className="text-[9px] font-bold text-stone-600 uppercase tracking-widest mt-0.5">Housing Placement Dashboard</p>
+            <h1 className="font-bold text-stone-900 tracking-tight text-[15px] leading-none">RoomFit</h1>
+            <p className="text-[10px] font-medium text-stone-500 mt-1">Student housing</p>
           </div>
         </div>
 
@@ -231,7 +230,7 @@ export default function StudentDashboard() {
           )}
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
-            className="flex items-center gap-2 bg-stone-800 hover:bg-stone-900 text-white font-semibold py-2.5 px-5 rounded-xl text-xs transition-all shadow-sm"
+            className="flex items-center gap-2 bg-stone-900 hover:bg-stone-700 text-white font-semibold py-2 px-4 rounded-lg text-[13px] transition-colors"
           >
             Sign Out <LogOut className="w-4 h-4" />
           </button>
@@ -239,7 +238,7 @@ export default function StudentDashboard() {
       </nav>
 
       {/* Main Content */}
-      <main className="w-full px-8 md:px-16 py-10 relative z-10 space-y-8">
+      <main className="w-full max-w-6xl mx-auto px-5 sm:px-6 py-8 relative z-10 space-y-6">
 
         {/* Unread notifications - live socket pushes and anything that landed
             while the student was offline both surface here. */}
@@ -249,14 +248,14 @@ export default function StudentDashboard() {
               initial={{ opacity: 0, y: -12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
-              className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex items-start gap-4 print-hidden"
+              className="bg-teal-50 border border-teal-200 rounded-2xl p-4 flex items-start gap-3 print-hidden shadow-soft"
             >
-              <div className="w-10 h-10 bg-white border border-emerald-200 rounded-xl flex items-center justify-center shrink-0">
-                <BellRing className="w-5 h-5 text-emerald-700" />
+              <div className="w-9 h-9 bg-white border border-teal-200 rounded-lg flex items-center justify-center shrink-0">
+                <BellRing className="w-4 h-4 text-teal-800" />
               </div>
               <div className="flex-1 space-y-1.5">
                 {notifications.map((n, idx) => (
-                  <p key={n._id || idx} className="text-sm font-semibold text-emerald-900">
+                  <p key={n._id || idx} className="text-sm font-medium text-teal-950">
                     {n.message}
                   </p>
                 ))}
@@ -264,33 +263,36 @@ export default function StudentDashboard() {
               <button
                 onClick={dismissNotifications}
                 aria-label="Dismiss notifications"
-                className="w-8 h-8 rounded-lg hover:bg-emerald-100 flex items-center justify-center shrink-0 transition-colors"
+                className="w-8 h-8 rounded-lg hover:bg-teal-100 flex items-center justify-center shrink-0 transition-colors"
               >
-                <X className="w-4 h-4 text-emerald-700" />
+                <X className="w-4 h-4 text-teal-800" />
               </button>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* SECTION 1 & 2: Welcome Banner & Status Overview */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-200 pb-6">
+        {/* Welcome + status */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-black text-stone-800 tracking-tight">
+            <h1 className="text-3xl sm:text-4xl font-bold text-stone-950 tracking-tight">
               Welcome back, {profile?.name ? profile.name.split(' ')[0] : (session?.user?.name ? session.user.name.split(' ')[0] : 'Student')}
             </h1>
-            <p className="text-stone-600 text-sm mt-1">
+            <p className="text-stone-600 text-[15px] mt-2">
               {dashboardData?.status === 'ALLOCATED'
                 ? "Your housing details and roommate matches are ready."
                 : "Complete your preferences to initialize roommate allocation."}
             </p>
           </div>
           <div className="flex items-center gap-3 print-hidden">
-            <span className={`px-4 py-2.5 rounded-xl text-xs font-bold border uppercase tracking-wider ${
-              dashboardData?.status === 'ALLOCATED' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
-              dashboardData?.status === 'PENDING_ALLOCATION' ? 'bg-amber-50 text-amber-800 border-amber-200' :
-              'bg-stone-100 text-stone-700 border-stone-200'
+            <span className={`px-3.5 py-2 rounded-full text-[12px] font-semibold border flex items-center gap-2 ${
+              dashboardData?.status === 'ALLOCATED' ? 'bg-teal-800 text-white border-teal-800' :
+              dashboardData?.status === 'PENDING_ALLOCATION' ? 'bg-amber-50 text-amber-900 border-amber-200' :
+              'bg-white text-stone-700 border-stone-300'
             }`}>
-              Status: {dashboardData?.status?.replace('_', ' ')}
+              <span className={`w-1.5 h-1.5 rounded-full ${dashboardData?.status === 'ALLOCATED' ? 'bg-teal-300' : dashboardData?.status === 'PENDING_ALLOCATION' ? 'bg-amber-500' : 'bg-stone-300'}`} aria-hidden="true" />
+              {dashboardData?.status === 'ALLOCATED' ? 'Placed' :
+               dashboardData?.status === 'PENDING_ALLOCATION' ? 'Matching in progress' :
+               `${dashboardData?.status?.replace('_', ' ')}`}
             </span>
           </div>
         </div>
@@ -298,8 +300,8 @@ export default function StudentDashboard() {
         {/* If Questionnaire has not been submitted yet */}
         {dashboardData?.status === 'NOT_SUBMITTED' && showWizard && (
           <div className="space-y-6">
-            {/* Visual Progress Card (Section 2) */}
-            <div className="glass-card p-6 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-6 print-hidden">
+            {/* Progress summary */}
+            <div className="card p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 print-hidden shadow-soft">
               <div className="space-y-2">
                 <h3 className="font-bold text-stone-800 text-md">Roommate Preference Questionnaire</h3>
                 <p className="text-stone-600 text-xs">
@@ -325,15 +327,11 @@ export default function StudentDashboard() {
 
         {/* If Allocation is submitted but still pending */}
         {dashboardData?.status === 'PENDING_ALLOCATION' && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="glass-card rounded-[2rem] p-8 md:p-12 text-center max-w-2xl mx-auto space-y-6 print-card"
-          >
-            <div className="w-20 h-20 bg-amber-50 border border-amber-200 rounded-full flex items-center justify-center mx-auto relative">
-              <Loader2 className="w-8 h-8 text-amber-600 animate-spin" />
+          <div className="card-premium rounded-[24px] p-10 text-center max-w-xl mx-auto space-y-4 print-card shadow-soft">
+            <div className="w-14 h-14 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-center mx-auto">
+              <Loader2 className="w-5 h-5 text-amber-700 animate-spin" />
             </div>
-            <h2 className="text-2xl font-bold text-stone-800">Allocation Process In Progress</h2>
+            <h2 className="text-xl font-bold text-stone-900">Allocation in progress</h2>
             <p className="text-stone-600 text-sm leading-relaxed">
               Your questionnaire responses have been received! The hostel administration is currently running the greedy compatibility heuristics engine to map student preferences. Check back here shortly.
             </p>
@@ -342,182 +340,140 @@ export default function StudentDashboard() {
                 Submitted on: {new Date(profile.submittedAt).toLocaleDateString()}
               </p>
             )}
-          </motion.div>
+          </div>
         )}
 
         {/* If Allocation exists */}
         {dashboardData?.status === 'ALLOCATED' && allocation && (
-          <div className="space-y-8">
+          <div className="space-y-6">
 
-            {/* HERO: room assignment is the emotional payoff of the whole
-                product, so it gets the full-width top slot and the largest
-                type on the page - not one of three equally-weighted cards. */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass-card rounded-[2rem] p-8 md:p-10 print-card"
-            >
-              <div className="grid lg:grid-cols-[1.4fr_1fr] gap-8 items-center">
-                <div>
-                  <h3 className="font-extrabold text-xs text-teal-700 uppercase tracking-widest mb-3">Your Hostel Placement</h3>
-                  <div className="text-7xl font-black text-stone-900 tracking-tight leading-none">{allocation.room_number}</div>
-                  <h4 className="font-bold text-stone-800 text-lg mt-3">{allocation.hostelName}{allocation.block ? ` · Block ${allocation.block}` : ""}</h4>
-                  <div className="flex items-center gap-2 mt-4 text-xs font-bold text-stone-600">
-                    <span className="px-2.5 py-1 rounded-full bg-stone-100 border border-stone-200">Room Size: {getCapacityLabel(allocation.room_capacity)}</span>
-                    <span className="px-2.5 py-1 rounded-full bg-stone-100 border border-stone-200">Occupancy: {allocation.room_occupancy} / {allocation.room_capacity} Beds</span>
-                  </div>
-                  <div className="mt-6">
-                    <RoomOccupancyVisual capacity={allocation.room_capacity} occupants={occupants} />
-                  </div>
-                </div>
-
-                {/* Supporting match stats - real evidence behind the placement, not the star of the show. */}
-                <div className="flex flex-col sm:flex-row lg:flex-col gap-4">
-                  <div className="flex-1 bg-white/60 border border-stone-200 rounded-2xl p-5 flex flex-col items-center text-center">
-                    <h3 className="font-extrabold text-[10px] text-stone-600 uppercase tracking-widest mb-2">Match Quality</h3>
-                    <div className="relative w-24 h-24 flex items-center justify-center">
-                      <svg className="w-full h-full transform -rotate-95" viewBox="0 0 100 100">
-                        <circle cx="50" cy="50" r="40" stroke="#e7e5e4" strokeWidth="8" fill="transparent" />
-                        <circle
-                          cx="50" cy="50" r="40"
-                          stroke="#0f766e" strokeWidth="8" fill="transparent"
-                          strokeDasharray={`${2 * Math.PI * 40 * (allocation.compatibilityScore / 100)} 251.2`}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      <span className="absolute text-2xl font-black text-stone-800">{allocation.compatibilityScore}%</span>
+            {/* Room assignment hero */}
+            <div className="card-premium rounded-[24px] overflow-hidden print-card shadow-soft">
+              <div className="hero-wash px-6 sm:px-8 pt-7 pb-6 border-b border-stone-100">
+                <EyebrowBadge>Your room assignment</EyebrowBadge>
+                <div className="flex flex-wrap items-end justify-between gap-6 mt-4">
+                  <div>
+                    <div className="text-6xl sm:text-7xl font-bold text-stone-950 tracking-tight leading-none">{allocation.room_number}</div>
+                    <h4 className="font-semibold text-stone-700 text-[15px] mt-3">{allocation.hostelName}{allocation.block ? ` · Block ${allocation.block}` : ""}</h4>
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                      <span className="chip chip-stone">{getCapacityLabel(allocation.room_capacity)}</span>
+                      <span className="chip chip-stone">{allocation.room_occupancy} of {allocation.room_capacity} beds filled</span>
                     </div>
-                    <h4 className="text-teal-700 font-extrabold text-xs mt-2.5 flex items-center gap-1.5 justify-center">
-                      <Sparkles className="w-3.5 h-3.5" /> {allocation.matchLabel}
-                    </h4>
                   </div>
-
-                  <div className="flex-1 bg-white/60 border border-stone-200 rounded-2xl p-5 flex flex-col items-center text-center">
-                    <h3 className="font-extrabold text-[10px] text-stone-600 uppercase tracking-widest mb-2">Stability Index</h3>
-                    <div className="relative w-24 h-24 flex items-center justify-center">
-                      <svg className="w-full h-full transform -rotate-95" viewBox="0 0 100 100">
-                        <circle cx="50" cy="50" r="40" stroke="#e7e5e4" strokeWidth="8" fill="transparent" />
-                        <circle
-                          cx="50" cy="50" r="40"
-                          stroke="#c2410c" strokeWidth="8" fill="transparent"
-                          strokeDasharray={`${2 * Math.PI * 40 * (allocation.stabilityScore / 100)} 251.2`}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      <span className="absolute text-2xl font-black text-stone-800">{allocation.stabilityScore}</span>
+                  <div className="flex items-center gap-5">
+                    <div className="text-center">
+                      <AnimatedRing score={allocation.compatibilityScore} size={112} />
+                      <p className="text-[12px] text-teal-900 font-semibold mt-2 flex items-center justify-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5" aria-hidden="true" /> {allocation.matchLabel}
+                      </p>
                     </div>
-                    <h4 className="text-orange-700 font-extrabold text-xs mt-2.5">
-                      Stability Rating
-                    </h4>
+                    <div className="text-center pl-5 border-l border-stone-200">
+                      <p className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Stability</p>
+                      <p className="text-[30px] font-bold text-stone-900 leading-none mt-1 tabular-nums">{allocation.stabilityScore}</p>
+                      <p className="text-[11px] text-stone-500 mt-1.5">Predicted room<br />stability</p>
+                    </div>
                   </div>
                 </div>
               </div>
-            </motion.div>
+              <div className="px-6 sm:px-8 py-6">
+                <RoomOccupancyVisual capacity={allocation.room_capacity} occupants={occupants} />
+              </div>
+            </div>
 
-            {/* Roommate Cards */}
-            <div className="glass-card p-6 rounded-[2rem] print-card">
-              <h3 className="font-extrabold text-stone-800 text-md border-b border-stone-200 pb-3 mb-6">Your Roommates</h3>
+            {/* Roommates */}
+            <div className="card-premium p-6 sm:p-7 rounded-[20px] print-card shadow-soft">
+              <h3 className="font-bold text-stone-900 text-[16px] border-b border-stone-100 pb-4 mb-5">Your roommates</h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {allocation.roommates && allocation.roommates.length > 0 ? (
                   allocation.roommates.map((rm: any, idx: number) => (
-                    <div key={idx} className="bg-white/60 border border-stone-200 p-5 rounded-2xl flex items-center gap-4 hover:border-teal-300 transition-colors">
-                      <div className="w-14 h-14 rounded-full bg-orange-100 flex items-center justify-center text-xl font-bold text-orange-800 shrink-0">
+                    <div key={idx} className="border border-stone-200 p-4 rounded-2xl flex items-center gap-3.5 lift bg-white">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-[14px] font-bold text-amber-900 shrink-0">
                         {rm.initials}
                       </div>
                       <div>
-                        <p className="font-bold text-stone-800 text-md">{rm.name}</p>
-                        <p className="text-xs text-stone-600 font-bold uppercase tracking-wider mt-1">
+                        <p className="font-bold text-stone-900 text-[14px]">{rm.name}</p>
+                        <p className="text-xs text-stone-500 mt-0.5">
                           {rm.branch} • Year {rm.year}
                         </p>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-stone-600 italic">No assigned roommates found.</p>
+                  <p className="text-sm text-stone-500">No assigned roommates found.</p>
                 )}
               </div>
             </div>
 
-            {/* Explanations & Positive Matches Timeline */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 print-grid">
+            {/* Explanations */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print-grid">
 
-              {/* Dynamic Matches Timeline */}
-              <div className="glass-card p-6 rounded-[2rem] print-card flex flex-col justify-between">
+              <div className="card-premium p-6 rounded-[20px] print-card shadow-soft">
                 <div>
-                  <h3 className="font-extrabold text-stone-800 text-md border-b border-stone-200 pb-3 mb-4">Why We Matched</h3>
-                  <p className="text-stone-600 text-xs leading-relaxed mb-6 font-semibold bg-teal-50 p-3.5 rounded-xl border border-teal-200">
+                  <h3 className="font-bold text-stone-900 text-[16px] border-b border-stone-100 pb-4 mb-5">Why you were matched</h3>
+                  <p className="text-stone-700 text-[13px] leading-relaxed mb-5">
                     {allocation.matchingExplanation}
                   </p>
                 </div>
 
-                <div className="space-y-3.5">
+                <ul className="space-y-2.5">
                   {allocation.whyWeMatched && allocation.whyWeMatched.length > 0 ? (
                     allocation.whyWeMatched.map((factor: string, idx: number) => (
-                      <div key={idx} className="flex items-center gap-2.5 text-xs text-stone-700 font-semibold">
-                        <div className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
-                          <span className="text-emerald-700 font-black">✓</span>
-                        </div>
+                      <li key={idx} className="flex items-start gap-2.5 text-[13px] text-stone-700">
+                        <span className="w-5 h-5 rounded-full bg-teal-800 text-white flex items-center justify-center text-[11px] font-bold shrink-0">✓</span>
                         <span>{factor}</span>
-                      </div>
+                      </li>
                     ))
                   ) : (
-                    <p className="text-xs text-stone-600 italic">Common preferences map complete.</p>
+                    <p className="text-[13px] text-stone-500">Common preferences map complete.</p>
                   )}
                   {allocation.preferredRoomSizeSatisfied !== null && (
-                    <div className="flex items-center gap-2.5 text-xs text-stone-700 font-semibold">
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${allocation.preferredRoomSizeSatisfied ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
-                        <span className={`font-black ${allocation.preferredRoomSizeSatisfied ? 'text-emerald-700' : 'text-amber-700'}`}>
-                          {allocation.preferredRoomSizeSatisfied ? '✓' : '!'}
-                        </span>
-                      </div>
+                    <li className="flex items-start gap-2.5 text-[13px] text-stone-700">
+                      <span className="w-5 h-5 rounded-full bg-stone-800 text-white flex items-center justify-center text-[11px] font-bold shrink-0">
+                        {allocation.preferredRoomSizeSatisfied ? '✓' : '!'}
+                      </span>
                       <span>
                         {allocation.preferredRoomSizeSatisfied
                           ? 'You got your preferred room size.'
                           : 'Your room size differs from what you requested.'}
                       </span>
-                    </div>
+                    </li>
                   )}
                   {allocation.accessibilityNeedSatisfied !== null && (
-                    <div className="flex items-center gap-2.5 text-xs text-stone-700 font-semibold">
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${allocation.accessibilityNeedSatisfied ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
-                        <span className={`font-black ${allocation.accessibilityNeedSatisfied ? 'text-emerald-700' : 'text-amber-700'}`}>
-                          {allocation.accessibilityNeedSatisfied ? '✓' : '!'}
-                        </span>
-                      </div>
+                    <li className="flex items-start gap-2.5 text-[13px] text-stone-700">
+                      <span className="w-5 h-5 rounded-full bg-stone-800 text-white flex items-center justify-center text-[11px] font-bold shrink-0">
+                        {allocation.accessibilityNeedSatisfied ? '✓' : '!'}
+                      </span>
                       <span>
                         {allocation.accessibilityNeedSatisfied
                           ? 'Your accessibility request was honored.'
                           : "We weren't able to accommodate your accessibility request this time."}
                       </span>
-                    </div>
+                    </li>
                   )}
-                </div>
+                </ul>
               </div>
 
-              {/* Constructive Potential Differences Card */}
-              <div className="glass-card p-6 rounded-[2rem] print-card flex flex-col justify-between">
+              <div className="card-premium p-6 rounded-[20px] print-card shadow-soft">
                 <div>
-                  <h3 className="font-extrabold text-stone-800 text-md border-b border-stone-200 pb-3 mb-4">Things to discuss together</h3>
-                  <p className="text-stone-600 text-xs leading-relaxed mb-6">
-                    Mismatches are normal! We recommend talking through these parameters during roommate onboarding to prevent conflicts early on.
+                  <h3 className="font-bold text-stone-900 text-[16px] border-b border-stone-100 pb-4 mb-5">Things to discuss together</h3>
+                  <p className="text-stone-600 text-[13px] leading-relaxed mb-5">
+                    Differences are normal. Talking through these early prevents conflicts later.
                   </p>
                 </div>
 
-                <div className="space-y-3.5">
+                <div className="space-y-2.5">
                   {allocation.thingsToDiscuss && allocation.thingsToDiscuss.length > 0 ? (
                     allocation.thingsToDiscuss.map((diff: string, idx: number) => (
-                      <div key={idx} className="flex items-center gap-2.5 text-xs text-stone-700 font-semibold">
-                        <div className="w-5 h-5 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
-                          <span className="text-amber-700 font-extrabold">⚠️</span>
-                        </div>
+                      <div key={idx} className="flex items-start gap-2.5 text-[13px] text-stone-700">
+                        <span className="w-5 h-5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center text-[11px] font-bold shrink-0">!</span>
                         <span>{diff}</span>
                       </div>
                     ))
                   ) : (
-                    <div className="flex items-center gap-2 text-xs text-emerald-800 font-bold p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+                    <div className="flex items-center gap-2 text-[13px] text-teal-900 font-medium p-3 bg-teal-50 rounded-lg border border-teal-200">
                       <Heart className="w-4 h-4 shrink-0" />
-                      <span>Zero routines differences detected! Roommates are highly synchronized.</span>
+                      <span>No routine differences detected — your room is well aligned.</span>
                     </div>
                   )}
                 </div>
@@ -527,7 +483,7 @@ export default function StudentDashboard() {
 
             {/* Roommate Chat Area */}
             {session?.user?.email && session?.user?.name && (
-            <div className="pt-6 border-t border-stone-200 chat-section">
+            <div className="pt-5 border-t border-stone-200 chat-section">
               <RoomChat
                 roomId={allocation.roomId}
                 currentUserEmail={session.user.email}
@@ -536,30 +492,30 @@ export default function StudentDashboard() {
             </div>
             )}
 
-            {/* Action Center Card */}
-            <div className="glass-card p-6 rounded-[2rem] print-hidden action-center-card">
-              <h3 className="font-extrabold text-stone-800 text-md border-b border-stone-200 pb-3 mb-6">Action & Onboarding Center</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Actions */}
+            <div className="card-premium p-6 rounded-[20px] print-hidden action-center-card shadow-soft">
+              <h3 className="font-bold text-stone-900 text-[16px] border-b border-stone-100 pb-4 mb-5">Actions</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <button
                   onClick={handleDownloadPDF}
-                  className="p-4 bg-white/60 border border-stone-200 hover:border-teal-300 rounded-2xl flex flex-col items-start gap-2 text-left transition-all"
+                  className="p-5 border border-stone-200 hover:border-teal-800/40 hover:-translate-y-0.5 hover:shadow-soft rounded-2xl flex flex-col items-start gap-1.5 text-left transition-all bg-white"
                 >
-                  <FileText className="w-6 h-6 text-teal-700" />
-                  <span className="text-xs font-bold text-stone-800">Print Assignment Ticket</span>
-                  <span className="text-[10px] text-stone-600">Save a physical PDF copy of your matching placement.</span>
+                  <FileText className="w-5 h-5 text-teal-800" />
+                  <span className="text-[13px] font-bold text-stone-900">Print assignment</span>
+                  <span className="text-xs text-stone-500">Save a copy of your placement.</span>
                 </button>
                 <button
                   onClick={() => router.push('/student/request')}
-                  className="p-4 bg-white/60 border border-stone-200 hover:border-red-300 rounded-2xl flex flex-col items-start gap-2 text-left transition-all"
+                  className="p-5 border border-stone-200 hover:border-teal-800/40 hover:-translate-y-0.5 hover:shadow-soft rounded-2xl flex flex-col items-start gap-1.5 text-left transition-all bg-white"
                 >
-                  <ShieldAlert className="w-6 h-6 text-red-500" />
-                  <span className="text-xs font-bold text-stone-800">Report Allocation Issue</span>
-                  <span className="text-[10px] text-stone-600">Request review or schedule swap negotiations.</span>
+                  <ShieldAlert className="w-5 h-5 text-amber-700" />
+                  <span className="text-[13px] font-bold text-stone-900">Report an issue</span>
+                  <span className="text-xs text-stone-500">Request a review of your allocation.</span>
                 </button>
-                <div className="p-4 bg-white/60 border border-stone-200 rounded-2xl flex flex-col items-start gap-2 text-left opacity-60">
-                  <MessageSquare className="w-6 h-6 text-orange-600" />
-                  <span className="text-xs font-bold text-stone-800">Room Swap Board (Coming Soon)</span>
-                  <span className="text-[10px] text-stone-600">Exchange rooms with peers under supervisor audits.</span>
+                <div className="p-4 border border-stone-200 rounded-lg flex flex-col items-start gap-1.5 text-left opacity-60">
+                  <MessageSquare className="w-5 h-5 text-stone-400" />
+                  <span className="text-[13px] font-bold text-stone-900">Room swaps (soon)</span>
+                  <span className="text-xs text-stone-500">Exchange rooms under supervision.</span>
                 </div>
               </div>
             </div>

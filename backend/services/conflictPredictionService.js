@@ -421,9 +421,13 @@ const analyzeAllRooms = (allocations, profiles) => {
         "Guests": 0
     };
 
+    // One Map for all rooms: the old per-room filter() was O(rooms x profiles)
+    // (6.6k rooms x 20k profiles on real data) before analyzeRoom even ran.
+    const profileById = new Map(profiles.map(p => [p.user_id, p]));
+
     const analyzedRooms = allocations.map(a => {
-        // Find matching roommate profiles
-        const roommates = profiles.filter(p => a.members.includes(p.user_id));
+        // Find matching roommate profiles via direct lookup per member.
+        const roommates = (a.members || []).map(m => profileById.get(m)).filter(Boolean);
         const analysis = analyzeRoom(a, roommates);
 
         // Count levels

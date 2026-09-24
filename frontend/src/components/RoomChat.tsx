@@ -127,10 +127,10 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
   };
 
   return (
-    <div className="glass-card rounded-[2rem] overflow-hidden flex flex-col h-[500px]">
+    <div className="card-premium rounded-[20px] shadow-soft overflow-hidden flex flex-col h-[500px]">
       {/* Header */}
-      <div className="px-6 py-5 bg-white/70 border-b border-stone-200 flex items-center gap-4">
-        <div className="w-10 h-10 bg-teal-50 rounded-[10px] flex items-center justify-center">
+      <div className="px-6 py-5 bg-white/70 border-b border-stone-100 flex items-center gap-4">
+        <div className="w-10 h-10 bg-teal-50 border border-teal-100 rounded-xl flex items-center justify-center">
           <MessageSquare className="w-5 h-5 text-teal-700" />
         </div>
         <div>
@@ -173,7 +173,7 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
                     )}
                     <div
                       className={clsx(
-                        "max-w-[75%] px-4 py-3 rounded-[14px]",
+                        "max-w-[75%] px-4 py-3 rounded-2xl",
                         isMe
                           ? "bg-teal-700 text-white rounded-tr-sm"
                           : "bg-white border border-stone-200 text-stone-700 rounded-tl-sm shadow-sm"
@@ -211,7 +211,7 @@ export default function RoomChat({ roomId, currentUserEmail, currentUserName }: 
           <button
             type="submit"
             disabled={!newMessage.trim()}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-orange-700 hover:bg-orange-800 disabled:opacity-50 transition-all rounded-full flex items-center justify-center shadow-md scale-95 hover:scale-100"
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 bg-teal-800 hover:bg-teal-900 disabled:opacity-50 transition-colors rounded-lg flex items-center justify-center"
           >
             <Send className="w-4 h-4 text-white -ml-0.5 mt-0.5" />
           </button>

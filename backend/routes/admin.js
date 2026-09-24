@@ -48,4 +48,9 @@ router.post('/force-allocate', adminController.forceAllocateRemaining);
 // Audit log - backend only, no dedicated frontend UI yet (see CLAUDE.md).
 router.get('/audit-log', adminController.getAuditLog);
 
+// Allocation integrity: health report (read-only) + one-time repair for
+// notification stacks from before superseding existed.
+router.get('/allocation-health', adminController.allocationHealth);
+router.post('/repair-notifications', adminController.repairNotifications);
+
 module.exports = router;

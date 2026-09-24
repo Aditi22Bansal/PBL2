@@ -21,6 +21,7 @@ const auditLogSchema = new mongoose.Schema({
       'HOSTEL_CONFIG_UPDATE',
       'HOSTEL_CONFIG_ACTIVATE',
       'ORG_REGISTRATION',
+      'REPAIR_NOTIFICATIONS',
     ],
   },
   // The _id of whatever the action was performed on (a room, a request, a config,

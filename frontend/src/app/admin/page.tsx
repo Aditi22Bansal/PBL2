@@ -1,19 +1,25 @@
-"use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
+"use client";
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
 import { PROXY_URL } from "@/lib/api";
 import {
-  LogOut, Home, Play, Upload, CheckCircle2, Database,
-  Trash2, Plus, AlertTriangle, Download, FileText, Search, Filter, Sparkles,
-  ChevronDown, ChevronUp, User, ShieldAlert, Award, Smile, HelpCircle,
-  Save, Building2, LayoutGrid, X
+  AlertTriangle, ArrowRight, Download, FileText, Play, Plus, Save, Trash2, Upload, X,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import AdminShell from "@/components/admin/AdminShell";
+import RoomExplorer from "@/components/admin/RoomExplorer";
+import {
+  ActivityPanel, AttentionPanel, CompatibilityPanel, HealthStrip,
+  OccupancyPanel, Panel, RoomSpotlight, SectionHead,
+} from "@/components/admin/panels";
+import {
+  exportAllocationsCSV, getCapacityLabel, greeting, inputCls,
+} from "@/lib/admin";
+import { CountUp } from "@/components/premium";
 
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
@@ -21,18 +27,18 @@ export default function AdminDashboard() {
   const [sheetUrl, setSheetUrl] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [allocating, setAllocating] = useState(false);
+  const [repairing, setRepairing] = useState(false);
   const [allocations, setAllocations] = useState<any[]>([]);
+  const [unassignedCount, setUnassignedCount] = useState(0);
   const [analytics, setAnalytics] = useState<any>(null);
+  const [activity, setActivity] = useState<any[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [openRequests, setOpenRequests] = useState(0);
   const [message, setMessage] = useState("");
   const [metrics, setMetrics] = useState<any>(null);
+  const [spotlight, setSpotlight] = useState<any>(null);
 
-  // Search & Filter state for Room Report
-  const [searchQuery, setSearchQuery] = useState("");
-  const [riskFilter, setRiskFilter] = useState("All");
-  const [occupancyFilter, setOccupancyFilter] = useState("All");
-  const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null);
-
-  // Hostel Configurations states
+  // Hostel configurations states
   const [configs, setConfigs] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [formConfigId, setFormConfigId] = useState<string | null>(null);
@@ -82,6 +88,8 @@ export default function AdminDashboard() {
       fetchAllocations();
       fetchConfigs();
       fetchAnalytics();
+      fetchActivity();
+      fetchRequests();
     }
   }, [status, router, session]);
 
@@ -89,6 +97,7 @@ export default function AdminDashboard() {
     try {
       const res = await axios.get(`${PROXY_URL}/admin/allocations`);
       setAllocations(res.data.allocations || []);
+      setUnassignedCount((res.data.unassigned || []).length);
     } catch (error) {
       console.error("Failed to fetch allocations:", error);
     }
@@ -109,6 +118,28 @@ export default function AdminDashboard() {
       setAnalytics(res.data);
     } catch (error) {
       console.error("Failed to fetch analytics:", error);
+    }
+  };
+
+  const fetchActivity = async () => {
+    try {
+      setActivityLoading(true);
+      const res = await axios.get(`${PROXY_URL}/admin/audit-log?limit=8`);
+      setActivity(res.data.entries || []);
+    } catch (error) {
+      console.error("Failed to fetch activity:", error);
+      setActivity([]);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  const fetchRequests = async () => {
+    try {
+      const res = await axios.get(`${PROXY_URL}/admin/requests`);
+      setOpenRequests((res.data || []).filter((r: any) => r.status === "Pending").length);
+    } catch (error) {
+      console.error("Failed to fetch requests:", error);
     }
   };
 
@@ -144,6 +175,7 @@ export default function AdminDashboard() {
       ]);
       fetchConfigs();
       fetchAnalytics();
+      fetchActivity();
     } catch (err: any) {
       console.error(err);
       alert("Error saving configuration: " + (err.response?.data?.message || err.message));
@@ -155,6 +187,7 @@ export default function AdminDashboard() {
       await axios.patch(`${PROXY_URL}/admin/hostel-configurations/${id}/activate`);
       fetchConfigs();
       fetchAnalytics();
+      fetchActivity();
     } catch (err: any) {
       console.error(err);
       alert("Failed to activate: " + (err.response?.data?.message || err.message));
@@ -167,6 +200,7 @@ export default function AdminDashboard() {
       await axios.delete(`${PROXY_URL}/admin/hostel-configurations/${id}`);
       fetchConfigs();
       fetchAnalytics();
+      fetchActivity();
     } catch (err: any) {
       console.error(err);
       alert("Failed to delete: " + (err.response?.data?.message || err.message));
@@ -182,6 +216,7 @@ export default function AdminDashboard() {
       setMessage(res.data.message);
       fetchAllocations();
       fetchAnalytics();
+      fetchActivity();
     } catch (err: any) {
       setMessage("Error: " + (err.response?.data?.details || err.message));
     } finally {
@@ -191,13 +226,14 @@ export default function AdminDashboard() {
 
   const handleAllocate = async () => {
     setAllocating(true);
-    setMessage("Running Similarity Matrix & Clustering... Please wait.");
+    setMessage("Running allocation — this can take several minutes for large batches. Please do not refresh.");
     try {
-      const res = await axios.post(`${PROXY_URL}/admin/trigger-allocation`);
-      setMessage(res.data.message + ` | Rooms Formed: ${res.data.total_rooms}`);
-      if(res.data.metrics) setMetrics(res.data.metrics);
+      const res = await axios.post(`${PROXY_URL}/admin/trigger-allocation`, {}, { timeout: 600000 });
+      setMessage(res.data.message + ` | Rooms formed: ${res.data.total_rooms}`);
+      if (res.data.metrics) setMetrics(res.data.metrics);
       fetchAllocations();
       fetchAnalytics();
+      fetchActivity();
     } catch (err: any) {
       const data = err.response?.data;
       let errMsg = data?.error || data?.message || err.message;
@@ -211,1247 +247,398 @@ export default function AdminDashboard() {
     }
   };
 
-  const exportToCSV = () => {
-    if (!allocations || allocations.length === 0) return;
-    const headers = ["Room Number", "Gender Group", "Compatibility %", "Capacity", "Occupancy Status", "Risk", "Conflict Reasons", "Members"];
-    const rows = allocations.map((a: any) => [
-      a.room_number,
-      a.gender_group || "N/A",
-      `${Math.round((a.compatibility_score || 0) * 100)}%`,
-      a.room_capacity || (a.members || []).length,
-      a.occupancy_status || "Full",
-      a.conflict_analysis?.conflictRisk || "Low",
-      (a.conflict_analysis?.conflictReasons || []).map((r: any) => r.text).join("; ") || "None",
-      (a.members || []).join("; ")
-    ]);
-    const csvContent = [headers, ...rows].map(e => e.map(val => `"${val}"`).join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `RoomFit_Allotments_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleRepair = async () => {
+    setRepairing(true);
+    try {
+      const res = await axios.post(`${PROXY_URL}/admin/repair-notifications`, {});
+      setMessage(res.data.message);
+      fetchActivity();
+    } catch (err: any) {
+      setMessage("Error: " + (err.response?.data?.error || err.message));
+    } finally {
+      setRepairing(false);
+    }
   };
 
   const exportToPDF = () => {
     window.print();
   };
 
-  const getCapacityLabel = (capacity: number) => {
-    switch (capacity) {
-      case 1: return "Single";
-      case 2: return "Double";
-      case 3: return "Triple";
-      case 4: return "Quad";
-      default: return `${capacity}-Bed`;
-    }
-  };
-
   if (status === "loading") return null;
 
-  // Filter and sort allocations for Room Report
-  // Default Sort: Lowest compatibility first
-  const filteredAllocations = allocations
-    .filter((a: any) => {
-      const matchQuery = 
-        a.room_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (a.members || []).some((m: string) => m.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (a.memberDetails && a.memberDetails.some((d: string) => d.toLowerCase().includes(searchQuery.toLowerCase())));
-      
-      const matchRisk = riskFilter === "All" || (a.conflict_analysis?.conflictRisk === riskFilter);
-      const matchOccupancy = occupancyFilter === "All" || a.occupancy_status === occupancyFilter;
-
-      return matchQuery && matchRisk && matchOccupancy;
-    })
-    .sort((x: any, y: any) => (x.compatibility_score || 0) - (y.compatibility_score || 0));
+  const ov = analytics?.systemOverview;
+  const insights = [...(analytics?.insights || [])];
+  if (openRequests > 0) {
+    insights.push({
+      id: "open-requests",
+      text: `${openRequests} room change request${openRequests === 1 ? "" : "s"} awaiting review in Requests.`,
+      type: "warning",
+    });
+  }
+  const highRiskRooms = allocations.filter(
+    (a) => (a.compatibility_score ?? 0) < 0.8 || (a.gender_group || "").includes("FLEX")
+  ).length;
+  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
 
   return (
-    <div className="min-h-screen bg-stone-50 relative overflow-hidden font-sans">
-      <style dangerouslySetInnerHTML={{ __html: `
-        @media print {
-          body {
-            background: white !important;
-            color: black !important;
-          }
-          nav, .print-hidden, button, input, select, .no-print {
-            display: none !important;
-          }
-          main {
-            padding: 0 !important;
-            margin: 0 !important;
-            width: 100% !important;
-          }
-          .print-card {
-            border: 1px solid #e7e5e4 !important;
-            box-shadow: none !important;
-            margin-bottom: 24px !important;
-            page-break-inside: avoid !important;
-          }
-          .print-grid {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr !important;
-            gap: 24px !important;
-          }
-          .print-full {
-            grid-column: span 2 !important;
-          }
-        }
-      `}} />
-
-      {/* Decorative Blur Circles */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-teal-100/40 blur-[120px] pointer-events-none print-hidden" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-teal-100/40 blur-[120px] pointer-events-none print-hidden" />
-
-      {/* Navigation Bar */}
-      <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-stone-200/80 px-8 py-5 flex items-center justify-between shadow-sm print-hidden">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-teal-700 flex items-center justify-center shadow-lg shadow-teal-200">
-            <Home className="text-white w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="font-extrabold text-stone-800 tracking-tight text-lg">RoomFit Console</h1>
-            <p className="text-[10px] font-bold text-stone-600 uppercase tracking-widest mt-0.5">Admin Management portal</p>
-          </div>
+    <AdminShell>
+      {/* Page head */}
+      <div className="flex flex-wrap items-end justify-between gap-4 pt-8 pb-6">
+        <div>
+          <p className="eyebrow text-teal-800 mb-2">RoomFit Console · Overview</p>
+          <h1 className="text-[30px] sm:text-[34px] font-bold tracking-tight text-stone-900 leading-tight">
+            {greeting()}, {session?.user?.name?.split(" ")[0] || "Administrator"}
+          </h1>
+          <p className="text-sm text-stone-500 mt-1.5">Here is the current accommodation and allocation overview · {today}.</p>
         </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1">
-            <Link
-              href="/admin/allocations"
-              className="flex items-center gap-2 text-stone-600 hover:text-stone-800 hover:bg-stone-100 font-semibold text-xs px-4 py-2.5 rounded-xl transition-all"
-            >
-              <Database className="w-4 h-4" /> Allocations
-            </Link>
-            <Link
-              href="/admin/requests"
-              className="flex items-center gap-2 text-stone-600 hover:text-stone-800 hover:bg-stone-100 font-semibold text-xs px-4 py-2.5 rounded-xl transition-all"
-            >
-              <HelpCircle className="w-4 h-4" /> Requests
-            </Link>
-          </div>
-
-          <div className="bg-stone-100 border border-stone-200 px-4 py-2 rounded-xl text-xs font-bold text-stone-600 flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-            Administrator Mode
-          </div>
-
+        <div className="flex items-center gap-2.5 print-hidden">
           <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            className="flex items-center gap-2 bg-stone-900 hover:bg-stone-800 text-white font-semibold py-2.5 px-5 rounded-xl text-xs transition-all shadow-sm"
+            onClick={() => exportAllocationsCSV(allocations)}
+            disabled={allocations.length === 0}
+            className="px-4 py-2 bg-white border border-stone-300 hover:border-stone-500 text-stone-700 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
           >
-            Sign Out <LogOut className="w-4 h-4" />
+            <Download className="w-4 h-4" aria-hidden="true" /> Export CSV
+          </button>
+          <button
+            onClick={exportToPDF}
+            disabled={allocations.length === 0}
+            className="btn-primary px-4 py-2 rounded-lg text-[13px] font-semibold flex items-center gap-2 disabled:opacity-50"
+          >
+            <FileText className="w-4 h-4" aria-hidden="true" /> PDF report
           </button>
         </div>
-      </nav>
+      </div>
 
-      {/* Main Admin Console */}
-      <main className="w-full px-8 md:px-16 py-10 relative z-10 space-y-8">
-        
-        {/* Banner Title & Exports */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-200 pb-6">
-          <div>
-            <h1 className="text-3xl font-black text-stone-800 tracking-tight">Explainable Room Allocations & Analytics</h1>
-            <p className="text-stone-600 text-sm mt-1">Audit roommate compatibility, resolve conflicts pairwise, and monitor capacity.</p>
-          </div>
-          <div className="flex items-center gap-3 print-hidden">
-            <button 
-              onClick={exportToCSV}
-              disabled={allocations.length === 0}
-              className="px-4 py-3 bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all disabled:opacity-50"
-            >
-              <Download className="w-4 h-4 text-stone-600" /> Export CSV
-            </button>
-            <button 
-              onClick={exportToPDF}
-              disabled={allocations.length === 0}
-              className="px-4 py-3 bg-teal-700 text-white hover:bg-teal-800 rounded-xl text-xs font-bold flex items-center gap-2 shadow-md shadow-teal-100 transition-all disabled:opacity-50"
-            >
-              <FileText className="w-4 h-4" /> PDF Report
-            </button>
-          </div>
-        </div>
+      {message && (
+        <p className="text-[13px] text-stone-700 border-l-2 border-teal-800 pl-3 py-1 mb-5 print-hidden" role="status">
+          {message}
+        </p>
+      )}
 
-        {message && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-emerald-50 border border-emerald-200/20 p-4 rounded-xl flex items-center gap-3 text-sm shadow-sm print-hidden"
-          >
-            <CheckCircle2 className="text-emerald-600 w-5 h-5 flex-shrink-0" />
-            <span className="text-emerald-800 font-semibold">{message}</span>
-          </motion.div>
-        )}
-
-        {/* SECTION 1: System Overview Metrics */}
-        {analytics && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 print-grid">
-            <div className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col justify-between min-h-[110px] print-card">
-              <span className="text-stone-600 text-xs font-bold uppercase tracking-wider">Total Students</span>
-              <span className="text-3xl font-black text-stone-800 mt-2">{analytics.systemOverview.totalStudents}</span>
-            </div>
-            <div className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col justify-between min-h-[110px] print-card">
-              <span className="text-stone-600 text-xs font-bold uppercase tracking-wider">Profiles Submitted</span>
-              <span className="text-3xl font-black text-emerald-600 mt-2">{analytics.systemOverview.profilesCompleted}</span>
-            </div>
-            <div className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col justify-between min-h-[110px] print-card">
-              <span className="text-stone-600 text-xs font-bold uppercase tracking-wider">Profiles Pending</span>
-              <span className="text-3xl font-black text-amber-500 mt-2">{analytics.systemOverview.profilesPending}</span>
-            </div>
-            <div className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col justify-between min-h-[110px] print-card">
-              <span className="text-stone-600 text-xs font-bold uppercase tracking-wider">Rooms Formed</span>
-              <span className="text-3xl font-black text-teal-700 mt-2">{analytics.systemOverview.totalRoomsGenerated}</span>
-            </div>
-            <div className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col justify-between min-h-[110px] print-card">
-              <span className="text-stone-600 text-xs font-bold uppercase tracking-wider">Total Beds Inventory</span>
-              <span className="text-3xl font-black text-stone-800 mt-2">{analytics.systemOverview.totalBeds}</span>
-            </div>
-            <div className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col justify-between min-h-[110px] print-card">
-              <span className="text-stone-600 text-xs font-bold uppercase tracking-wider">Occupied Beds</span>
-              <span className="text-3xl font-black text-teal-700 mt-2">{analytics.systemOverview.occupiedBeds}</span>
-            </div>
-            <div className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col justify-between min-h-[110px] print-card">
-              <span className="text-stone-600 text-xs font-bold uppercase tracking-wider">Empty Beds</span>
-              <span className="text-3xl font-black text-teal-700 mt-2">{analytics.systemOverview.emptyBeds}</span>
-            </div>
-            <div className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col justify-between min-h-[110px] print-card">
-              <span className="text-stone-600 text-xs font-bold uppercase tracking-wider">Hostel Utilization</span>
-              <span className="text-3xl font-black text-teal-700 mt-2">{analytics.systemOverview.hostelUtilization}%</span>
-            </div>
-          </div>
-        )}
-
-        {/* SECTION 8: Dynamic AI Insights & Alerts Banner */}
-        {analytics && analytics.insights && analytics.insights.length > 0 && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white border border-stone-200 rounded-[2rem] p-6 shadow-sm print-card"
-          >
-            <h3 className="text-sm font-extrabold text-stone-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-teal-700 animate-pulse" /> AI System Insights & Explanations
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {analytics.insights.map((insight: any, idx: number) => (
-                <div 
-                  key={idx} 
-                  className={`p-4 rounded-2xl border flex gap-3 text-xs leading-relaxed font-semibold ${
-                    insight.type === 'danger' ? 'bg-red-50/50 border-red-200 text-red-800' :
-                    insight.type === 'warning' ? 'bg-amber-50/50 border-amber-200 text-amber-800' :
-                    insight.type === 'success' ? 'bg-emerald-50/50 border-emerald-200/20 text-emerald-800' :
-                    'bg-stone-50 border-stone-200 text-stone-700'
-                  }`}
-                >
-                  <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${
-                    insight.type === 'danger' ? 'text-red-600' :
-                    insight.type === 'warning' ? 'text-amber-500' :
-                    insight.type === 'success' ? 'text-emerald-600' :
-                    'text-stone-600'
-                  }`} />
-                  <span>{insight.text}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* SECTION: Conflict Analysis Risk Breakdown (New Section!) */}
-        {analytics && analytics.conflictAnalysis && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 print-grid">
-            {/* Risk Levels Summary */}
-            <div className="bg-white p-6 rounded-[2rem] border border-stone-200 shadow-sm print-card col-span-1">
-              <h3 className="font-extrabold text-stone-800 text-md border-b border-stone-100 pb-3 mb-4">Conflict Risk Assessment</h3>
-              <div className="space-y-3.5">
-                <div className="flex items-center justify-between text-xs font-bold p-3 bg-red-50 border border-red-100 rounded-2xl text-red-700">
-                  <div className="flex items-center gap-2">
-                    <ShieldAlert className="w-4 h-4" />
-                    <span>High Risk Rooms</span>
-                  </div>
-                  <span className="text-lg font-black">{analytics.conflictAnalysis.summary.highRiskCount}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs font-bold p-3 bg-amber-50 border border-amber-100 rounded-2xl text-amber-700">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span>Needs Attention</span>
-                  </div>
-                  <span className="text-lg font-black">{analytics.conflictAnalysis.summary.needsAttentionCount}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs font-bold p-3 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-700">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Good Rooms</span>
-                  </div>
-                  <span className="text-lg font-black">{analytics.conflictAnalysis.summary.goodCount}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs font-bold p-3 bg-teal-50 border border-teal-100 rounded-2xl text-teal-800">
-                  <div className="flex items-center gap-2">
-                    <Award className="w-4 h-4" />
-                    <span>Excellent Match</span>
-                  </div>
-                  <span className="text-lg font-black">{analytics.conflictAnalysis.summary.excellentCount}</span>
+      {/* Key metrics — all 8 statistics, one structured band */}
+      <section aria-label="Key metrics" className="bg-white border border-stone-200/90 rounded-[20px] overflow-hidden shadow-soft">
+        {ov ? (
+          <>
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-px bg-stone-200">
+              <div className="bg-white px-5 sm:px-6 py-6">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500">Students</p>
+                <p className="text-[32px] font-bold text-stone-900 leading-none tabular-nums mt-2"><CountUp value={ov.totalStudents} /></p>
+                <p className="text-xs text-stone-500 mt-2">registered across institution</p>
+              </div>
+              <div className="bg-white px-5 sm:px-6 py-6">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500">Rooms formed</p>
+                <p className="text-[32px] font-bold text-stone-900 leading-none tabular-nums mt-2"><CountUp value={ov.totalRoomsGenerated} /></p>
+                <p className="text-xs text-stone-500 mt-2">
+                  {ov.totalRoomsGenerated > 0 ? `~${Math.round(analytics.allocationQuality.averageRoomSize)} students per room` : "no rooms yet"}
+                </p>
+              </div>
+              <div className="bg-white px-5 sm:px-6 py-6">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500">Beds occupied</p>
+                <p className="text-[32px] font-bold text-stone-900 leading-none tabular-nums mt-2">
+                  <CountUp value={ov.occupiedBeds} /><span className="text-stone-400 font-semibold text-[22px]"> / {ov.totalBeds}</span>
+                </p>
+                <p className="text-xs text-stone-500 mt-2">{ov.emptyBeds} bed{ov.emptyBeds === 1 ? "" : "s"} available</p>
+              </div>
+              <div className="bg-white px-5 sm:px-6 py-6">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500">Occupancy</p>
+                <p className="text-[32px] font-bold text-stone-900 leading-none tabular-nums mt-2"><CountUp value={ov.hostelUtilization} suffix="%" /></p>
+                <div className="mt-2.5 h-1.5 rounded-full bg-stone-200 overflow-hidden max-w-[220px]" role="img" aria-label={`${ov.hostelUtilization}% occupancy`}>
+                  <div className="h-full bg-teal-800 rounded-full" style={{ width: `${Math.min(ov.hostelUtilization, 100)}%` }} />
                 </div>
               </div>
             </div>
-
-            {/* Top Conflict Causes SVG Chart (Section 5 & 6) */}
-            <div className="bg-white p-6 rounded-[2rem] border border-stone-200 shadow-sm print-card col-span-2">
-              <h3 className="font-extrabold text-stone-800 text-md border-b border-stone-100 pb-3 mb-4">Common Conflict Categories</h3>
-              <div className="space-y-4">
-                {Object.entries(analytics.conflictAnalysis.conflictCauses).map(([cause, count]: any) => {
-                  const maxCount = Math.max(...Object.values(analytics.conflictAnalysis.conflictCauses) as number[], 1);
-                  const pct = Math.round((count / maxCount) * 100);
-                  
-                  return (
-                    <div key={cause} className="text-xs space-y-1">
-                      <div className="flex items-center justify-between font-bold text-stone-600">
-                        <span>{cause}</span>
-                        <span className="text-stone-800 font-extrabold">{count} Room(s) ({pct}%)</span>
-                      </div>
-                      <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden border border-stone-200">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${pct}%` }}
-                          transition={{ duration: 0.5 }}
-                          className={`h-full rounded-full ${
-                            cause === 'Smoking' ? 'bg-red-500' :
-                            cause === 'Sleep Schedule' ? 'bg-teal-700' :
-                            cause === 'Cleanliness' ? 'bg-amber-500' :
-                            'bg-teal-600'
-                          }`}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+            <dl className="grid grid-cols-2 md:grid-cols-4 gap-px bg-stone-100 border-t border-stone-200">
+              <div className="bg-stone-50/60 px-5 sm:px-6 py-3.5 flex items-center justify-between gap-3">
+                <dt className="text-xs text-stone-500 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-teal-800 shrink-0" aria-hidden="true" />Profiles submitted
+                </dt>
+                <dd className="text-[15px] font-bold text-stone-900 tabular-nums">{ov.profilesCompleted}</dd>
               </div>
-            </div>
-          </div>
+              <div className="bg-stone-50/60 px-5 sm:px-6 py-3.5 flex items-center justify-between gap-3">
+                <dt className="text-xs text-stone-500 flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${ov.profilesPending > 0 ? "bg-amber-500" : "bg-teal-800"}`} aria-hidden="true" />Profiles pending
+                </dt>
+                <dd className={`text-[15px] font-bold tabular-nums ${ov.profilesPending > 0 ? "text-amber-700" : "text-stone-900"}`}>{ov.profilesPending}</dd>
+              </div>
+              <div className="bg-stone-50/60 px-5 sm:px-6 py-3.5 flex items-center justify-between gap-3">
+                <dt className="text-xs text-stone-500 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-teal-800 shrink-0" aria-hidden="true" />Total beds
+                </dt>
+                <dd className="text-[15px] font-bold text-stone-900 tabular-nums">{ov.totalBeds}</dd>
+              </div>
+              <div className="bg-stone-50/60 px-5 sm:px-6 py-3.5 flex items-center justify-between gap-3">
+                <dt className="text-xs text-stone-500 flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${ov.emptyBeds > 0 ? "bg-amber-500" : "bg-stone-300"}`} aria-hidden="true" />Empty beds
+                </dt>
+                <dd className="text-[15px] font-bold text-stone-900 tabular-nums">{ov.emptyBeds}</dd>
+              </div>
+            </dl>
+          </>
+        ) : (
+          <p className="px-6 py-10 text-sm text-stone-500">Loading metrics…</p>
         )}
+      </section>
 
-        {/* SECTION 2 & 3: Allocation Quality & Utilization Cards */}
-        {analytics && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 print-grid">
-            
-            {/* Allocation Quality (Section 2) */}
-            <div className="bg-white p-6 rounded-[2rem] border border-stone-200 shadow-sm print-card">
-              <h3 className="font-extrabold text-stone-800 text-md border-b border-stone-100 pb-3 mb-4">Allocation Match Quality</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100/80">
-                  <div className="text-stone-600 text-[10px] font-extrabold uppercase tracking-wider">Avg Compatibility</div>
-                  <div className="text-2xl font-black text-emerald-600 mt-1">{analytics.allocationQuality.averageCompatibility}%</div>
-                </div>
-                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100/80">
-                  <div className="text-stone-600 text-[10px] font-extrabold uppercase tracking-wider">Average Room Size</div>
-                  <div className="text-2xl font-black text-stone-800 mt-1">{analytics.allocationQuality.averageRoomSize} Stud/Rm</div>
-                </div>
-                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100/80">
-                  <div className="text-stone-600 text-[10px] font-extrabold uppercase tracking-wider">Highest Room Match</div>
-                  <div className="text-md font-bold text-stone-800 mt-1.5">
-                    {analytics.allocationQuality.highestCompatibilityRoom ? (
-                      <>
-                        <span className="text-teal-700">{analytics.allocationQuality.highestCompatibilityRoom.room_number}</span>
-                        <span className="text-xs text-stone-600 font-medium ml-1">
-                          {analytics.allocationQuality.highestCompatibilityRoom.raw_compatibility_score < 0
-                            ? '(Below Average Match)'
-                            : `(${analytics.allocationQuality.highestCompatibilityRoom.compatibility_score}%)`}
-                        </span>
-                      </>
-                    ) : "N/A"}
-                  </div>
-                </div>
-                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100/80">
-                  <div className="text-stone-600 text-[10px] font-extrabold uppercase tracking-wider">Lowest Room Match</div>
-                  <div className="text-md font-bold text-stone-800 mt-1.5">
-                    {analytics.allocationQuality.lowestCompatibilityRoom ? (
-                      <>
-                        <span className="text-red-500">{analytics.allocationQuality.lowestCompatibilityRoom.room_number}</span>
-                        <span className="text-xs text-stone-600 font-medium ml-1">
-                          {analytics.allocationQuality.lowestCompatibilityRoom.raw_compatibility_score < 0
-                            ? '(Below Average Match)'
-                            : `(${analytics.allocationQuality.lowestCompatibilityRoom.compatibility_score}%)`}
-                        </span>
-                      </>
-                    ) : "N/A"}
-                  </div>
-                </div>
-                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100/80">
-                  <div className="text-stone-600 text-[10px] font-extrabold uppercase tracking-wider">Unassigned Students</div>
-                  <div className={`text-2xl font-black mt-1 ${analytics.allocationQuality.unassignedStudents > 0 ? 'text-amber-500' : 'text-stone-800'}`}>
-                    {analytics.allocationQuality.unassignedStudents}
-                  </div>
-                </div>
-                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100/80">
-                  <div className="text-stone-600 text-[10px] font-extrabold uppercase tracking-wider">Flex Rooms Formed</div>
-                  <div className="text-2xl font-black text-stone-800 mt-1">{analytics.allocationQuality.flexRooms}</div>
-                </div>
-              </div>
-            </div>
+      {/* Main dashboard grid */}
+      <div className="grid grid-cols-12 gap-5 mt-5 items-start">
+        {/* Left — room allocation overview */}
+        <div className="col-span-12 xl:col-span-8 min-w-0">
+          <SectionHead
+            title="Room allocation"
+            sub={ov ? `${ov.totalRoomsGenerated} rooms · ${ov.totalStudents} students · ${ov.hostelUtilization}% occupied` : "Review room occupancy, compatibility and allocation health."}
+            action={
+              <Link href="/admin/allocations" className="text-[13px] font-semibold text-teal-900 hover:text-teal-950 flex items-center gap-1 transition-colors print-hidden">
+                Open manager <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </Link>
+            }
+          />
+          <RoomExplorer
+            allocations={allocations}
+            variant="overview"
+            limit={8}
+            viewAllHref="/admin/allocations"
+            selectedId={spotlight?._id || null}
+            onSelect={setSpotlight}
+          />
 
-            {/* Hostel Utilization (Section 3) */}
-            <div className="bg-white p-6 rounded-[2rem] border border-stone-200 shadow-sm flex flex-col justify-between print-card">
-              <div>
-                <h3 className="font-extrabold text-stone-800 text-md border-b border-stone-100 pb-3 mb-4">Hostel Bed Utilization</h3>
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100/80">
-                    <div className="text-stone-600 text-[10px] font-extrabold uppercase tracking-wider">Beds Occupied</div>
-                    <div className="text-2xl font-black text-stone-800 mt-1">{analytics.systemOverview.occupiedBeds} Beds</div>
-                  </div>
-                  <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100/80">
-                    <div className="text-stone-600 text-[10px] font-extrabold uppercase tracking-wider">Beds Remaining</div>
-                    <div className="text-2xl font-black text-stone-800 mt-1">{analytics.systemOverview.emptyBeds} Beds</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Progress bar container */}
-              <div className="space-y-2 mt-auto">
-                <div className="flex items-center justify-between text-xs font-bold text-stone-600">
-                  <span>Overall Capacity Progress</span>
-                  <span>{analytics.systemOverview.hostelUtilization}%</span>
-                </div>
-                <div className="w-full bg-stone-100 h-4 rounded-full overflow-hidden border border-stone-200">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${analytics.systemOverview.hostelUtilization}%` }}
-                    transition={{ duration: 0.8 }}
-                    className="bg-gradient-to-r from-teal-600 to-teal-700 h-full rounded-full"
+          {/* Operations */}
+          <div className="mt-8 print-hidden">
+            <SectionHead title="Operations" sub="Sync responses and run the matching engine." />
+            <Panel label="Operations">
+              <div className="grid md:grid-cols-2 gap-px bg-stone-100 rounded-2xl overflow-hidden">
+                <div className="bg-white p-5 sm:p-6">
+                  <h3 className="text-sm font-bold text-stone-900">Sync responses</h3>
+                  <p className="text-[13px] text-stone-500 mt-1 mb-4 leading-relaxed">Import questionnaire responses from a viewer-accessible Google Sheet.</p>
+                  <input
+                    type="text" placeholder="Google Sheet CSV export URL" value={sheetUrl}
+                    onChange={(e) => setSheetUrl(e.target.value)} aria-label="Google Sheet CSV export URL"
+                    className={`${inputCls} w-full mb-2.5`}
                   />
+                  <button
+                    onClick={handleSync} disabled={syncing || !sheetUrl}
+                    className="btn-primary font-semibold text-[13px] px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {syncing ? "Syncing…" : "Sync responses"} <Upload className="w-4 h-4" aria-hidden="true" />
+                  </button>
                 </div>
-                <div className="flex items-center justify-between text-[10px] text-stone-600 font-bold uppercase mt-1">
-                  <span>0 Assigned</span>
-                  <span>{analytics.systemOverview.totalBeds} Max Beds</span>
+                <div className="bg-white p-5 sm:p-6">
+                  <h3 className="text-sm font-bold text-stone-900">Run allocation</h3>
+                  <p className="text-[13px] text-stone-500 mt-1 mb-4 leading-relaxed">Match students into rooms using compatibility, cohort rules, and the active configuration.</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleAllocate} disabled={allocating || repairing || (analytics?.systemOverview.profilesCompleted === 0)}
+                      className="btn-primary font-semibold text-[13px] px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {allocating ? "Running…" : "Run allocation"} <Play className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      onClick={handleRepair} disabled={allocating || repairing}
+                      title="Collapse stacked allocation notifications so each student sees only their latest room"
+                      className="font-semibold text-[13px] px-4 py-2 rounded-lg border border-stone-300 hover:border-stone-500 text-stone-600 transition-colors disabled:opacity-50"
+                    >
+                      {repairing ? "Cleaning…" : "Clean up notifications"}
+                    </button>
+                  </div>
+                  {metrics && (
+                    <dl className="mt-5 divide-y divide-stone-100 border-t border-b border-stone-100">
+                      {Object.entries(metrics).map(([model, score]: any) => (
+                        <div key={model} className="flex items-baseline justify-between py-2">
+                          <dt className="text-[13px] text-stone-500">{model}</dt>
+                          <dd className="text-sm font-semibold text-stone-900 tabular-nums">{(score * 100).toFixed(1)}%</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
                 </div>
               </div>
-            </div>
+            </Panel>
           </div>
-        )}
 
-        {/* SECTION 4, 5 & 6: Charts & Distributions */}
-        {analytics && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 print-grid">
-            
-            {/* Compatibility Analytics Histogram (Section 4) */}
-            <div className="bg-white p-6 rounded-[2rem] border border-stone-200 shadow-sm print-card">
-              <h3 className="font-extrabold text-stone-800 text-md border-b border-stone-100 pb-3 mb-6">Compatibility Distribution</h3>
-              
-              <div className="h-[180px] flex items-end justify-between gap-2 px-2 relative border-b border-stone-200 pb-2">
-                {Object.entries(analytics.compatibilityAnalytics).map(([bucket, count]: any) => {
-                  const maxCount = Math.max(...(Object.values(analytics.compatibilityAnalytics) as number[]), 1);
-                  const heightPct = (count / maxCount) * 100;
-                  return (
-                    <div key={bucket} className="flex-1 flex flex-col items-center gap-2 group relative">
-                      {/* Tooltip */}
-                      <div className="absolute top-[-30px] bg-stone-900 text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity font-bold pointer-events-none">
-                        {count} Room(s)
-                      </div>
-                      
-                      <div className="w-full bg-stone-50 hover:bg-stone-100 rounded-lg h-[140px] flex items-end overflow-hidden">
-                        <motion.div 
-                          initial={{ height: 0 }}
-                          animate={{ height: `${heightPct}%` }}
-                          transition={{ duration: 0.5 }}
-                          className={`w-full rounded-t-md ${
-                            bucket.includes('Below') ? 'bg-gradient-to-t from-red-500 to-red-400' :
-                            bucket.includes('80-85') ? 'bg-gradient-to-t from-amber-500 to-amber-400' :
-                            'bg-gradient-to-t from-teal-700 to-teal-400'
-                          }`}
-                        />
-                      </div>
-                      <span className="text-[9px] text-stone-600 font-extrabold text-center truncate w-full">{bucket}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="text-center text-[10px] text-stone-600 font-bold uppercase mt-4">Room Compatibility Buckets (%)</div>
-            </div>
-
-            {/* Room Size Distribution Doughnut (Section 5) */}
-            <div className="bg-white p-6 rounded-[2rem] border border-stone-200 shadow-sm flex flex-col justify-between print-card">
+          {/* Room configurations */}
+          <div className="mt-8 print-hidden">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
               <div>
-                <h3 className="font-extrabold text-stone-800 text-md border-b border-stone-100 pb-3 mb-4">Room Size Breakdown</h3>
+                <h2 className="text-[17px] font-semibold tracking-tight text-stone-900">Room configurations</h2>
+                <p className="text-[13px] text-stone-500 mt-0.5">Define room inventory used by the allocation engine.</p>
               </div>
-              
-              <div className="flex items-center justify-center relative py-4">
-                <svg viewBox="0 0 100 100" className="w-36 h-36">
-                  {Object.entries(analytics.roomSizeDistribution).map(([capStr, count]: any, idx) => {
-                    const cap = Number(capStr);
-                    const totalRooms = analytics.systemOverview.totalRoomsGenerated || 1;
-                    const pct = (count / totalRooms) * 100;
-                    const radius = 40 - (idx * 9);
-                    const circ = 2 * Math.PI * radius;
-                    const strokeDash = (pct / 100) * circ;
-
-                    // Color palette
-                    const colors = [
-                      "#0f766e", // double: teal-700
-                      "#0d9488", // triple: teal-600
-                      "#10b981", // quad: emerald-500
-                      "#f59e0b"  // other: amber-500
-                    ];
-                    const color = colors[idx] || "#57534e";
-
-                    return (
-                      <g key={cap}>
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r={radius}
-                          fill="transparent"
-                          stroke="#f5f5f4"
-                          strokeWidth="6"
-                        />
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r={radius}
-                          fill="transparent"
-                          stroke={color}
-                          strokeWidth="6"
-                          strokeDasharray={`${strokeDash} ${circ}`}
-                          strokeLinecap="round"
-                          transform="rotate(-90 50 50)"
-                        />
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
-
-              {/* Legends */}
-              <div className="grid grid-cols-3 gap-2 mt-4 text-[10px] font-bold text-stone-600 border-t border-stone-100 pt-4">
-                {Object.entries(analytics.roomSizeDistribution).map(([capStr, count]: any, idx) => {
-                  const cap = Number(capStr);
-                  const colors = ["bg-teal-700", "bg-teal-600", "bg-emerald-500", "bg-amber-500"];
-                  const colorClass = colors[idx] || "bg-stone-600";
-                  return (
-                    <div key={cap} className="flex flex-col items-center">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className={`w-2 h-2 rounded-full ${colorClass}`} />
-                        <span>{getCapacityLabel(cap)}</span>
-                      </div>
-                      <span className="text-stone-800 text-xs font-black">{count} Rms</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Student Demographics (Section 6) */}
-            <div className="bg-white p-6 rounded-[2rem] border border-stone-200 shadow-sm print-card">
-              <h3 className="font-extrabold text-stone-800 text-md border-b border-stone-100 pb-3 mb-4">Student Demographics</h3>
-              
-              <div className="space-y-4 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
-                {/* Branch breakdown */}
-                <div className="space-y-2">
-                  <span className="text-[10px] font-extrabold text-stone-600 uppercase tracking-widest block">Branch Distribution</span>
-                  {Object.entries(analytics.studentDemographics.branch).slice(0, 3).map(([branch, count]: any) => {
-                    const totalComp = analytics.systemOverview.profilesCompleted || 1;
-                    const pct = Math.round((count / totalComp) * 100);
-                    return (
-                      <div key={branch} className="text-xs space-y-1">
-                        <div className="flex items-center justify-between font-bold text-stone-600">
-                          <span>{branch}</span>
-                          <span>{count} ({pct}%)</span>
-                        </div>
-                        <div className="w-full bg-stone-100 h-1.5 rounded-full overflow-hidden">
-                          <div style={{ width: `${pct}%` }} className="bg-teal-700 h-full rounded-full" />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Year breakdown */}
-                <div className="space-y-2 pt-2 border-t border-stone-100">
-                  <span className="text-[10px] font-extrabold text-stone-600 uppercase tracking-widest block">Year of Study</span>
-                  <div className="grid grid-cols-4 gap-2 text-center text-xs font-bold">
-                    {["1", "2", "3", "4"].map((yr) => {
-                      const count = analytics.studentDemographics.year[yr] || 0;
-                      const totalComp = analytics.systemOverview.profilesCompleted || 1;
-                      const pct = Math.round((count / totalComp) * 100);
-                      return (
-                        <div key={yr} className="bg-stone-50 border border-stone-100 p-1.5 rounded-xl">
-                          <span className="text-[10px] text-stone-600 block">Yr {yr}</span>
-                          <span className="text-stone-800 font-extrabold">{count} ({pct}%)</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* Sync Controls & Allocation triggering */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print-hidden">
-          {/* Sync Card */}
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="bg-white p-8 rounded-[2rem] border border-stone-200 shadow-sm relative overflow-hidden group"
-          >
-            <div className="absolute top-0 right-0 p-8 opacity-5 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform duration-700">
-               <Database className="w-32 h-32 text-teal-900" />
-            </div>
-            
-            <h2 className="text-2xl font-black text-stone-800 tracking-tight flex items-center gap-2.5">
-               Google Sheet Synchronization
-            </h2>
-            <p className="text-stone-600 text-sm leading-relaxed mt-2">
-              Import room preferences directly from student compatibility response logs. Links must be set as viewer-accessible.
-            </p>
-
-            <div className="mt-8 space-y-4">
-              <input
-                type="text"
-                placeholder="Google Sheet CSV Export URL..."
-                value={sheetUrl}
-                onChange={(e) => setSheetUrl(e.target.value)}
-                className="w-full bg-stone-50 border border-stone-200/80 rounded-2xl px-4 py-3.5 text-sm text-stone-800 focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all shadow-inner"
-              />
-              <button
-                onClick={handleSync}
-                disabled={syncing || !sheetUrl}
-                className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-4 rounded-2xl text-sm transition-all flex items-center justify-center gap-2 shadow-md shadow-teal-200 disabled:opacity-50"
-              >
-                {syncing ? "Synchronizing database..." : "Synchronize Google Sheet responses"} <Upload className="w-4 h-4" />
-              </button>
-            </div>
-          </motion.div>
-
-          {/* Allocation Process Card */}
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="bg-white p-8 rounded-[2rem] border border-stone-200 shadow-sm relative overflow-hidden group"
-          >
-            <div className="absolute top-0 right-0 p-8 opacity-5 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform duration-700">
-               <Play className="w-32 h-32 text-teal-900" />
-            </div>
-
-            <h2 className="text-2xl font-black text-stone-800 tracking-tight flex items-center gap-2.5">
-               Trigger AI Room Allocation
-            </h2>
-            <p className="text-stone-600 text-sm leading-relaxed mt-2">
-              Execute greedy heuristics room solver using compatibility matrices, branch cohorts, and active room configuration limits.
-            </p>
-
-            <div className="mt-8 pt-4">
-              <button
-                onClick={handleAllocate}
-                disabled={allocating || (analytics?.systemOverview.profilesCompleted === 0)}
-                className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-4 rounded-2xl text-sm transition-all flex items-center justify-center gap-2 shadow-md shadow-teal-100 disabled:opacity-50"
-              >
-                {allocating ? "Running matching solver..." : "Trigger compatibility solver run"} <Play className="w-4 h-4" />
-              </button>
-            </div>
-          </motion.div>
-        </div>
-
-        {/* Model Metrics Benchmarks */}
-        {metrics && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white p-6 rounded-3xl relative border border-stone-200 shadow-sm print-card"
-          >
-            <h2 className="text-xl font-bold mb-4 text-stone-800 flex items-center gap-2">
-               Model Benchmark Performance
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {Object.entries(metrics).map(([model, score]: any) => (
-                 <div key={model} className="bg-stone-50 p-4 rounded-2xl border border-stone-100 flex flex-col items-center justify-center">
-                    <div className="text-stone-600 text-xs font-bold mb-1 uppercase tracking-wider">{model}</div>
-                    <div className={`text-2xl font-black ${model.includes('Hybrid') ? 'text-teal-700' : 'text-stone-800'}`}>
-                        {(score * 100).toFixed(1)}%
-                    </div>
-                 </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* Hostel Configuration Inventory */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white p-8 rounded-[2rem] border border-stone-200 shadow-sm print-hidden"
-        >
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-stone-100 pb-5 mb-8 gap-4">
-            <div>
-              <h2 className="text-2xl font-black text-stone-800 tracking-tight">Hostel Configurations</h2>
-              <p className="text-stone-600 text-xs mt-1">Manage active room capacities, inventories, and gender categories.</p>
-            </div>
-            {!showForm && (
-              <button 
-                onClick={() => {
-                  setFormConfigId(null);
-                  setFormHostelName("");
-                  setFormHostelCode("");
-                  setFormGender("Mixed");
-                  setFormTemplates([
-                    { capacity: 2, count: 20, floor: "Ground" },
-                    { capacity: 3, count: 40, floor: "1" },
-                    { capacity: 4, count: 10, floor: "2" }
-                  ]);
-                  setShowForm(true);
-                }}
-                className="px-5 py-3 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-teal-100"
-              >
-                <Plus className="w-4 h-4" /> Create Configuration
-              </button>
-            )}
-          </div>
-
-          {showForm ? (
-            /* Create/Edit Form — design system pilot: primary and neutral color tokens,
-               defined labels, grouped sections, consistent spacing (see globals.css) */
-            <div className="bg-neutral-50 rounded-3xl border border-neutral-200 overflow-hidden">
-              {/* Form header */}
-              <div className="flex items-center justify-between gap-4 px-8 py-6 border-b border-neutral-200 bg-white">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center shrink-0">
-                    <Building2 className="w-5 h-5 text-primary-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-neutral-800">
-                      {formConfigId ? "Edit Hostel Configuration" : "New Hostel Configuration"}
-                    </h3>
-                    <p className="text-xs text-neutral-500 mt-0.5">Define the hostel&apos;s identity and its room capacity inventory.</p>
-                  </div>
-                </div>
+              {!showForm && (
                 <button
-                  onClick={() => { setShowForm(false); setFormConfigId(null); }}
-                  aria-label="Close form"
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-all shrink-0"
+                  onClick={() => {
+                    setFormConfigId(null); setFormHostelName(""); setFormHostelCode(""); setFormGender("Mixed");
+                    setFormTemplates([
+                      { capacity: 2, count: 20, floor: "Ground" },
+                      { capacity: 3, count: 40, floor: "1" },
+                      { capacity: 4, count: 10, floor: "2" }
+                    ]);
+                    setShowForm(true);
+                  }}
+                  className="text-[13px] font-semibold text-teal-900 hover:text-teal-950 flex items-center gap-1.5"
                 >
-                  <X className="w-5 h-5" />
+                  <Plus className="w-4 h-4" aria-hidden="true" /> New configuration
                 </button>
-              </div>
+              )}
+            </div>
 
-              <div className="p-8 space-y-6">
-                {/* Section: Basic Details */}
-                <section className="bg-white border border-neutral-200 rounded-2xl p-6">
-                  <h4 className="text-sm font-bold text-neutral-700 mb-5 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary-500" /> Basic Details
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="flex flex-col gap-2">
-                      <label className="text-xs font-bold text-neutral-500 uppercase tracking-wide">Hostel Name</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Boys Hostel 1"
-                        value={formHostelName}
-                        onChange={(e) => setFormHostelName(e.target.value)}
-                        className="bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all placeholder:text-neutral-400"
-                      />
+            {showForm ? (
+              <Panel label="Configuration form" className="overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200">
+                  <h3 className="text-sm font-bold text-stone-900">{formConfigId ? "Edit configuration" : "New configuration"}</h3>
+                  <button
+                    onClick={() => { setShowForm(false); setFormConfigId(null); }} aria-label="Close form"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-stone-500 hover:bg-stone-100 transition-colors"
+                  >
+                    <X className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="p-5 space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-700 mb-1.5">Hostel name</label>
+                      <input type="text" placeholder="e.g. Boys Hostel 1" value={formHostelName} onChange={(e) => setFormHostelName(e.target.value)} className={`${inputCls} w-full`} />
                     </div>
-                    <div className="flex flex-col gap-2">
-                      <label className="text-xs font-bold text-neutral-500 uppercase tracking-wide">Hostel Code</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. BH1"
-                        value={formHostelCode}
-                        onChange={(e) => setFormHostelCode(e.target.value)}
-                        className="bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all placeholder:text-neutral-400"
-                      />
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-700 mb-1.5">Hostel code</label>
+                      <input type="text" placeholder="e.g. BH1" value={formHostelCode} onChange={(e) => setFormHostelCode(e.target.value)} className={`${inputCls} w-full`} />
                     </div>
-                    <div className="flex flex-col gap-2">
-                      <label className="text-xs font-bold text-neutral-500 uppercase tracking-wide">Gender Classification</label>
-                      <select
-                        value={formGender}
-                        onChange={(e) => setFormGender(e.target.value as any)}
-                        className="bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all"
-                      >
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-700 mb-1.5">Gender</label>
+                      <select value={formGender} onChange={(e) => setFormGender(e.target.value as any)} className={`${inputCls} w-full`}>
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
                         <option value="Mixed">Mixed</option>
                       </select>
                     </div>
                   </div>
-                </section>
-
-                {/* Section: Room Templates */}
-                <section className="bg-white border border-neutral-200 rounded-2xl p-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-                    <h4 className="text-sm font-bold text-neutral-700 flex items-center gap-2">
-                      <LayoutGrid className="w-4 h-4 text-primary-500" /> Room Capacity Layout
-                    </h4>
-                    <div className="flex items-center gap-4 text-xs font-bold text-neutral-500">
-                      <span>Total Rooms: <span className="text-primary-600 font-black">{formTotalRooms}</span></span>
-                      <span className="w-px h-4 bg-neutral-200" />
-                      <span>Total Beds: <span className="text-primary-600 font-black">{formTotalBeds}</span></span>
-                    </div>
-                  </div>
-
-                  <div className="border border-neutral-200 rounded-2xl overflow-hidden">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-neutral-50 text-neutral-500 font-bold uppercase border-b border-neutral-200">
-                        <tr>
-                          <th className="px-6 py-4">Room Bed Capacity</th>
-                          <th className="px-6 py-4">Number of Rooms Available</th>
-                          <th className="px-6 py-4">Floor</th>
-                          <th className="px-6 py-4 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-neutral-100">
-                        {formTemplates.map((t, idx) => (
-                          <tr key={idx}>
-                            <td className="px-6 py-3">
-                              <input
-                                type="number"
-                                placeholder="e.g. 3 (triple)"
-                                value={t.capacity}
-                                onChange={(e) => {
-                                  const val = e.target.value === "" ? "" : Number(e.target.value);
-                                  const updated = [...formTemplates];
-                                  updated[idx].capacity = val;
-                                  setFormTemplates(updated);
-                                }}
-                                className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all"
-                              />
-                            </td>
-                            <td className="px-6 py-3">
-                              <input
-                                type="number"
-                                placeholder="e.g. 10 (rooms count)"
-                                value={t.count}
-                                onChange={(e) => {
-                                  const val = e.target.value === "" ? "" : Number(e.target.value);
-                                  const updated = [...formTemplates];
-                                  updated[idx].count = val;
-                                  setFormTemplates(updated);
-                                }}
-                                className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all"
-                              />
-                            </td>
-                            <td className="px-6 py-3">
-                              <input
-                                type="text"
-                                placeholder="e.g. Ground, 1, 2"
-                                value={t.floor}
-                                onChange={(e) => {
-                                  const updated = [...formTemplates];
-                                  updated[idx].floor = e.target.value;
-                                  setFormTemplates(updated);
-                                }}
-                                className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-800 focus:outline-none focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all w-28"
-                              />
-                            </td>
-                            <td className="px-6 py-3 text-right">
-                              <button
-                                onClick={() => {
-                                  const updated = formTemplates.filter((_, i) => i !== idx);
-                                  setFormTemplates(updated);
-                                }}
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-xl transition-all inline-flex items-center gap-1 border border-transparent font-medium"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Remove</span>
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <button
-                    onClick={() => setFormTemplates([...formTemplates, { capacity: "", count: "", floor: "" }])}
-                    className="mt-4 px-4 py-2.5 border border-neutral-200 hover:border-primary-300 hover:bg-primary-50 text-neutral-600 hover:text-primary-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Room Type
-                  </button>
-                </section>
-
-                {formValidationError && (
-                  <div className="text-red-600 text-xs font-semibold bg-red-50 border border-red-200 p-4 rounded-2xl flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 shrink-0" /> {formValidationError}
-                  </div>
-                )}
-              </div>
-
-              {/* Footer actions */}
-              <div className="flex items-center justify-end gap-3 px-8 py-6 border-t border-neutral-200 bg-white">
-                <button
-                  onClick={() => {
-                    setShowForm(false);
-                    setFormConfigId(null);
-                  }}
-                  className="px-5 py-3 border border-neutral-200 hover:bg-neutral-100 text-neutral-600 rounded-xl text-sm font-semibold transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreateOrUpdate}
-                  disabled={!!formValidationError}
-                  className="px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:hover:bg-primary-600 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center gap-2 shadow-md shadow-primary-600/20 hover:shadow-lg hover:shadow-primary-600/30 hover:-translate-y-0.5"
-                >
-                  <Save className="w-4 h-4" /> Save Configuration
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* Configurations List */
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {configs.map((c) => (
-                <div 
-                  key={c._id}
-                  className={`p-6 rounded-[2rem] border transition-all flex flex-col justify-between h-full relative group ${c.isActive ? 'border-teal-300 bg-teal-50/10 shadow-sm' : 'border-stone-200 bg-white hover:border-stone-300'}`}
-                >
                   <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${c.gender === 'Male' ? 'bg-teal-50 text-teal-800 border border-teal-100' : c.gender === 'Female' ? 'bg-orange-50 text-orange-800 border border-orange-100' : 'bg-stone-50 text-stone-700 border border-stone-100'}`}>
-                        {c.gender} Gender
-                      </span>
-                      {c.isActive && (
-                        <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-teal-700 text-white shadow-sm flex items-center gap-1">
-                          Active
-                        </span>
-                      )}
+                    <div className="flex items-baseline justify-between mb-3">
+                      <h4 className="text-xs font-bold text-stone-900">Room types</h4>
+                      <p className="text-xs text-stone-500 tabular-nums">{formTotalRooms} rooms · {formTotalBeds} beds</p>
                     </div>
-                    
-                    <h3 className="text-lg font-black text-stone-800 mb-1">{c.hostelName}</h3>
-                    {c.hostelCode && <p className="text-stone-600 text-xs font-bold mb-4">{c.hostelCode}</p>}
-                    
-                    <div className="space-y-1.5 border-t border-stone-100/80 pt-4 mb-6">
-                      {c.roomTemplates.map((t: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between text-xs font-semibold text-stone-600">
-                          <span>{getCapacityLabel(t.capacity)} Rooms <span className="text-stone-600 font-medium">· Floor {t.floor || 'Ground'}</span></span>
-                          <span className="text-stone-600 font-bold">{t.count} Rooms</span>
-                        </div>
-                      ))}
-                      <div className="flex items-center justify-between text-xs font-bold text-stone-700 border-t border-stone-100 pt-2 mt-2">
-                        <span>Total Beds</span>
-                        <span className="text-teal-700 font-black">
-                          {c.roomTemplates.reduce((sum: number, t: any) => sum + (t.capacity * t.count), 0)} Beds
-                        </span>
-                      </div>
+                    <div className="border border-stone-200 rounded-xl overflow-hidden overflow-x-auto nice-scroll">
+                      <table className="w-full text-left text-[13px] min-w-[520px]">
+                        <thead>
+                          <tr className="text-[11px] uppercase tracking-wider text-stone-500 border-b border-stone-200 bg-stone-50">
+                            <th className="px-4 py-2.5 font-semibold">Beds per room</th>
+                            <th className="px-4 py-2.5 font-semibold">Room count</th>
+                            <th className="px-4 py-2.5 font-semibold">Floor</th>
+                            <th className="px-4 py-2.5"><span className="sr-only">Actions</span></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100">
+                          {formTemplates.map((t, idx) => (
+                            <tr key={idx}>
+                              <td className="px-4 py-2">
+                                <input type="number" aria-label="Beds per room" value={t.capacity}
+                                  onChange={(e) => { const val = e.target.value === "" ? "" : Number(e.target.value); const u = [...formTemplates]; u[idx].capacity = val; setFormTemplates(u); }}
+                                  className={`${inputCls} w-24`} />
+                              </td>
+                              <td className="px-4 py-2">
+                                <input type="number" aria-label="Room count" value={t.count}
+                                  onChange={(e) => { const val = e.target.value === "" ? "" : Number(e.target.value); const u = [...formTemplates]; u[idx].count = val; setFormTemplates(u); }}
+                                  className={`${inputCls} w-24`} />
+                              </td>
+                              <td className="px-4 py-2">
+                                <input type="text" aria-label="Floor" placeholder="Ground" value={t.floor}
+                                  onChange={(e) => { const u = [...formTemplates]; u[idx].floor = e.target.value; setFormTemplates(u); }}
+                                  className={`${inputCls} w-28`} />
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                <button onClick={() => setFormTemplates(formTemplates.filter((_, i) => i !== idx))} className="text-[13px] font-medium text-red-700 hover:text-red-900">Remove</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 border-t border-stone-100 pt-4">
-                    {!c.isActive && (
-                      <button 
-                        onClick={() => handleActivateConfig(c._id)}
-                        className="flex-1 py-2 px-3 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-lg text-xs transition-all text-center"
-                      >
-                        Activate
-                      </button>
-                    )}
-                    <button 
-                      onClick={() => {
-                        setFormConfigId(c._id);
-                        setFormHostelName(c.hostelName);
-                        setFormHostelCode(c.hostelCode || "");
-                        setFormGender(c.gender);
-                        setFormTemplates(c.roomTemplates.map((t: any) => ({ capacity: t.capacity, count: t.count, floor: t.floor || '' })));
-                        setShowForm(true);
-                      }}
-                      className="py-2 px-3 border border-stone-200 hover:bg-stone-50 text-stone-600 font-semibold rounded-lg text-xs transition-all"
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteConfig(c._id)}
-                      className="py-2 px-3 border border-red-200 hover:bg-red-50 text-red-600 rounded-lg text-xs transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
+                    <button onClick={() => setFormTemplates([...formTemplates, { capacity: "", count: "", floor: "" }])} className="mt-3 text-[13px] font-semibold text-teal-900 hover:text-teal-950 flex items-center gap-1.5">
+                      <Plus className="w-4 h-4" aria-hidden="true" /> Add room type
                     </button>
                   </div>
+                  {formValidationError && (
+                    <p className="text-[13px] text-red-700 flex items-center gap-2" role="alert">
+                      <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" /> {formValidationError}
+                    </p>
+                  )}
                 </div>
-              ))}
-              {configs.length === 0 && (
-                <div className="col-span-full py-16 border-2 border-dashed border-stone-200 rounded-[2rem] flex flex-col items-center justify-center text-stone-600">
-                  <Database className="w-10 h-10 mb-2 text-stone-300" />
-                  <p className="text-sm font-semibold">No Hostel Configurations found.</p>
-                  <p className="text-xs">Create a new one to persist your room templates inventory.</p>
+                <div className="flex items-center justify-end gap-2.5 px-5 py-4 border-t border-stone-200 bg-stone-50">
+                  <button onClick={() => { setShowForm(false); setFormConfigId(null); }} className="px-4 py-2 border border-stone-300 hover:border-stone-500 rounded-lg text-[13px] font-semibold text-stone-700 transition-colors">Cancel</button>
+                  <button onClick={handleCreateOrUpdate} disabled={!!formValidationError} className="btn-primary px-4 py-2 rounded-lg text-[13px] font-semibold flex items-center gap-2 disabled:opacity-50">
+                    <Save className="w-4 h-4" aria-hidden="true" /> Save configuration
+                  </button>
                 </div>
-              )}
-            </div>
-          )}
-        </motion.div>
-
-        {/* SECTION 7: Explainable Room Report Table (with Collapsible Details!) */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white border border-stone-200 rounded-[2.5rem] overflow-hidden mt-8 shadow-sm print-card"
-        >
-          {/* Header */}
-          <div className="p-8 border-b border-stone-200 bg-stone-50/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div>
-              <h3 className="font-bold text-xl text-stone-800 tracking-wide">Explainable Room Allotments Report</h3>
-              <p className="text-stone-600 text-sm mt-1">
-                Risk assessment dashboard sorted by lowest compatibility rooms. Click rows to expand explanation details.
-              </p>
-            </div>
-            <div className="bg-teal-50 border border-teal-200 px-4 py-2 rounded-xl text-xs font-bold text-teal-800 flex items-center gap-1.5 self-start">
-              <Database className="w-4 h-4" /> {filteredAllocations.length} Active Records Filtered
-            </div>
+              </Panel>
+            ) : (
+              <Panel label="Room configurations" className="overflow-hidden">
+                {configs.length === 0 ? (
+                  <p className="px-5 py-10 text-center text-[13px] text-stone-500">No configurations yet. Create one to define room inventory.</p>
+                ) : (
+                  <ul className="divide-y divide-stone-100">
+                    {configs.map((c) => (
+                      <li key={c._id} className={`px-5 py-4 flex flex-wrap items-center gap-x-6 gap-y-2 ${c.isActive ? "bg-teal-50/40" : ""}`}>
+                        <span className="min-w-[180px] flex-1">
+                          <span className="block text-sm font-semibold text-stone-900">
+                            {c.hostelName}
+                            {c.hostelCode && <span className="text-stone-400 font-normal"> · {c.hostelCode}</span>}
+                          </span>
+                          <span className="block text-xs text-stone-500 mt-0.5">
+                            {c.gender} · {c.roomTemplates.map((t: any) => `${t.count}× ${getCapacityLabel(t.capacity)} (floor ${t.floor || "Ground"})`).join(", ")}
+                          </span>
+                        </span>
+                        <span className="text-[13px] text-stone-600 tabular-nums">
+                          {c.roomTemplates.reduce((sum: number, t: any) => sum + (t.capacity * t.count), 0)} beds
+                        </span>
+                        {c.isActive && <span className="text-xs font-bold text-teal-900">Active</span>}
+                        <span className="ml-auto flex items-center gap-4">
+                          {!c.isActive && (
+                            <button onClick={() => handleActivateConfig(c._id)} className="text-[13px] font-semibold text-teal-900 hover:text-teal-950">Activate</button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setFormConfigId(c._id); setFormHostelName(c.hostelName); setFormHostelCode(c.hostelCode || "");
+                              setFormGender(c.gender); setFormTemplates(c.roomTemplates.map((t: any) => ({ capacity: t.capacity, count: t.count, floor: t.floor || '' })));
+                              setShowForm(true);
+                            }}
+                            className="text-[13px] font-medium text-stone-500 hover:text-stone-900"
+                          >
+                            Edit
+                          </button>
+                          <button onClick={() => handleDeleteConfig(c._id)} aria-label={`Delete ${c.hostelName}`} className="text-stone-400 hover:text-red-700 transition-colors">
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Panel>
+            )}
           </div>
-          
-          {/* Controls Bar - Hidden in Print */}
-          <div className="p-6 bg-white border-b border-stone-100 flex flex-col sm:flex-row items-center gap-4 print-hidden">
-            {/* Search */}
-            <div className="w-full sm:flex-1 relative">
-              <Search className="w-4 h-4 text-stone-600 absolute left-4 top-1/2 transform -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search Room #, Student Email, or Name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-11 pr-4 py-2.5 text-xs text-stone-800 focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all placeholder:text-stone-600 font-medium"
+        </div>
+
+        {/* Right rail — allocation health */}
+        <aside className="col-span-12 xl:col-span-4 min-w-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-5 content-start" aria-label="Allocation health">
+          {ov && (
+            <div className="md:col-span-2 xl:col-span-1">
+              <HealthStrip
+                unassigned={unassignedCount}
+                emptyBeds={ov.emptyBeds}
+                highRisk={highRiskRooms}
+                pending={ov.profilesPending}
               />
             </div>
-
-            {/* Filter Risk */}
-            <div className="w-full sm:w-auto flex items-center gap-2">
-              <Filter className="w-4 h-4 text-stone-600 shrink-0" />
-              <select
-                value={riskFilter}
-                onChange={(e) => setRiskFilter(e.target.value)}
-                className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all font-bold text-stone-600"
-              >
-                <option value="All">Risk Level: All</option>
-                <option value="Excellent">Risk Level: Excellent</option>
-                <option value="Good">Risk Level: Good</option>
-                <option value="Needs Attention">Risk Level: Needs Attention</option>
-                <option value="High Risk">Risk Level: High Risk</option>
-              </select>
-            </div>
-
-            {/* Filter Occupancy */}
-            <div className="w-full sm:w-auto">
-              <select
-                value={occupancyFilter}
-                onChange={(e) => setOccupancyFilter(e.target.value)}
-                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all font-bold text-stone-600"
-              >
-                <option value="All">Occupancy: All</option>
-                <option value="Full">Occupancy: Full</option>
-                <option value="Partial">Occupancy: Partial</option>
-                <option value="Empty">Occupancy: Empty</option>
-              </select>
-            </div>
-          </div>
-          
-          {/* Table Container */}
-          <div className="overflow-x-auto max-h-[600px] overflow-y-auto custom-scrollbar">
-            <table className="w-full text-left text-sm whitespace-nowrap relative">
-              <thead className="bg-stone-50 text-stone-600 border-b border-stone-200 sticky top-0 z-20 font-bold uppercase text-[10px] tracking-wider">
-                <tr>
-                  <th className="px-8 py-5">Room Number</th>
-                  <th className="px-8 py-5">Assigned Students</th>
-                  <th className="px-8 py-5 text-center">Beds Capacity</th>
-                  <th className="px-8 py-5 text-center">Compatibility %</th>
-                  <th className="px-8 py-5 text-center">Occupancy Status</th>
-                  <th className="px-8 py-5 text-center">Conflict Risk</th>
-                  <th className="px-8 py-5 text-center print-hidden">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100 text-stone-700">
-                {filteredAllocations.map((a: any) => {
-                  const isExpanded = expandedRoomId === a._id;
-                  const analysis = a.conflict_analysis || {};
-                  
-                  return (
-                    <Fragment key={a._id}>
-                      <tr 
-                        onClick={() => setExpandedRoomId(isExpanded ? null : a._id)}
-                        className="hover:bg-stone-50/50 transition-colors group cursor-pointer"
-                      >
-                        <td className="px-8 py-5 font-bold text-stone-800">{a.room_number}</td>
-                        <td className="px-8 py-5">
-                          <div className="flex flex-col gap-1">
-                            {(a.memberDetails || a.members).map((member: string, idx: number) => (
-                              <span key={idx} className="text-xs font-semibold text-stone-600 flex items-center gap-1.5">
-                                <User className="w-3.5 h-3.5 text-stone-600" /> {member}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-8 py-5 text-center font-extrabold text-stone-800">
-                          {a.room_capacity || a.members.length} Beds
-                        </td>
-                        <td className="px-8 py-5 text-center font-black">
-                          <span className={
-                            (a.compatibility_score || 0) < 0.80 ? 'text-red-500' :
-                            (a.compatibility_score || 0) < 0.88 ? 'text-amber-500' :
-                            'text-emerald-600'
-                          }>
-                            {/* Raw score can be negative (rooms form even at very low
-                                compatibility rather than being rejected); floor the
-                                displayed percentage at 0 and use the same "Below
-                                Average Match" label as the student dashboard instead
-                                of a confusing negative number. */}
-                            {(a.compatibility_score || 0) < 0
-                              ? 'Below Average Match'
-                              : `${Math.round((a.compatibility_score || 0) * 100)}%`}
-                          </span>
-                        </td>
-                        <td className="px-8 py-5 text-center">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${
-                            a.occupancy_status === 'Full' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                            a.occupancy_status === 'Empty' ? 'bg-red-50 text-red-700 border border-red-200' :
-                            'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}>
-                            {a.occupancy_status || "Full"}
-                          </span>
-                        </td>
-                        <td className="px-8 py-5 text-center">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${
-                            analysis.conflictRisk === 'High Risk' ? 'bg-red-600 text-white shadow-sm animate-pulse' :
-                            analysis.conflictRisk === 'Needs Attention' ? 'bg-amber-400 text-stone-900 font-extrabold' :
-                            analysis.conflictRisk === 'Good' ? 'bg-emerald-700 text-white font-extrabold' :
-                            'bg-teal-700 text-white'
-                          }`}>
-                            {analysis.conflictRisk || "Low"}
-                          </span>
-                        </td>
-                        <td className="px-8 py-5 text-center print-hidden">
-                          <button className="text-stone-600 group-hover:text-stone-600 p-1 rounded hover:bg-stone-100 transition-colors">
-                            {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                          </button>
-                        </td>
-                      </tr>
-
-                      {/* Expanded Section */}
-                      <AnimatePresence initial={false}>
-                        {isExpanded && (
-                          <tr>
-                            <td colSpan={7} className="bg-stone-50/50 px-8 py-6 border-y border-stone-200">
-                              <motion.div 
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: "auto" }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="space-y-6 overflow-hidden"
-                              >
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                  
-                                  {/* Conflict Reasons (Ranked) */}
-                                  <div className="bg-white p-5 rounded-2xl border border-stone-200 space-y-4">
-                                    <h4 className="font-extrabold text-xs text-red-700 uppercase tracking-wide flex items-center gap-1.5">
-                                      <ShieldAlert className="w-4 h-4" /> Compatibility Conflicts ({analysis.conflictReasons?.length || 0})
-                                    </h4>
-                                    
-                                    {analysis.conflictReasons && analysis.conflictReasons.length > 0 ? (
-                                      <div className="space-y-3">
-                                        {analysis.conflictReasons.map((reason: any, idx: number) => (
-                                          <div key={idx} className="p-3 bg-red-50/30 border border-red-100 rounded-xl space-y-1">
-                                            <div className="flex items-center justify-between text-[10px] font-extrabold">
-                                              <span className="text-red-700 uppercase">{reason.category}</span>
-                                              <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">Weight: {reason.score}</span>
-                                            </div>
-                                            <p className="text-xs text-stone-700 leading-relaxed font-semibold">{reason.text}</p>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <div className="text-xs text-stone-600 italic py-4 flex items-center gap-2">
-                                        <Smile className="w-4 h-4 text-emerald-500" /> No compatibility conflicts detected in this room.
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* Positive Factors & Actionable Recommendations */}
-                                  <div className="space-y-6">
-                                    {/* Positive Factors */}
-                                    <div className="bg-white p-5 rounded-2xl border border-stone-200 space-y-3">
-                                      <h4 className="font-extrabold text-xs text-emerald-700 uppercase tracking-wide flex items-center gap-1.5">
-                                        <Award className="w-4 h-4" /> Strong Roommate Commonalities ({analysis.positiveFactors?.length || 0})
-                                      </h4>
-                                      {analysis.positiveFactors && analysis.positiveFactors.length > 0 ? (
-                                        <ul className="space-y-2">
-                                          {analysis.positiveFactors.map((factor: string, idx: number) => (
-                                            <li key={idx} className="text-xs text-stone-700 font-semibold flex items-center gap-2">
-                                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                                              <span>{factor}</span>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      ) : (
-                                        <p className="text-xs text-stone-600 italic">No significant matching indicators found.</p>
-                                      )}
-                                    </div>
-
-                                    {/* Recommendations */}
-                                    <div className="bg-white p-5 rounded-2xl border border-stone-200 space-y-3">
-                                      <h4 className="font-extrabold text-xs text-teal-800 uppercase tracking-wide flex items-center gap-1.5">
-                                        <Sparkles className="w-4 h-4" /> Dynamic Actionable Recommendations
-                                      </h4>
-                                      <ul className="space-y-2">
-                                        {analysis.recommendations?.map((rec: string, idx: number) => (
-                                          <li key={idx} className="text-xs text-stone-700 font-bold flex items-start gap-2">
-                                            <span className="text-teal-600 mt-0.5 font-bold shrink-0">✓</span>
-                                            <span>{rec}</span>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-
-                                  </div>
-                                </div>
-
-                                {/* Roommate Comparison Matrix (Privacy-Sensitive Admin View) */}
-                                {analysis.roommatePreferences && analysis.roommatePreferences.length > 0 && (
-                                  <div className="bg-white p-5 rounded-2xl border border-stone-200 space-y-3">
-                                    <h4 className="font-extrabold text-xs text-stone-700 uppercase tracking-wide">
-                                      Roommate Mismatch Resolution Matrix (Admin-Only View)
-                                    </h4>
-                                    <div className="overflow-x-auto">
-                                      <table className="w-full text-left text-xs text-stone-600 whitespace-nowrap">
-                                        <thead>
-                                          <tr className="border-b border-stone-100 font-bold uppercase text-[9px] tracking-wider text-stone-600">
-                                            <th className="pb-2">Roommate</th>
-                                            <th className="pb-2">Sleep Schedule</th>
-                                            <th className="pb-2">Cleanliness</th>
-                                            <th className="pb-2">Study Environment</th>
-                                            <th className="pb-2">Smoking Habit</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-stone-50 font-semibold text-stone-700">
-                                          {analysis.roommatePreferences.map((pref: any, idx: number) => (
-                                            <tr key={idx} className="h-8">
-                                              <td>{pref.name}</td>
-                                              <td>{pref.sleep_time}</td>
-                                              <td>{pref.cleanliness}</td>
-                                              <td>{pref.study_env}</td>
-                                              <td>{pref.smoking}</td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                )}
-
-                              </motion.div>
-                            </td>
-                          </tr>
-                        )}
-                      </AnimatePresence>
-                    </Fragment>
-                  );
-                })}
-                {filteredAllocations.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-8 py-20 text-center text-stone-600 text-sm font-semibold">
-                      No matching room records found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </motion.div>
-
-      </main>
-    </div>
+          )}
+          <RoomSpotlight room={spotlight} onClose={spotlight ? () => setSpotlight(null) : undefined} />
+          {ov && (
+            <OccupancyPanel totalBeds={ov.totalBeds} occupiedBeds={ov.occupiedBeds} totalRooms={ov.totalRoomsGenerated} />
+          )}
+          <CompatibilityPanel allocations={allocations} />
+          <AttentionPanel insights={insights} />
+          <ActivityPanel entries={activity} loading={activityLoading} />
+          <button onClick={() => signOut({ callbackUrl: "/" })} className="w-full text-center text-xs text-stone-400 hover:text-stone-600 transition-colors print-hidden md:col-span-2 xl:col-span-1">
+            Sign out of console
+          </button>
+        </aside>
+      </div>
+    </AdminShell>
   );
 }

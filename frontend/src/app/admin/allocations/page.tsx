@@ -1,13 +1,16 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { ArrowLeft, Database, Lock, Unlock, Shuffle, FileText, ShieldAlert } from "lucide-react";
-import { motion } from "framer-motion";
-import Link from "next/link";
+import { Database, FileText, ShieldAlert, Shuffle } from "lucide-react";
 import { PROXY_URL } from "@/lib/api";
+import AdminShell from "@/components/admin/AdminShell";
+import RoomExplorer from "@/components/admin/RoomExplorer";
+import { Panel } from "@/components/admin/panels";
+import { inputCls } from "@/lib/admin";
 
 export default function AdminAllocations() {
   const { data: session, status } = useSession();
@@ -16,7 +19,7 @@ export default function AdminAllocations() {
   const [unassigned, setUnassigned] = useState([]);
   const [loading, setLoading] = useState(true);
   const [forceAllocating, setForceAllocating] = useState(false);
-  
+
   // Custom manual swap states
   const [swapping, setSwapping] = useState(false);
   const [swapData, setSwapData] = useState({ roomAId: '', memberA: '', roomBId: '', memberB: '' });
@@ -48,9 +51,8 @@ export default function AdminAllocations() {
 
   const toggleLock = async (roomId: string, currentLockStatus: boolean) => {
       const newStatus = !currentLockStatus;
-      
+
        // Optimistic UI Update: Instantly change the button state before server replies
-       // eslint-disable-next-line @typescript-eslint/no-explicit-any
        setAllocations((prev: any) => prev.map((a: any) =>
           a._id === roomId ? { ...a, isLocked: newStatus } : a
       ));
@@ -63,7 +65,6 @@ export default function AdminAllocations() {
            // No need to fetchAllocations() again since we already updated the state!
        } catch {
             // Rollback the UI if the server actually fails
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             setAllocations((prev: any) => prev.map((a: any) =>
                a._id === roomId ? { ...a, isLocked: currentLockStatus } : a
             ));
@@ -71,7 +72,6 @@ export default function AdminAllocations() {
       }
   }
 
-   // eslint-disable-next-line @typescript-eslint/no-explicit-any
    const handleSwap = async (e: any) => {
       e.preventDefault();
       try {
@@ -80,7 +80,6 @@ export default function AdminAllocations() {
           setSwapData({ roomAId: '', memberA: '', roomBId: '', memberB: '' });
           alert("Swap completed successfully!");
           fetchAllocations();
-       // eslint-disable-next-line @typescript-eslint/no-explicit-any
        } catch (err: any) {
            alert(err.response?.data?.error || "Failed to swap members. Double check member IDs.");
        }
@@ -92,7 +91,6 @@ export default function AdminAllocations() {
           const res = await axios.post(`${PROXY_URL}/admin/force-allocate`);
           alert(res.data.message);
           fetchAllocations();
-       // eslint-disable-next-line @typescript-eslint/no-explicit-any
        } catch (err: any) {
            alert(err.response?.data?.error || "Force allocation failed.");
       } finally {
@@ -126,7 +124,6 @@ export default function AdminAllocations() {
         return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { jsPDF } = (window as any).jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -144,11 +141,9 @@ export default function AdminAllocations() {
     doc.text(`Generated: ${now}  |  Total Rooms: ${allocations.length}  |  Unassigned: ${unassigned.length}`, 14, 22);
 
     // Sort allocations by room number
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sorted = [...allocations].sort((a: any, b: any) => (a.room_number || '').localeCompare(b.room_number || ''));
 
     // Table data
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tableRows = sorted.map((a: any) => {
         const members = (a.memberDetails || a.members || []).map((m: string, i: number) => `${i + 1}. ${m}`).join('\n');
         const score = typeof a.compatibility_score === 'number' ? `${(a.compatibility_score * 100).toFixed(1)}%` : 'N/A';
@@ -162,7 +157,6 @@ export default function AdminAllocations() {
         ];
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (doc as any).autoTable({
         startY: 34,
         head: [['Room', 'Location', 'Category', 'Match %', 'Assigned Students', 'Status']],
@@ -194,10 +188,8 @@ export default function AdminAllocations() {
             4: { cellWidth: 'auto' },
             5: { halign: 'center', cellWidth: 22 }
         },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         didDrawPage: (data: any) => {
             // Footer on each page
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const pageCount = (doc as any).internal.getNumberOfPages();
             doc.setFontSize(8);
             doc.setTextColor(150);
@@ -211,7 +203,6 @@ export default function AdminAllocations() {
 
     // Unassigned section (if any)
     if (unassigned.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const finalY = (doc as any).lastAutoTable?.finalY || 40;
         const remainingSpace = doc.internal.pageSize.getHeight() - finalY;
         if (remainingSpace < 40) doc.addPage();
@@ -222,7 +213,6 @@ export default function AdminAllocations() {
         doc.setTextColor(194, 65, 12); // #c2410c
         doc.text(`Unassigned Students (${unassigned.length})`, 14, startY);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (doc as any).autoTable({
             startY: startY + 4,
             head: [['#', 'Student']],
@@ -239,176 +229,100 @@ export default function AdminAllocations() {
   if (status === "loading") return null;
 
   return (
-    <div className="min-h-screen bg-[#fafaf9] text-[#292524] flex justify-center px-6 md:px-[6vw] py-6 pb-20">
-
-        <div className="w-full relative z-10 pt-4">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
-                <Link href="/admin" className="flex items-center gap-2 text-[#57534e] hover:text-[#115e59] font-medium transition-colors text-sm">
-                    <ArrowLeft size={16}/> Back to Dashboard
-                </Link>
-                <div className="flex gap-4">
-                    <button onClick={() => setSwapping(!swapping)} className="bg-white border border-[#115e59]/10 hover:border-[#115e59]/20 text-[#115e59] px-5 py-2.5 rounded-full text-[13px] font-medium flex items-center gap-2 transition-all shadow-sm">
-                        <Shuffle size={16}/> Manual Swap
-                    </button>
-                    <button onClick={downloadPDF} className="bg-[#c2410c] hover:bg-[#ea580c] text-white px-5 py-2.5 rounded-full text-[13px] font-medium flex items-center gap-2 shadow-[0_4px_24px_rgba(196,97,58,0.3)] hover:-translate-y-[1px] hover:shadow-[0_12px_36px_rgba(196,97,58,0.4)] transition-all">
-                        <FileText size={16} strokeWidth={2.5}/> Download PDF Report
-                    </button>
-                </div>
-            </div>
-
-            <div className="mb-10">
-                <h1 className="text-4xl md:text-[44px] font-semibold text-[#115e59] mb-3 leading-tight">Room Allocations</h1>
-                <p className="text-[#44403c] max-w-2xl font-light leading-[1.7]">
-                    View, lock, or modify assigned student rooms. Locked rooms will strictly NOT be modified by the AI during subsequent engine runs.
-                </p>
-            </div>
-
-            {swapping && (
-                <motion.form initial={{opacity:0, y:-10}} animate={{opacity:1, y:0}} onSubmit={handleSwap} className="bg-white p-8 rounded-[20px] border border-[#115e59]/10 shadow-[0_8px_40px_rgba(26,56,42,0.07)] mb-10 grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
-                    <div>
-                        <label className="text-[12px] font-semibold text-[#57534e] uppercase tracking-[0.5px] block mb-2">Room A ID (_id)</label>
-                        <input className="w-full bg-[#fafaf9] border border-[#115e59]/10 rounded-xl p-3 text-[14px] text-[#292524] outline-none focus:border-[#34d399] focus:ring-1 focus:ring-[#34d399] transition-all" required value={swapData.roomAId} onChange={e=>setSwapData({...swapData, roomAId: e.target.value})} placeholder="Room A ID" />
-                    </div>
-                    <div>
-                        <label className="text-[12px] font-semibold text-[#57534e] uppercase tracking-[0.5px] block mb-2">Member A Email</label>
-                        <input className="w-full bg-[#fafaf9] border border-[#115e59]/10 rounded-xl p-3 text-[14px] text-[#292524] outline-none focus:border-[#34d399] focus:ring-1 focus:ring-[#34d399] transition-all" required value={swapData.memberA} onChange={e=>setSwapData({...swapData, memberA: e.target.value})} placeholder="Email to move"/>
-                    </div>
-                    <div>
-                        <label className="text-[12px] font-semibold text-[#57534e] uppercase tracking-[0.5px] block mb-2">Room B ID (_id)</label>
-                        <input className="w-full bg-[#fafaf9] border border-[#115e59]/10 rounded-xl p-3 text-[14px] text-[#292524] outline-none focus:border-[#34d399] focus:ring-1 focus:ring-[#34d399] transition-all" required value={swapData.roomBId} onChange={e=>setSwapData({...swapData, roomBId: e.target.value})} placeholder="Room B ID"/>
-                    </div>
-                    <div>
-                        <label className="text-[12px] font-semibold text-[#57534e] uppercase tracking-[0.5px] block mb-2">Member B Email</label>
-                        <input className="w-full bg-[#fafaf9] border border-[#115e59]/10 rounded-xl p-3 text-[14px] text-[#292524] outline-none focus:border-[#34d399] focus:ring-1 focus:ring-[#34d399] transition-all" required value={swapData.memberB} onChange={e=>setSwapData({...swapData, memberB: e.target.value})} placeholder="Email to replace"/>
-                    </div>
-                    <button type="submit" className="w-full bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl p-3.5 font-medium transition-colors text-[14px]">Execute Swap</button>
-                </motion.form>
-            )}
-
-            <div className="bg-white border border-[#115e59]/10 rounded-[20px] overflow-hidden shadow-[0_8px_40px_rgba(26,56,42,0.07)]">
-                <div className="p-8 border-b border-[#115e59]/10 flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#fafaf9]/50">
-                    <div>
-                    <h3 className="font-semibold text-[18px] text-[#115e59]">Generated Allotments</h3>
-                    <p className="text-[#44403c] text-[13px] font-light mt-0.5">Overview of the verified student housing placements.</p>
-                    </div>
-                    <div className="bg-[#ecfdf5] px-4 py-2 rounded-full text-[12px] font-semibold text-[#047857] flex items-center gap-2 border border-[#34d399]/20">
-                    <Database className="w-3.5 h-3.5" /> {allocations.length} Active Rooms
-                    </div>
-                </div>
-                
-                <div className="overflow-x-auto max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-[#115e59]/10">
-                    <table className="w-full text-left text-[14px] whitespace-nowrap relative">
-                    <thead className="bg-[#fafaf9] text-[#57534e] border-b border-[#115e59]/10 sticky top-0 z-20">
-                        <tr>
-                        <th className="px-8 py-5 font-semibold tracking-[1px] uppercase text-[11px]">Room details</th>
-                        <th className="px-8 py-5 font-semibold tracking-[1px] uppercase text-[11px]">Classification</th>
-                        <th className="px-8 py-5 font-semibold tracking-[1px] uppercase text-[11px]">Assigned Students</th>
-                        <th className="px-8 py-5 font-semibold tracking-[1px] uppercase text-[11px] text-right">Lock Status</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#115e59]/5 text-[#44403c]">
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        {[...allocations].sort((a: any, b: any) => (a.room_number || "").localeCompare(b.room_number || "")).map((a: any) => (
-                        <tr key={a._id || a.room_number} className="hover:bg-[#fafaf9]/50 transition-colors group">
-                            <td className="px-8 py-5">
-                                <div className="font-bold text-[#115e59] text-[24px] leading-tight">{a.room_number}</div>
-                                <div className="text-[13px] text-[#57534e] font-light mt-0.5">Block {a.block}, Floor {a.floor}</div>
-                                <div className="text-[10px] text-[#115e59]/40 mt-1 select-all hover:text-[#115e59]/80 font-mono tracking-tight">{a._id}</div>
-                            </td>
-                            <td className="px-8 py-5">
-                            <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-[11px] font-semibold tracking-[0.5px] uppercase ${a.gender_group && a.gender_group.includes('FLEX') ? 'bg-[#fff7ed] text-[#c2410c]' : 'bg-[#f5f5f4] text-[#115e59]'}`}>
-                                {a.gender_group}
-                            </span>
-                            </td>
-                            <td className="px-8 py-5">
-                            <div className="flex flex-col gap-1.5">
-                                {(a.memberDetails || a.members).map((member: string, idx: number) => (
-                                <span key={idx} className="bg-white px-3.5 py-2 rounded-xl text-[13px] border border-[#115e59]/10 text-[#44403c] truncate max-w-[280px] font-medium shadow-sm">
-                                    {member}
-                                </span>
-                                ))}
-                            </div>
-                            </td>
-                            <td className="px-8 py-5 text-right">
-                                <button onClick={() => toggleLock(a._id, a.isLocked)} className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium transition-colors border ${a.isLocked ? 'bg-[#fff7ed] text-[#c2410c] border-[#c2410c]/20 hover:bg-[#ffedd5]' : 'bg-white text-[#57534e] border-[#115e59]/10 hover:bg-[#fafaf9]'}`}>
-                                    {a.isLocked ? <Lock size={14}/> : <Unlock size={14}/>}
-                                    {a.isLocked ? 'Locked' : 'Unlocked'}
-                                </button>
-                            </td>
-                        </tr>
-                        ))}
-                        {loading && (
-                        <tr>
-                            <td colSpan={4} className="px-8 py-24 text-center text-[#57534e] font-light">
-                                <div className="flex items-center justify-center gap-3">
-                                    <svg className="animate-spin h-5 w-5 text-[#c2410c]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                    Loading room data...
-                                </div>
-                            </td>
-                        </tr>
-                        )}
-                        {!loading && allocations.length === 0 && (
-                        <tr>
-                            <td colSpan={4} className="px-8 py-24 text-center text-[#57534e] font-light">
-                            No allotments generated yet.
-                            </td>
-                        </tr>
-                        )}
-                    </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {unassigned.length > 0 && (
-                <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="bg-white border border-[#c2410c]/20 rounded-[20px] overflow-hidden mt-10 shadow-sm">
-                    <div className="p-8 border-b border-[#c2410c]/10 flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#fff7ed]/50">
-                        <div>
-                            <h3 className="font-semibold text-xl text-[#115e59]">Unassigned Students</h3>
-                            <p className="text-[#c2410c]/80 text-[13px] font-light mt-1">These students could not be matched with sufficient compatibility. Force-allocate to assign them rooms anyway.</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <div className="bg-white border border-[#c2410c]/20 px-4 py-2 rounded-full text-[12px] font-semibold text-[#c2410c]">
-                                {unassigned.length} Pending
-                            </div>
-                            <button 
-                                onClick={handleForceAllocate}
-                                disabled={forceAllocating}
-                                className="bg-[#c2410c] hover:bg-[#ea580c] disabled:opacity-60 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-full text-[13px] font-medium flex items-center gap-2 shadow-[0_4px_24px_rgba(196,97,58,0.3)] hover:-translate-y-[1px] hover:shadow-[0_12px_36px_rgba(196,97,58,0.4)] transition-all"
-                            >
-                                {forceAllocating ? (
-                                    <>
-                                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                        Allocating...
-                                    </>
-                                ) : (
-                                    <>
-                                        <ShieldAlert size={14}/> Force Allocate All
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-                        <table className="w-full text-left text-[14px]">
-                            <thead className="bg-[#fff7ed]/50 text-[#57534e] border-b border-[#c2410c]/10 sticky top-0">
-                                <tr>
-                                    <th className="px-8 py-4 font-semibold tracking-[1px] uppercase text-[11px] w-12">#</th>
-                                    <th className="px-8 py-4 font-semibold tracking-[1px] uppercase text-[11px]">Student</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[#c2410c]/5 text-[#44403c]">
-                                {unassigned.map((student: string, idx: number) => (
-                                    <tr key={idx} className="hover:bg-[#fff7ed]/30 transition-colors">
-                                        <td className="px-8 py-3 text-[#57534e] text-[13px]">{idx + 1}</td>
-                                        <td className="px-8 py-3 font-medium text-[14px]">{student}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </motion.div>
-            )}
+    <AdminShell>
+      <div className="flex flex-wrap items-end justify-between gap-4 pt-8 pb-6 print-hidden">
+        <div>
+          <p className="eyebrow text-teal-800 mb-2">RoomFit Console · Allocations</p>
+          <h1 className="text-[30px] sm:text-[34px] font-bold tracking-tight text-stone-900 leading-tight">Room allocations</h1>
+          <p className="text-sm text-stone-500 mt-1.5">View, lock, or modify assigned rooms. Locked rooms are left untouched by later allocation runs.</p>
         </div>
-    </div>
+        <div className="flex gap-2.5">
+          <button onClick={() => setSwapping(!swapping)} className="bg-white border border-stone-300 hover:border-stone-500 text-stone-800 px-4 py-2 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition-colors">
+            <Shuffle size={16} aria-hidden="true" /> Manual swap
+          </button>
+          <button onClick={downloadPDF} className="btn-primary px-4 py-2 rounded-lg text-[13px] font-semibold flex items-center gap-2">
+            <FileText size={16} aria-hidden="true" /> Download PDF
+          </button>
+        </div>
+      </div>
+
+      {swapping && (
+        <form onSubmit={handleSwap} className="bg-white border border-stone-200 rounded-2xl p-5 mb-6 grid grid-cols-1 md:grid-cols-5 gap-4 items-end shadow-[0_1px_2px_rgba(28,25,23,0.05)] print-hidden">
+          <div>
+            <label className="text-[12px] font-semibold text-stone-700 block mb-1.5">Room A ID</label>
+            <input className={`${inputCls} w-full`} required value={swapData.roomAId} onChange={e=>setSwapData({...swapData, roomAId: e.target.value})} placeholder="Room A ID" />
+          </div>
+          <div>
+            <label className="text-[12px] font-semibold text-stone-700 block mb-1.5">Member A email</label>
+            <input className={`${inputCls} w-full`} required value={swapData.memberA} onChange={e=>setSwapData({...swapData, memberA: e.target.value})} placeholder="Email to move"/>
+          </div>
+          <div>
+            <label className="text-[12px] font-semibold text-stone-700 block mb-1.5">Room B ID</label>
+            <input className={`${inputCls} w-full`} required value={swapData.roomBId} onChange={e=>setSwapData({...swapData, roomBId: e.target.value})} placeholder="Room B ID"/>
+          </div>
+          <div>
+            <label className="text-[12px] font-semibold text-stone-700 block mb-1.5">Member B email</label>
+            <input className={`${inputCls} w-full`} required value={swapData.memberB} onChange={e=>setSwapData({...swapData, memberB: e.target.value})} placeholder="Email to replace"/>
+          </div>
+          <button type="submit" className="w-full btn-primary rounded-lg p-2.5 font-semibold transition-colors text-sm">Execute swap</button>
+        </form>
+      )}
+
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="text-[17px] font-semibold text-stone-900">Generated allotments</h2>
+        <div className="bg-white px-3 py-1.5 rounded-lg text-xs font-semibold text-stone-600 flex items-center gap-2 border border-stone-300">
+          <Database className="w-3.5 h-3.5" aria-hidden="true" /> {allocations.length} rooms
+        </div>
+      </div>
+
+      {loading ? (
+        <Panel label="Allocations" className="px-5 py-16 text-center">
+          <p className="text-sm text-stone-500">Loading room data…</p>
+        </Panel>
+      ) : (
+        <RoomExplorer allocations={allocations} variant="manage" onToggleLock={toggleLock} />
+      )}
+
+      {unassigned.length > 0 && (
+        <Panel label="Unassigned students" className="overflow-hidden mt-6">
+          <div className="p-5 border-b border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50/50">
+            <div>
+              <h3 className="font-bold text-[15px] text-stone-900">Unassigned students</h3>
+              <p className="text-stone-600 text-[13px] mt-1">These students could not be matched. Force-allocate to assign them rooms.</p>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <div className="bg-white border border-stone-300 px-3 py-1.5 rounded-lg text-xs font-semibold text-stone-600 tabular-nums">
+                {unassigned.length} pending
+              </div>
+              <button
+                onClick={handleForceAllocate}
+                disabled={forceAllocating}
+                className="bg-amber-700 hover:bg-amber-800 disabled:opacity-60 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition-colors"
+              >
+                {forceAllocating ? "Allocating…" : (<><ShieldAlert size={14} aria-hidden="true" /> Force allocate all</>)}
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto nice-scroll max-h-[400px] overflow-y-auto">
+            <table className="w-full text-left text-[14px]">
+              <thead className="bg-stone-50 text-stone-500 border-b border-stone-200 sticky top-0">
+                <tr>
+                  <th className="px-5 py-3 font-bold uppercase text-[11px] tracking-wider w-12">#</th>
+                  <th className="px-5 py-3 font-bold uppercase text-[11px] tracking-wider">Student</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100 text-stone-700">
+                {unassigned.map((student: string, idx: number) => (
+                  <tr key={idx} className="hover:bg-stone-50 transition-colors">
+                    <td className="px-5 py-2.5 text-stone-500 text-[13px] tabular-nums">{idx + 1}</td>
+                    <td className="px-5 py-2.5 font-medium text-[14px]">{student}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
+    </AdminShell>
   );
 }

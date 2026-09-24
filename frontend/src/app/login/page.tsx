@@ -4,7 +4,7 @@ import { signIn, useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, ShieldCheck, User, UserCog } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import AuthShell from "@/components/AuthShell";
 
 export default function LoginPage() {
   const { data: session, status } = useSession();
@@ -64,353 +64,215 @@ export default function LoginPage() {
   // If still checking session, show nothing to avoid flash
   if (status === "loading") {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#faf9f7] flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-stone-300 border-t-teal-800 rounded-full animate-spin" />
       </div>
     );
   }
+
+  const inputCls =
+    "w-full bg-white border border-stone-300 rounded-lg px-3.5 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-teal-800 transition-colors placeholder:text-stone-400";
+  const labelCls = "text-[12px] font-semibold text-stone-700 block mb-1.5";
 
   // Developer simplified authentication flow UI
   if (isDevAuth) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center relative overflow-hidden">
-        {/* Background gradient */}
-        <div className="absolute top-0 right-0 w-full h-[60vh] bg-gradient-to-b from-blue-100/50 to-transparent pointer-events-none" />
-
-        {/* Back to home link */}
-        <button
-          onClick={() => router.push("/")}
-          className="absolute top-6 left-6 z-20 flex items-center gap-2 text-sm text-slate-400 hover:text-slate-700 transition-colors"
-        >
-          ← Back to home
-        </button>
-
-        <div className="z-10 relative flex flex-col items-center px-4 w-full max-w-lg mt-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="w-full"
-          >
-            {/* Brand mark */}
-            <div className="text-center mb-6">
-              <span className="font-serif text-2xl font-semibold text-slate-700 tracking-tight">
-                Room<span className="text-orange-500">Sync</span>
+      <AuthShell
+        title="Welcome to RoomFit"
+        subtitle="Development sign-in — select your role to continue."
+      >
+        {step === "ROLE_SELECT" ? (
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                setRole("STUDENT");
+                setStep("FORM_INPUT");
+              }}
+              className="w-full p-4 rounded-lg bg-white border border-stone-300 hover:border-teal-800 text-left flex items-center gap-3 transition-colors"
+            >
+              <span className="p-2 bg-teal-50 border border-teal-200 rounded-lg text-teal-800">
+                <User className="w-5 h-5" />
               </span>
-              <span className="ml-2 text-xs font-bold text-violet-600 bg-violet-100 px-2 py-1 rounded-md uppercase tracking-wider">Dev Mode</span>
-            </div>
+              <span>
+                <span className="block text-[14px] font-bold text-stone-900">Continue as Student</span>
+                <span className="block text-xs text-stone-500 mt-0.5">Dashboard, questionnaire &amp; roommate chat</span>
+              </span>
+              <ChevronRight className="w-4 h-4 text-stone-400 ml-auto" />
+            </button>
 
-            {/* Main auth card */}
-            <div className="bg-white px-10 py-12 rounded-[2rem] shadow-[0_10px_50px_rgba(0,0,0,0.05)] border border-slate-100 text-center">
-              
-              <AnimatePresence mode="wait">
-                {step === "ROLE_SELECT" ? (
-                  <motion.div
-                    key="role-select"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    className="space-y-6"
-                  >
-                    <h1 className="text-3xl font-bold text-slate-800">
-                      Welcome to RoomFit
-                    </h1>
-                    <p className="text-slate-500 text-sm leading-relaxed">
-                      Select your role to quickly sign into the development portal.
-                    </p>
+            <button
+              onClick={() => {
+                setRole("ADMIN");
+                setStep("FORM_INPUT");
+              }}
+              className="w-full p-4 rounded-lg bg-white border border-stone-300 hover:border-teal-800 text-left flex items-center gap-3 transition-colors"
+            >
+              <span className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
+                <UserCog className="w-5 h-5" />
+              </span>
+              <span>
+                <span className="block text-[14px] font-bold text-stone-900">Continue as Admin</span>
+                <span className="block text-xs text-stone-500 mt-0.5">Allocations, rooms &amp; requests</span>
+              </span>
+              <ChevronRight className="w-4 h-4 text-stone-400 ml-auto" />
+            </button>
+          </div>
+        ) : (
+          <div>
+            <h2 className="text-[16px] font-bold text-stone-900 text-center">
+              {role === "ADMIN" ? "Admin details" : "Student details"}
+            </h2>
+            <p className="text-stone-600 text-sm mt-1 mb-6 text-center">
+              Enter your name and email to proceed.
+            </p>
 
-                    <div className="flex flex-col gap-4 mt-8">
-                      <button
-                        onClick={() => {
-                          setRole("STUDENT");
-                          setStep("FORM_INPUT");
-                        }}
-                        className="w-full py-5 px-6 rounded-2xl bg-blue-50 border-2 border-blue-200 hover:border-blue-500 hover:bg-blue-100/50 text-blue-700 font-bold transition-all flex items-center justify-between text-left group shadow-sm"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="p-3 bg-blue-600 rounded-xl text-white">
-                            <User className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <div className="text-lg">Continue as Student</div>
-                            <div className="text-xs text-blue-500 font-normal mt-0.5 font-sans">Access dashboard & roommate chat</div>
-                          </div>
-                        </div>
-                        <ChevronRight className="w-5 h-5 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setRole("ADMIN");
-                          setStep("FORM_INPUT");
-                        }}
-                        className="w-full py-5 px-6 rounded-2xl bg-violet-50 border-2 border-violet-200 hover:border-violet-500 hover:bg-violet-100/50 text-violet-700 font-bold transition-all flex items-center justify-between text-left group shadow-sm"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="p-3 bg-violet-600 rounded-xl text-white">
-                            <UserCog className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <div className="text-lg">Continue as Admin</div>
-                            <div className="text-xs text-violet-500 font-normal mt-0.5 font-sans">Manage allocations & CSV synchronization</div>
-                          </div>
-                        </div>
-                        <ChevronRight className="w-5 h-5 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-                      </button>
-                    </div>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="form-input"
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                  >
-                    <div className="flex items-center justify-center gap-2 mb-6">
-                      <div className={`p-3 rounded-xl ${role === "ADMIN" ? "bg-violet-100 text-violet-600" : "bg-blue-100 text-blue-600"}`}>
-                        {role === "ADMIN" ? <UserCog className="w-6 h-6" /> : <User className="w-6 h-6" />}
-                      </div>
-                    </div>
-                    
-                    <h1 className="text-2xl font-bold text-slate-800">
-                      {role === "ADMIN" ? "Faculty Admin Details" : "Student Details"}
-                    </h1>
-                    <p className="text-slate-500 text-sm mt-1 mb-8">
-                      Enter your name and email to proceed.
-                    </p>
-
-                    <form onSubmit={handleDevSignIn} className="space-y-4">
-                      <div className="text-left">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Full Name</label>
-                        <input
-                          type="text"
-                          placeholder="E.g., John Doe"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          required
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-slate-400"
-                        />
-                      </div>
-                      <div className="text-left">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Email Address</label>
-                        <input
-                          type="email"
-                          placeholder="E.g., john.doe@example.com"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          required
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-slate-400"
-                        />
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className={`w-full text-white font-medium py-4 px-6 rounded-xl flex items-center justify-center gap-2 mt-6 transition-all duration-300 shadow-md ${
-                          role === "ADMIN" ? "bg-violet-600 hover:bg-violet-700" : "bg-blue-600 hover:bg-blue-700"
-                        }`}
-                      >
-                        {loading ? (
-                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        ) : (
-                          "Login"
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setStep("ROLE_SELECT")}
-                        className="w-full text-slate-400 hover:text-slate-600 py-2.5 text-sm font-semibold transition-all mt-2"
-                      >
-                        ← Back to role selection
-                      </button>
-                    </form>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium border-t border-slate-100 pt-6">
-                <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                <span>Local Development Bypass System</span>
+            <form onSubmit={handleDevSignIn} className="space-y-4">
+              <div>
+                <label className={labelCls}>Full name</label>
+                <input
+                  type="text"
+                  placeholder="E.g., Ananya Sharma"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className={inputCls}
+                />
               </div>
-            </div>
-          </motion.div>
+              <div>
+                <label className={labelCls}>Email address</label>
+                <input
+                  type="email"
+                  placeholder="E.g., aditi@yourinstitution.edu"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className={inputCls}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary w-full font-semibold py-3 px-5 rounded-lg text-sm disabled:opacity-60"
+              >
+                {loading ? "Signing in…" : "Log in"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStep("ROLE_SELECT")}
+                className="w-full text-stone-500 hover:text-stone-800 py-2 text-sm font-medium transition-colors"
+              >
+                ← Back to role selection
+              </button>
+            </form>
+          </div>
+        )}
+
+        <div className="mt-6 flex items-center justify-center gap-2 text-xs text-stone-500 border-t border-stone-200 pt-4">
+          <ShieldCheck className="w-4 h-4 text-teal-800" />
+          <span>Local development sign-in</span>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center relative overflow-hidden">
-      {/* Background gradient */}
-      <div className="absolute top-0 right-0 w-full h-[60vh] bg-gradient-to-b from-blue-100/50 to-transparent pointer-events-none" />
-
-      {/* Back to home link */}
-      <button
-        onClick={() => router.push("/")}
-        className="absolute top-6 left-6 z-20 flex items-center gap-2 text-sm text-slate-400 hover:text-slate-700 transition-colors"
-      >
-        ← Back to home
-      </button>
-
-      <div className="z-10 relative flex flex-col items-center px-4 w-full max-w-lg mt-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="w-full"
+    <AuthShell
+      title="Log in to RoomFit"
+      subtitle="Choose your role, then sign in with your institution account."
+    >
+      {/* Role toggle */}
+      <div className="flex bg-stone-100 p-1 rounded-lg mb-6">
+        <button
+          onClick={() => setRole("STUDENT")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-semibold transition-colors ${
+            role === "STUDENT"
+              ? "text-stone-900 bg-white shadow-sm"
+              : "text-stone-500 hover:text-stone-800"
+          }`}
         >
-          {/* Brand mark */}
-          <div className="text-center mb-6">
-            <span className="font-serif text-2xl font-semibold text-slate-700 tracking-tight">
-              Room<span className="text-orange-500">Sync</span>
-            </span>
-          </div>
-
-          {/* Main auth card */}
-          <div className="bg-white px-10 py-12 rounded-[2rem] text-center shadow-[0_10px_50px_rgba(0,0,0,0.05)] border border-slate-100">
-
-            <motion.div
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.2 }}
-              className={`mx-auto p-4 rounded-full w-20 h-20 flex items-center justify-center mb-6 transition-colors duration-500 ${
-                role === "ADMIN"
-                  ? "bg-violet-100 text-violet-600"
-                  : "bg-blue-100 text-blue-600"
-              }`}
-            >
-              {role === "ADMIN" ? (
-                <UserCog className="w-10 h-10" />
-              ) : (
-                <User className="w-10 h-10" strokeWidth={1.5} />
-              )}
-            </motion.div>
-
-            <h1 className="text-3xl font-bold text-slate-800 mb-2">
-              Hostel Allotment Portal
-            </h1>
-
-            <p className="text-slate-500 mb-10 text-sm px-2 leading-relaxed">
-              Welcome back. Please specify your role to sign into the housing
-              administration system.
-            </p>
-
-            {/* Role toggle */}
-            <div className="flex bg-slate-100 p-1.5 rounded-xl mb-8 relative z-20">
-              <button
-                onClick={() => setRole("STUDENT")}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-semibold transition-all duration-300 ${
-                  role === "STUDENT"
-                    ? "text-blue-700 bg-white shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                <User className="w-4 h-4" /> Student
-              </button>
-              <button
-                onClick={() => setRole("ADMIN")}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-semibold transition-all duration-300 ${
-                  role === "ADMIN"
-                    ? "text-violet-700 bg-white shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                <UserCog className="w-4 h-4" /> Faculty Admin
-              </button>
-            </div>
-
-            <AnimatePresence mode="wait">
-              {!demoMode ? (
-                <motion.div
-                  key="google-btn"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  <button
-                    onClick={handleSignIn}
-                    disabled={loading}
-                    className={`w-full text-white font-medium py-4 px-6 rounded-xl flex items-center justify-center gap-4 transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
-                      role === "ADMIN"
-                        ? "bg-violet-600 hover:bg-violet-700"
-                        : "bg-blue-600 hover:bg-blue-700"
-                    }`}
-                  >
-                    {loading ? (
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <div className="bg-white p-1 rounded-md">
-                          <svg
-                            viewBox="0 0 24 24"
-                            className="w-4 h-4 flex-shrink-0"
-                            preserveAspectRatio="xMidYMid meet"
-                          >
-                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.86C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.05H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.95l3.66-2.86z" fill="#FBBC05" />
-                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.05l3.66 2.86c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                          </svg>
-                        </div>
-                        Sign in via SIT Account
-                        <ChevronRight className="w-5 h-5 ml-1 opacity-70" />
-                      </>
-                    )}
-                  </button>
-                </motion.div>
-              ) : (
-                <motion.form
-                  key="demo-form"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  onSubmit={handleDemoSignIn}
-                  className="space-y-4"
-                >
-                  <input
-                    type="email"
-                    placeholder="E.g., student0@yourdomain.edu"
-                    value={demoEmail}
-                    onChange={(e) => setDemoEmail(e.target.value)}
-                    required
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-slate-400"
-                  />
-                  <input
-                    type="password"
-                    placeholder="Enter manual password..."
-                    value={demoPassword}
-                    onChange={(e) => setDemoPassword(e.target.value)}
-                    required
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-slate-400"
-                  />
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3.5 px-6 rounded-xl transition-all shadow-md disabled:opacity-50"
-                  >
-                    {loading ? "Authenticating..." : "Manual Sign In"}
-                  </button>
-                </motion.form>
-              )}
-            </AnimatePresence>
-
-            <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium">
-              <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span>Restricted to your institution&apos;s email domain</span>
-              {/* Hidden backdoor toggle */}
-              <button
-                onClick={() => setDemoMode(!demoMode)}
-                className="ml-auto text-slate-300 hover:text-slate-500 font-bold transition-colors"
-                title="Toggle Manual Override"
-                type="button"
-              >
-                •
-              </button>
-            </div>
-          </div>
-        </motion.div>
+          <User className="w-4 h-4" /> Student
+        </button>
+        <button
+          onClick={() => setRole("ADMIN")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-semibold transition-colors ${
+            role === "ADMIN"
+              ? "text-stone-900 bg-white shadow-sm"
+              : "text-stone-500 hover:text-stone-800"
+          }`}
+        >
+          <UserCog className="w-4 h-4" /> Admin
+        </button>
       </div>
-    </div>
+
+      {!demoMode ? (
+        <button
+          onClick={handleSignIn}
+          disabled={loading}
+          className="btn-primary w-full font-semibold py-3 px-5 rounded-lg text-sm flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? (
+            "Signing in…"
+          ) : (
+            <>
+              <span className="bg-white p-1 rounded">
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-4 h-4 flex-shrink-0"
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.86C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.05H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.95l3.66-2.86z" fill="#FBBC05" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.05l3.66 2.86c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                </svg>
+              </span>
+              Sign in with your institution account
+            </>
+          )}
+        </button>
+      ) : (
+        <form onSubmit={handleDemoSignIn} className="space-y-4">
+          <input
+            type="email"
+            placeholder="E.g., student0@yourdomain.edu"
+            value={demoEmail}
+            onChange={(e) => setDemoEmail(e.target.value)}
+            required
+            className={inputCls}
+          />
+          <input
+            type="password"
+            placeholder="Enter password"
+            value={demoPassword}
+            onChange={(e) => setDemoPassword(e.target.value)}
+            required
+            className={inputCls}
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary w-full font-semibold py-3 px-5 rounded-lg text-sm disabled:opacity-50"
+          >
+            {loading ? "Authenticating…" : "Sign in"}
+          </button>
+        </form>
+      )}
+
+      <div className="mt-6 flex items-center justify-center gap-2 text-xs text-stone-500">
+        <ShieldCheck className="w-4 h-4 text-teal-800" />
+        <span>Restricted to your institution&apos;s email domain</span>
+        {/* Manual override toggle */}
+        <button
+          onClick={() => setDemoMode(!demoMode)}
+          className="ml-auto text-stone-300 hover:text-stone-500 font-bold transition-colors"
+          title="Toggle manual sign-in"
+          type="button"
+        >
+          •
+        </button>
+      </div>
+    </AuthShell>
   );
 }

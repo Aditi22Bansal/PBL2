@@ -1,43 +1,26 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { motion, useReducedMotion } from "framer-motion";
 import {
-  MessageCircle, ShieldCheck, Sparkles, Bell, Users, LayoutGrid,
+  MessageCircle, Sparkles, Bell, Users, LayoutGrid,
   SlidersHorizontal, FileDown, Lock, ClipboardList, ArrowRight,
   CheckCircle2, Building2, History,
 } from "lucide-react";
+import Navbar, { Reveal } from "@/components/landing/Navbar";
+import Footer from "@/components/landing/Footer";
 import HeroVisual from "@/components/landing/HeroVisual";
-import Mascot from "@/components/landing/Mascot";
+import { EyebrowBadge } from "@/components/premium";
 import {
   CompatibilityRing, ConstraintDiagram, NotificationChatMock,
-  TenantIsolationVisual, AdminPreview,
+  TenantIsolationVisual, AdminPreview, MatchFlow,
 } from "@/components/landing/FeatureVisuals";
 
-function Reveal({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  // useReducedMotion() is null on the server and resolves client-side after
-  // mount - toggling *which* props are passed based on it (rather than just
-  // their values) makes the server-rendered markup and the client's first
-  // render disagree, which React flags as a real hydration mismatch. Instead,
-  // keep initial/whileInView always present (identical shape every time) and
-  // only collapse the transition duration to 0 when reduced motion is on -
-  // same practical effect (no visible motion), no mismatch.
-  const reduced = useReducedMotion();
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: reduced ? 0 : 0.6, delay: reduced ? 0 : delay, ease: "easeOut" }}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
 const REAL_CAPABILITIES = [
-  "Cosine-similarity compatibility matching", "Two-phase allocation engine",
-  "Hard-constraint pre-filters", "Real-time Socket.IO notifications",
-  "Multi-tenant by design", "Self-serve org onboarding",
+  "Compatibility matching",
+  "Two-phase allocation",
+  "Hard-constraint checks",
+  "Live notifications",
+  "Multi-tenant by design",
+  "Self-serve onboarding",
 ];
 
 const STUDENT_BENEFITS = [
@@ -48,8 +31,8 @@ const STUDENT_BENEFITS = [
   },
   {
     icon: CheckCircle2,
-    title: "Guaranteed placement — never silent",
-    desc: "A two-phase pipeline places 100% of students it possibly can. The rare student it truly can't place is flagged for manual review with the specific reason — never silently dropped.",
+    title: "Placed with a reason, or flagged honestly",
+    desc: "A two-phase pipeline places everyone it possibly can. The rare student it truly can't place is flagged for manual review with the specific reason — never silently dropped.",
   },
   {
     icon: MessageCircle,
@@ -81,124 +64,119 @@ const STORY_MILESTONES = [
     tag: "The start",
     title: "A BTech capstone, for one institution",
     desc: "RoomFit started as a single-institution final-year project: one hostel, one dataset, one hardcoded set of assumptions baked into the code.",
-    accent: "teal" as const,
   },
   {
     tag: "The rebuild",
-    title: "Rebuilt into a real multi-tenant SaaS",
-    desc: "Every collection gained real organization scoping, self-serve institution onboarding replaced hardcoded assumptions, and domain-verified signup keeps each institution's data genuinely isolated from every other.",
-    accent: "teal" as const,
+    title: "Rebuilt into multi-tenant software",
+    desc: "Every collection gained organization scoping, self-serve institution onboarding replaced hardcoded assumptions, and domain-verified signup keeps each institution's data isolated.",
   },
   {
     tag: "The audit",
     title: "We found real security bugs — and closed them",
-    desc: "A client-trusted role field meant any account could silently self-promote to admin on login; a service call between our own backends had no auth on it at all. Both were found during our own review and closed, not left as someone else's problem.",
-    accent: "violet" as const,
+    desc: "A client-trusted role field meant any account could silently self-promote to admin on login; a service call between our own backends had no auth on it at all. Both were found during our own review and closed.",
   },
   {
     tag: "The proof",
-    title: "Load-tested under real, sustained pressure",
-    desc: "A real k6 load test — not a manifest nobody ran — pushed the allocation engine hard enough to scale from 1 to 5 replicas under sustained CPU pressure, hold there, and scale back down correctly once load eased.",
-    accent: "teal" as const,
+    title: "Load-tested under sustained pressure",
+    desc: "A k6 load test pushed the allocation engine hard enough to scale from 1 to 5 replicas under sustained CPU pressure, hold there, and scale back down once load eased.",
   },
 ];
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return <p className="eyebrow text-teal-800 mb-3">{children}</p>;
+}
+
+function SectionHead({ eyebrow, title, lede }: { eyebrow: string; title: string; lede?: string }) {
+  return (
+    <div className="max-w-2xl mb-12">
+      <Eyebrow>{eyebrow}</Eyebrow>
+      <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 leading-[1.12]">{title}</h2>
+      {lede && <p className="text-stone-600 mt-4 leading-relaxed text-[16px]">{lede}</p>}
+    </div>
+  );
+}
 
 export default function Landing() {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800 overflow-x-hidden">
-      {/* NAV */}
-      <nav className="sticky top-0 z-50 backdrop-blur-xl bg-stone-50/80 border-b border-stone-200">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 font-semibold text-lg text-stone-900">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-teal-400 to-teal-600" />
-            RoomFit
-          </div>
-          <div className="hidden md:flex items-center gap-8 text-sm text-stone-600">
-            <a href="#how-it-works" className="hover:text-stone-900 transition-colors">How it works</a>
-            <a href="#students" className="hover:text-stone-900 transition-colors">Students</a>
-            <a href="#admins" className="hover:text-stone-900 transition-colors">Admins</a>
-            <a href="#our-story" className="hover:text-stone-900 transition-colors">Our story</a>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button onClick={() => router.push("/login")} className="text-sm text-stone-600 hover:text-stone-900 px-2 sm:px-3 py-2 transition-colors whitespace-nowrap">
-              Log in
-            </button>
-            <button
-              onClick={() => router.push("/register")}
-              className="text-sm font-medium bg-teal-700 hover:bg-teal-800 text-white px-3.5 sm:px-4 py-2 rounded-full transition-colors flex items-center gap-1.5 whitespace-nowrap"
-            >
-              <span className="hidden sm:inline">Register your institution</span>
-              <span className="sm:hidden">Register</span> <ArrowRight className="w-3.5 h-3.5 flex-shrink-0" />
-            </button>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-[#faf9f7] text-stone-800 overflow-x-hidden">
+      <Navbar />
 
       {/* HERO */}
-      <section className="relative max-w-7xl mx-auto px-6 pt-10 pb-12 sm:pt-16 sm:pb-20 grid lg:grid-cols-2 gap-10 lg:gap-12 items-center">
-        <div>
-          <div className="inline-flex items-center gap-2 text-xs font-medium text-teal-800 bg-teal-50 border border-teal-200 rounded-full px-3 py-1.5 mb-6">
-            <Sparkles className="w-3.5 h-3.5" /> Multi-tenant hostel allocation
+      <section className="hero-wash border-b border-stone-200/80 overflow-hidden">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 pt-14 pb-16 sm:pt-20 sm:pb-24 grid lg:grid-cols-[1.05fr_0.95fr] gap-12 items-center">
+          <div>
+            <EyebrowBadge>Hostel roommate allocation · for institutions</EyebrowBadge>
+            <h1 className="text-[42px] sm:text-6xl font-bold tracking-tight leading-[1.04] text-stone-950 mt-6 mb-6">
+              Find the people<br />
+              you&apos;ll actually<br />
+              <span className="text-teal-800">love living with.</span>
+            </h1>
+            <p className="text-stone-600 text-[17px] leading-relaxed max-w-md mb-9">
+              RoomFit turns a short lifestyle questionnaire into roommate
+              groupings that get along — while enforcing the constraints your
+              institution can&apos;t compromise on.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => router.push("/register")}
+                className="btn-primary font-semibold px-7 py-3.5 rounded-2xl flex items-center justify-center gap-2 text-[15px]"
+              >
+                Register your institution <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => router.push("/login")}
+                className="btn-quiet font-semibold px-7 py-3.5 rounded-2xl border border-stone-300 hover:border-stone-400 hover:-translate-y-px text-stone-800 bg-white text-[15px] transition-all"
+              >
+                Log in
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-8">
+              {["Free to set up", "Isolated per institution", "Live in minutes"].map((t) => (
+                <span key={t} className="chip chip-stone">{t}</span>
+              ))}
+            </div>
           </div>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05] mb-6 text-stone-900">
-            Roommates matched by
-            <span className="block bg-gradient-to-r from-teal-600 to-emerald-600 bg-clip-text text-transparent">compatibility, not chance.</span>
-          </h1>
-          <p className="text-stone-600 text-lg leading-relaxed max-w-lg mb-8">
-            RoomFit turns a lifestyle questionnaire into roommate groupings that actually
-            get along — while never crossing the constraints your institution can&apos;t
-            compromise on.
-          </p>
-          <div className="flex flex-wrap items-center gap-4">
-            <button
-              onClick={() => router.push("/register")}
-              className="bg-teal-700 hover:bg-teal-800 text-white font-medium px-6 py-3.5 rounded-full transition-colors flex items-center gap-2 shadow-lg shadow-teal-900/15"
-            >
-              Register your institution <ArrowRight className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => router.push("/login")}
-              className="text-stone-700 hover:text-stone-900 font-medium px-6 py-3.5 rounded-full border border-stone-300 hover:border-stone-400 transition-colors"
-            >
-              Log in
-            </button>
-          </div>
+
+          <Reveal delay={0.1} className="min-w-0">
+            <HeroVisual />
+            <p className="text-[12px] text-stone-500 mt-4 text-center">Live 3D preview of a RoomFit match — the room, the roommates, and the compatibility behind them.</p>
+          </Reveal>
         </div>
-        <HeroVisual />
       </section>
 
-      {/* REAL CAPABILITIES STRIP - descriptive, not invented stats */}
-      <div className="border-y border-stone-200 bg-white py-5 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+      {/* CAPABILITIES */}
+      <div className="border-b border-stone-200/80 bg-white">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-4 flex flex-wrap gap-x-7 gap-y-2">
           {REAL_CAPABILITIES.map((c) => (
-            <span key={c} className="text-xs font-medium text-stone-600 flex items-center gap-2">
-              <span className="w-1 h-1 rounded-full bg-teal-600" /> {c}
-            </span>
+            <span key={c} className="text-[13px] font-medium text-stone-600">{c}</span>
           ))}
         </div>
       </div>
 
       {/* HOW IT WORKS */}
-      <section id="how-it-works" className="max-w-7xl mx-auto px-6 py-14 sm:py-20 lg:py-24">
+      <section id="how-it-works" className="max-w-6xl mx-auto px-5 sm:px-6 py-16 sm:py-24 scroll-mt-16">
         <Reveal>
-          <p className="text-xs font-semibold tracking-widest uppercase text-teal-700 mb-3">Process</p>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4 max-w-xl text-stone-900">From questionnaire to move-in day.</h2>
-          <p className="text-stone-600 max-w-lg mb-12">A two-phase pipeline that optimizes for compatibility first, then guarantees everyone gets a room.</p>
+          <SectionHead
+            eyebrow="How it works"
+            title="From questionnaire to move-in day"
+            lede="A two-phase pipeline that optimizes for compatibility first, then guarantees everyone gets a room."
+          />
         </Reveal>
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-3 gap-4">
           {[
-            { icon: ClipboardList, title: "A real lifestyle questionnaire", desc: "~30 questions on sleep schedule, cleanliness, study habits, and personality — takes a few minutes, saved as you go." },
-            { icon: Sparkles, title: "Compatibility, then constraints", desc: "The engine optimizes for compatibility first, then guarantees placement — hard constraints like gender and smoking compatibility are never traded off for a better score." },
-            { icon: Bell, title: "Matched and notified instantly", desc: "The moment a room is assigned, students get a live notification and can see exactly why they were matched." },
+            { icon: ClipboardList, step: "Step 1", title: "Students answer a lifestyle questionnaire", desc: "~30 questions on sleep, cleanliness, study habits, and personality. Takes a few minutes, saved as you go." },
+            { icon: Sparkles, step: "Step 2", title: "The engine matches, constraints gate", desc: "Compatibility is optimized first; gender and smoking compatibility are absolute pre-filters, never traded off for a better score." },
+            { icon: Bell, step: "Step 3", title: "Rooms assigned, students notified", desc: "The moment a room is assigned, students get a live notification and can see exactly why they were matched." },
           ].map((s, i) => (
-            <Reveal key={s.title} delay={i * 0.1}>
-              <div className="glass-card rounded-2xl p-7 h-full">
-                <div className="w-11 h-11 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center mb-5">
-                  <s.icon className="w-5 h-5 text-teal-700" />
+            <Reveal key={s.title} delay={i * 0.06}>
+              <div className="card-premium rounded-[20px] p-7 h-full lift">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-stone-500 mb-4">{s.step}</p>
+                <div className="w-11 h-11 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center mb-5">
+                  <s.icon className="w-5 h-5 text-teal-800" />
                 </div>
-                <h3 className="font-semibold text-stone-800 mb-2">{s.title}</h3>
+                <h3 className="font-bold text-stone-900 text-[15px] mb-1.5">{s.title}</h3>
                 <p className="text-sm text-stone-600 leading-relaxed">{s.desc}</p>
               </div>
             </Reveal>
@@ -206,73 +184,81 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* FOR STUDENTS */}
-      <section id="students" className="bg-white border-y border-stone-200">
-        <div className="max-w-7xl mx-auto px-6 py-14 sm:py-20 lg:py-24">
+      {/* COMPATIBILITY */}
+      <section className="bg-white border-y border-stone-200/80">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 sm:py-24 grid lg:grid-cols-2 gap-10 items-start">
           <Reveal>
-            <p className="text-xs font-semibold tracking-widest uppercase text-teal-700 mb-3">For students</p>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4 max-w-xl text-stone-900">Students will be...</h2>
-            <p className="text-stone-600 max-w-lg mb-12">Real benefits, grounded in the actual allocation engine and notification system — not aspirational copy.</p>
+            <Eyebrow>Compatibility engine</Eyebrow>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 leading-[1.12] mb-4">
+              RoomFit understands people, not just rooms.
+            </h2>
+            <p className="text-stone-600 leading-relaxed mb-6 text-[15px]">
+              Two profiles go in. Shared lifestyle signals are weighed, hard
+              constraints gate the pairing, and a compatibility score comes out —
+              attached to an actual room.
+            </p>
+            <ul className="space-y-2.5 text-[14px] text-stone-700">
+              {[
+                "Sleep, cleanliness, study, social, food and noise preferences",
+                "Every score links back to the shared traits behind it",
+                "Hard gates run first — never scored away",
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-teal-800 mt-0.5 shrink-0" /> {t}
+                </li>
+              ))}
+            </ul>
           </Reveal>
-          <div className="grid md:grid-cols-3 gap-6">
-            {STUDENT_BENEFITS.map((b, i) => (
-              <Reveal key={b.title} delay={i * 0.1}>
-                <div className="glass-card rounded-2xl p-7 h-full">
-                  <div className="w-11 h-11 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center mb-5">
-                    <b.icon className="w-5 h-5 text-teal-700" />
-                  </div>
-                  <h3 className="font-semibold text-stone-800 mb-2">{b.title}</h3>
-                  <p className="text-sm text-stone-600 leading-relaxed">{b.desc}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
+          <Reveal delay={0.06}>
+            <MatchFlow />
+          </Reveal>
         </div>
       </section>
 
-      {/* HARD CONSTRAINTS */}
-      <section className="max-w-7xl mx-auto px-6 py-14 sm:py-20 lg:py-24 grid lg:grid-cols-2 gap-14 items-center">
+      {/* CONSTRAINTS */}
+      <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 sm:py-24 grid lg:grid-cols-2 gap-10 items-start">
         <Reveal>
-          <p className="text-xs font-semibold tracking-widest uppercase text-teal-700 mb-3">Never compromised</p>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-5 text-stone-900">Hard constraints are absolute — not a scored feature.</h2>
-          <p className="text-stone-600 leading-relaxed mb-6">
-            No mixed-gender rooms. No smoking/non-smoking pairings. These aren&apos;t
-            preferences the algorithm weighs against everything else — they exclude a
-            pairing outright, before any matching runs at all.
+          <Eyebrow>Non-negotiables</Eyebrow>
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 leading-[1.12] mb-4">
+            Hard constraints are absolute.
+          </h2>
+          <p className="text-stone-600 leading-relaxed text-[15px]">
+            No mixed-gender rooms. No smoking/non-smoking pairings. These
+            aren&apos;t preferences the algorithm weighs — they exclude a pairing
+            outright, before matching runs. The rare student who can&apos;t be
+            placed is flagged with the specific reason, never hidden or forced.
           </p>
-          <ul className="space-y-3">
-            {["Gender and smoking/drinking incompatibility checked as absolute pre-filters", "A two-phase optimize-then-guarantee design places every student it possibly can", "The rare unplaceable case is flagged explicitly with the specific blocking reason — never hidden or forced"].map((t) => (
-              <li key={t} className="flex items-start gap-3 text-sm text-stone-700">
-                <ShieldCheck className="w-4 h-4 text-teal-700 mt-0.5 flex-shrink-0" /> {t}
-              </li>
-            ))}
-          </ul>
         </Reveal>
-        <Reveal delay={0.15}>
+        <Reveal delay={0.06}>
           <ConstraintDiagram />
         </Reveal>
       </section>
 
       {/* EXPLAINABILITY */}
-      <section className="bg-white border-y border-stone-200">
-        <div className="max-w-7xl mx-auto px-6 py-14 sm:py-20 lg:py-24 grid lg:grid-cols-2 gap-14 items-center">
-          <Reveal>
-            <div className="glass-card rounded-2xl p-8 flex flex-col items-center">
+      <section className="bg-white border-y border-stone-200/80">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 sm:py-24 grid lg:grid-cols-[0.9fr_1.1fr] gap-10 items-center">
+            <Reveal>
+              <div className="card-premium rounded-[24px] p-8 flex flex-col items-center shadow-soft">
               <CompatibilityRing score={92} />
-              <p className="text-sm text-stone-600 mt-4 text-center">&ldquo;Why We Matched&rdquo; — shared quiet-study hours, similar sleep schedule, aligned cleanliness expectations.</p>
+              <p className="text-sm text-stone-600 mt-4 text-center leading-relaxed max-w-xs">
+                &ldquo;Why We Matched&rdquo; — shared quiet-study hours, similar
+                sleep schedule, aligned cleanliness expectations.
+              </p>
             </div>
           </Reveal>
-          <Reveal delay={0.1}>
-            <p className="text-xs font-semibold tracking-widest uppercase text-teal-700 mb-3">Why we match</p>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-5 text-stone-900">No black box. See exactly why.</h2>
-            <p className="text-stone-600 leading-relaxed mb-6">
-              Every match comes with a real explanation — what you have in common, and the
-              specific things worth discussing with your new roommates before move-in.
-            </p>
-            <ul className="space-y-3">
-              {["“Why We Matched” breaks down the real shared traits behind your score", "“Things to discuss” surfaces predicted friction points honestly, upfront", "Room-size and ground-floor accessibility preferences honored best-effort — never a placement blocker"].map((t) => (
-                <li key={t} className="flex items-start gap-3 text-sm text-stone-700">
-                  <SlidersHorizontal className="w-4 h-4 text-teal-700 mt-0.5 flex-shrink-0" /> {t}
+          <Reveal delay={0.06}>
+            <Eyebrow>Why we match</Eyebrow>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 leading-[1.12] mb-4">
+              No black box. See exactly why.
+            </h2>
+            <ul className="space-y-2.5 text-[14px] text-stone-700">
+              {[
+                "“Why We Matched” lists the shared traits behind each score",
+                "“Things to discuss” surfaces likely friction points upfront",
+                "Room-size and accessibility preferences honored best-effort",
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-2.5">
+                  <SlidersHorizontal className="w-4 h-4 text-teal-800 mt-0.5 shrink-0" /> {t}
                 </li>
               ))}
             </ul>
@@ -280,54 +266,60 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* CHAT + NOTIFICATIONS */}
-      <section className="max-w-7xl mx-auto px-6 py-14 sm:py-20 lg:py-24 grid lg:grid-cols-2 gap-14 items-center">
+      {/* CHAT */}
+      <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 sm:py-24 grid lg:grid-cols-2 gap-10 items-start">
         <Reveal>
-          <p className="text-xs font-semibold tracking-widest uppercase text-teal-700 mb-3">Stay connected</p>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-5 text-stone-900">Meet your roommates before you move in.</h2>
-          <p className="text-stone-600 leading-relaxed mb-6">
-            The moment you&apos;re placed, you know it — live if you&apos;re online, waiting
-            for you if you weren&apos;t. A private chat with just your room group opens up
-            immediately.
+          <Eyebrow>Stay connected</Eyebrow>
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 leading-[1.12] mb-4">
+            Meet your roommates before move-in.
+          </h2>
+          <p className="text-stone-600 leading-relaxed mb-5 text-[15px]">
+            The moment you&apos;re placed, you know it — live if you&apos;re
+            online, waiting for you if you weren&apos;t. A private chat with
+            just your room group opens immediately.
           </p>
-          <div className="flex items-center gap-3 text-sm text-stone-700">
-            <MessageCircle className="w-4 h-4 text-teal-700" /> Private, room-scoped roommate chat
-          </div>
+          <p className="flex items-center gap-2 text-sm text-stone-700">
+            <MessageCircle className="w-4 h-4 text-teal-800" /> Private, room-scoped chat
+          </p>
         </Reveal>
-        <Reveal delay={0.1}>
+        <Reveal delay={0.06}>
           <NotificationChatMock />
         </Reveal>
       </section>
 
-      {/* MULTI-TENANT */}
-      <section className="bg-white border-y border-stone-200">
-        <div className="max-w-7xl mx-auto px-6 py-14 sm:py-20 lg:py-24">
+      {/* INSTITUTIONS */}
+      <section className="bg-white border-y border-stone-200/80">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 sm:py-24 grid lg:grid-cols-2 gap-10 items-start">
           <Reveal>
-            <p className="text-xs font-semibold tracking-widest uppercase text-teal-700 mb-3">Built for institutions</p>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4 max-w-xl text-stone-900">One platform, completely isolated per institution.</h2>
-            <p className="text-stone-600 max-w-lg mb-10">Register your own organization with your own email domain — your data is never visible to any other institution, ever.</p>
+            <Eyebrow>Built for institutions</Eyebrow>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 leading-[1.12] mb-4">
+              One platform, isolated per institution.
+            </h2>
+            <p className="text-stone-600 leading-relaxed text-[15px]">
+              Register your organization with your own email domain. Your
+              students, rooms, and allocations are never visible to any other
+              institution.
+            </p>
           </Reveal>
-          <Reveal delay={0.1}>
+          <Reveal delay={0.06}>
             <TenantIsolationVisual />
           </Reveal>
         </div>
       </section>
 
-      {/* FOR ADMINS */}
-      <section id="admins" className="max-w-7xl mx-auto px-6 py-14 sm:py-20 lg:py-24">
+      {/* FOR STUDENTS */}
+      <section id="students" className="max-w-6xl mx-auto px-5 sm:px-6 py-16 sm:py-24 scroll-mt-16">
         <Reveal>
-          <p className="text-xs font-semibold tracking-widest uppercase text-teal-700 mb-3">For admins</p>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4 max-w-xl text-stone-900">Admins will be...</h2>
-          <p className="text-stone-600 max-w-lg mb-12">Real operational benefits, grounded in what the platform actually enforces and logs.</p>
+          <SectionHead eyebrow="For students" title="Designed around student life" />
         </Reveal>
-        <div className="grid md:grid-cols-3 gap-6">
-          {ADMIN_BENEFITS.map((b, i) => (
-            <Reveal key={b.title} delay={i * 0.1}>
-              <div className="glass-card rounded-2xl p-7 h-full">
-                <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center mb-5">
-                  <b.icon className="w-5 h-5 text-orange-700" />
+        <div className="grid md:grid-cols-3 gap-4">
+          {STUDENT_BENEFITS.map((b, i) => (
+            <Reveal key={b.title} delay={i * 0.06}>
+              <div className="card-premium rounded-[20px] p-7 h-full lift">
+                <div className="w-11 h-11 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center mb-5">
+                  <b.icon className="w-5 h-5 text-teal-800" />
                 </div>
-                <h3 className="font-semibold text-stone-800 mb-2">{b.title}</h3>
+                <h3 className="font-bold text-stone-900 text-[15px] mb-1.5">{b.title}</h3>
                 <p className="text-sm text-stone-600 leading-relaxed">{b.desc}</p>
               </div>
             </Reveal>
@@ -335,57 +327,69 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ADMIN TOOLKIT (detailed) */}
-      <section className="bg-white border-y border-stone-200">
-        <div className="max-w-7xl mx-auto px-6 py-14 sm:py-20 lg:py-24 grid lg:grid-cols-2 gap-14 items-center">
+      {/* FOR ADMINS */}
+      <section id="admins" className="bg-white border-y border-stone-200/80 scroll-mt-16">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 sm:py-24">
           <Reveal>
-            <p className="text-xs font-semibold tracking-widest uppercase text-teal-700 mb-3">Admin toolkit</p>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-5 text-stone-900">Dense, fast, and fully in your control.</h2>
-            <p className="text-stone-600 leading-relaxed mb-6">
-              Sync your existing roster from CSV or Google Sheets, run allocation, then
-              review, lock, or manually swap any assignment — every action logged.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { icon: LayoutGrid, t: "Analytics dashboard" }, { icon: FileDown, t: "PDF / CSV export" },
-                { icon: Lock, t: "Room lock & manual swap" }, { icon: Users, t: "Accommodation requests" },
-              ].map((f) => (
-                <div key={f.t} className="flex items-center gap-2.5 text-sm text-stone-700">
-                  <f.icon className="w-4 h-4 text-teal-700 flex-shrink-0" /> {f.t}
+            <SectionHead
+              eyebrow="For admins"
+              title="Operational control, without the spreadsheet chaos"
+              lede="Sync your roster, run allocation, review, lock, or swap any assignment — every action logged."
+            />
+          </Reveal>
+          <div className="grid md:grid-cols-3 gap-4 mb-10">
+            {ADMIN_BENEFITS.map((b, i) => (
+              <Reveal key={b.title} delay={i * 0.06}>
+                <div className="card-premium rounded-[20px] p-7 h-full lift">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mb-5">
+                    <b.icon className="w-5 h-5 text-amber-800" />
+                  </div>
+                  <h3 className="font-bold text-stone-900 text-[15px] mb-1.5">{b.title}</h3>
+                  <p className="text-sm text-stone-600 leading-relaxed">{b.desc}</p>
                 </div>
-              ))}
-            </div>
-          </Reveal>
-          <Reveal delay={0.1}>
-            <AdminPreview />
-          </Reveal>
+              </Reveal>
+            ))}
+          </div>
+          <div className="grid lg:grid-cols-2 gap-10 items-start">
+            <Reveal>
+              <h3 className="font-bold text-stone-900 text-[16px] mb-4">What the console covers</h3>
+              <ul className="grid sm:grid-cols-2 gap-2.5">
+                {[
+                  { icon: LayoutGrid, t: "Analytics dashboard" }, { icon: FileDown, t: "PDF / CSV export" },
+                  { icon: Lock, t: "Room lock & manual swap" }, { icon: Users, t: "Accommodation requests" },
+                ].map((f) => (
+                  <li key={f.t} className="flex items-center gap-2.5 text-sm text-stone-700 border border-stone-200 rounded-2xl px-4 py-3.5 bg-[#faf9f7] hover:border-teal-800/40 hover:bg-white transition-colors">
+                    <f.icon className="w-4 h-4 text-teal-800 shrink-0" /> {f.t}
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+            <Reveal delay={0.06}>
+              <AdminPreview />
+            </Reveal>
+          </div>
         </div>
       </section>
 
       {/* OUR STORY */}
-      <section id="our-story" className="max-w-5xl mx-auto px-6 py-14 sm:py-20 lg:py-24">
+      <section id="our-story" className="max-w-3xl mx-auto px-5 sm:px-6 py-16 sm:py-24 scroll-mt-16">
         <Reveal>
-          <p className="text-xs font-semibold tracking-widest uppercase text-teal-700 mb-3">Our story</p>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4 max-w-xl text-stone-900">From a class project to a platform we stress-tested for real.</h2>
-          <p className="text-stone-600 max-w-2xl mb-12 leading-relaxed">
-            No press mentions, no client logos, no testimonials yet — this project is
-            young. What it does have is an honest build history, including the parts
-            that weren&apos;t clean the first time.
-          </p>
+          <SectionHead
+            eyebrow="Our story"
+            title="From a class project to tested software"
+            lede="No press mentions or client logos yet — this project is young. What it has is an honest build history."
+          />
         </Reveal>
-        <div className="relative pl-8">
-          <div className="absolute left-[7px] top-2 bottom-2 w-px bg-stone-200" aria-hidden="true" />
-          <div className="space-y-10">
+        <div className="relative pl-7">
+          <div className="absolute left-[6px] top-2 bottom-2 w-px bg-stone-200" aria-hidden="true" />
+          <div className="space-y-8">
             {STORY_MILESTONES.map((m, i) => (
-              <Reveal key={m.title} delay={i * 0.08}>
+              <Reveal key={m.title} delay={i * 0.04}>
                 <div className="relative">
-                  <span
-                    className={`absolute -left-8 top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white ${m.accent === "violet" ? "bg-violet-500" : "bg-teal-600"}`}
-                    aria-hidden="true"
-                  />
-                  <p className={`text-xs font-semibold tracking-widest uppercase mb-1.5 ${m.accent === "violet" ? "text-violet-700" : "text-teal-700"}`}>{m.tag}</p>
-                  <h3 className="font-semibold text-stone-900 mb-1.5">{m.title}</h3>
-                  <p className="text-sm text-stone-600 leading-relaxed max-w-2xl">{m.desc}</p>
+                  <span className="absolute -left-7 top-1.5 w-3 h-3 rounded-full bg-teal-700 border-2 border-white shadow-sm" aria-hidden="true" />
+                  <p className="eyebrow text-stone-500 mb-1">{m.tag}</p>
+                  <h3 className="font-bold text-stone-900 text-[15px] mb-1">{m.title}</h3>
+                  <p className="text-sm text-stone-600 leading-relaxed">{m.desc}</p>
                 </div>
               </Reveal>
             ))}
@@ -394,29 +398,34 @@ export default function Landing() {
       </section>
 
       {/* CTA */}
-      <section className="max-w-5xl mx-auto px-6 py-14 sm:py-20 lg:py-24 text-center relative">
+      <section className="max-w-6xl mx-auto px-5 sm:px-6 pb-16 sm:pb-24">
         <Reveal>
-          <Mascot className="w-24 h-24 mx-auto mb-6" />
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4 text-stone-900">Ready to give your students a better start?</h2>
-          <p className="text-stone-600 max-w-md mx-auto mb-8">Register your institution and get a fully isolated dashboard in minutes.</p>
-          <button
-            onClick={() => router.push("/register")}
-            className="bg-teal-700 hover:bg-teal-800 text-white font-medium px-7 py-3.5 rounded-full transition-colors inline-flex items-center gap-2 shadow-lg shadow-teal-900/15"
-          >
-            Register your institution <ArrowRight className="w-4 h-4" />
-          </button>
+          <div className="teal-band rounded-[28px] px-6 py-12 sm:px-12 sm:py-14 grid lg:grid-cols-[1.2fr_auto] gap-8 items-center shadow-lift relative overflow-hidden">
+            <div aria-hidden="true" className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-teal-300/20 blur-3xl" />
+            <div aria-hidden="true" className="absolute -bottom-24 -left-16 w-72 h-72 rounded-full bg-amber-300/20 blur-3xl" />
+            <div className="relative">
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white leading-[1.12]">Give your students a better start to the year.</h2>
+              <p className="text-teal-50/90 mt-3 text-[16px]">Register your institution and get an isolated dashboard in minutes.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row lg:flex-col gap-3 relative">
+              <button
+                onClick={() => router.push("/register")}
+                className="font-semibold px-7 py-3.5 rounded-2xl inline-flex items-center justify-center gap-2 whitespace-nowrap bg-white text-teal-900 hover:-translate-y-px hover:shadow-lift transition-all"
+              >
+                Register your institution <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => router.push("/login")}
+                className="font-semibold px-7 py-3.5 rounded-2xl border border-white/40 text-white hover:bg-white/10 whitespace-nowrap transition-colors"
+              >
+                Log in
+              </button>
+            </div>
+          </div>
         </Reveal>
       </section>
 
-      {/* FOOTER */}
-      <footer className="border-t border-stone-200">
-        <div className="max-w-7xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-sm text-stone-600">
-            <Mascot className="w-8 h-8" /> RoomFit
-          </div>
-          <p className="text-xs text-stone-600">Multi-tenant hostel roommate allocation.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

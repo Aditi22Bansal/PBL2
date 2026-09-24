@@ -2,151 +2,263 @@
 
 @theme {
   /*
-   * Pilot tokens (currently used only by the Hostel Configuration form in
-   * app/admin/page.tsx; not yet rolled out elsewhere) - retired as a
-   * separate system and realiased onto the same shared teal/stone palette
-   * the landing page, student dashboard, and now the rest of admin all use.
-   * The token NAMES (primary-*, neutral-*) are kept so the form's existing
-   * classNames (bg-primary-600, text-neutral-800, etc.) don't need touching -
-   * only the values they resolve to changed, from the old violet/slate scale
-   * to real teal/stone hex.
-   *
-   * Two steps are deliberately NOT a literal 1:1 teal/stone alias:
-   * primary-600/700 alias to teal-700/800 (one step up) because primary-600
-   * is used both as solid-button background (needs a white-text-safe shade)
-   * and as inline stat-number text (bg-primary-600/text-primary-600 dual use
-   * with white text on it) - real teal-600 measures 3.74:1 with white text,
-   * under the 4.5:1 AA floor this app holds every other button/text pairing
-   * to (see the landing/dashboard work); teal-700 measures 5.47:1. Likewise
-   * neutral-400/500 alias to stone-600 because both are used as real label
-   * and placeholder text (text-neutral-500 on white measures 4.56:1 as real
-   * stone-500 - the same borderline case already fixed everywhere else in
-   * this app - stone-600 measures 7.63:1). Every other step aliases 1:1
-   * since it's only ever used decoratively (icon fills, focus rings,
-   * background tints), where the real teal/stone value is already safe.
+   * RoomFit design system — calm, professional, light.
+   * One primary (deep teal), one sparing warm accent (muted amber/orange),
+   * warm neutrals. Solid surfaces, hairline borders, restrained shadow.
+   * No glassmorphism, no gradients-as-decoration, no glow.
    */
-  --color-primary-50: #f0fdfa;   /* teal-50 */
-  --color-primary-100: #ccfbf1;  /* teal-100 */
-  --color-primary-200: #99f6e4;  /* teal-200 */
-  --color-primary-300: #5eead4;  /* teal-300 */
-  --color-primary-400: #2dd4bf;  /* teal-400 */
-  --color-primary-500: #14b8a6;  /* teal-500 - decorative only (dot/icon/border), safe as-is */
-  --color-primary-600: #0f766e;  /* teal-700 - aliased up: also used as button bg + stat text */
-  --color-primary-700: #115e59;  /* teal-800 - aliased up: hover state, one step past 600 */
-  --color-primary-800: #134e4a;  /* teal-900 */
+  --color-primary-50: #eff6f5;
+  --color-primary-100: #d7e9e6;
+  --color-primary-200: #b0d3cf;
+  --color-primary-300: #7fb5b0;
+  --color-primary-400: #4d948e;
+  --color-primary-500: #2a7a74;
+  --color-primary-600: #16655f;
+  --color-primary-700: #115e59;
+  --color-primary-800: #0e4a46;
 
-  --color-neutral-50: #fafaf9;   /* stone-50 */
-  --color-neutral-100: #f5f5f4;  /* stone-100 */
-  --color-neutral-200: #e7e5e4;  /* stone-200 */
-  --color-neutral-300: #d6d3d1;  /* stone-300 */
-  --color-neutral-400: #57534e;  /* stone-600 - aliased up: used as real placeholder text */
-  --color-neutral-500: #57534e;  /* stone-600 - aliased up: used as real label text */
-  --color-neutral-600: #57534e;  /* stone-600 - already the safe floor used everywhere else */
-  --color-neutral-700: #44403c;  /* stone-700 */
-  --color-neutral-800: #292524;  /* stone-800 */
-  --color-neutral-900: #1c1917;  /* stone-900 */
+  --color-neutral-50: #fafaf9;
+  --color-neutral-100: #f5f5f4;
+  --color-neutral-200: #e7e5e4;
+  --color-neutral-300: #d6d3d1;
+  --color-neutral-400: #57534e;
+  --color-neutral-500: #57534e;
+  --color-neutral-600: #57534e;
+  --color-neutral-700: #44403c;
+  --color-neutral-800: #292524;
+  --color-neutral-900: #1c1917;
 
-  /* brand and accent tokens were never actually referenced by any real
-     class (confirmed by grep) - updated for hygiene so nothing in this file
-     still points at the old dark-blue/sky remnants, not because anything
-     renders them. */
-  --color-brand-50: #f0fdfa;
-  --color-brand-500: #0d9488;
-  --color-brand-600: #0f766e;
-  --color-brand-900: #134e4a;
+  --color-brand-50: #eff6f5;
+  --color-brand-500: #2a7a74;
+  --color-brand-600: #16655f;
+  --color-brand-900: #0e4a46;
 
-  --color-accent-400: #fdba74;
-  --color-accent-500: #fb923c;
+  --color-accent-400: #d97706;
+  --color-accent-500: #b45309;
 
-  --color-background-base: #fafaf9;   /* stone-50 */
-  --color-background-surface: rgba(255, 255, 255, 0.7);
-  --color-background-glass: rgba(255, 255, 255, 0.6);
+  --color-background-base: #faf9f7;
+  --color-background-surface: #ffffff;
+  --color-background-glass: #ffffff;
 
-  --color-text-primary: #292524;   /* stone-800 */
-  --color-text-secondary: #57534e; /* stone-600 */
+  --color-text-primary: #292524;
+  --color-text-secondary: #57534e;
+
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-/*
- * Landing page (Phase 1): light baseline — mint/teal primary, warm
- * coral/amber secondary, deep charcoal text. Replaces the old
- * dark-slate-violet system for this page. At the time this landed, the
- * primary/neutral pilot tokens above were a separate, still-dark-violet
- * system scoped only to the admin Hostel Configuration form - they were
- * since realiased onto this same palette too (see the pilot-token comment
- * above). Every text/background pairing introduced below was checked
- * against WCAG contrast math before use, not eyeballed — see PR notes.
- */
 :root {
-  --background: #fafaf9; /* stone-50 - warm off-white, not stark white */
-  --foreground: #292524; /* stone-800 - deep charcoal, not pure black */
+  --background: #faf9f7;
+  --foreground: #292524;
+  --border: #e7e5e4;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   min-height: 100vh;
-  position: relative;
   overflow-x: hidden;
 }
 
-/* Dynamic background gradients - sits behind every page at z-index -1;
-   every real page (landing included) paints its own opaque background on
-   top, so this is a quiet fallback wash, not something text is ever
-   checked against directly. */
-body::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle at 15% 50%, rgba(45, 212, 191, 0.10), transparent 25%),
-              radial-gradient(circle at 85% 30%, rgba(251, 146, 60, 0.10), transparent 25%);
-  z-index: -1;
-  pointer-events: none;
+::selection {
+  background: rgba(22, 101, 95, 0.16);
 }
 
-/* Glassmorphism Utilities - frosted-white glass for a light backdrop.
-   Text placed inside these must use the stone-800/stone-600 pairing
-   below, never the old white/slate-300 dark-glass text colors. */
+:focus-visible {
+  outline: 2px solid #16655f;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 @layer utilities {
-  .glass-panel {
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(41, 37, 36, 0.08);
-    box-shadow: 0 4px 30px rgba(41, 37, 36, 0.06);
+  /* Standard surface: white, hairline border, quiet shadow.
+     Used by dense admin surfaces where restraint matters. */
+  .card {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05);
   }
 
+  /* Premium surface: larger radius, layered soft shadow, warm tint option.
+     Used by landing / student hero moments and feature cards. */
+  .card-premium {
+    background: #ffffff;
+    border: 1px solid #eceae7;
+    box-shadow:
+      0 1px 2px rgba(28, 25, 23, 0.04),
+      0 12px 32px -12px rgba(28, 25, 23, 0.12);
+  }
+
+  .shadow-soft {
+    box-shadow:
+      0 1px 2px rgba(28, 25, 23, 0.04),
+      0 12px 32px -12px rgba(28, 25, 23, 0.12);
+  }
+
+  .shadow-lift {
+    box-shadow:
+      0 2px 4px rgba(28, 25, 23, 0.05),
+      0 20px 44px -16px rgba(28, 25, 23, 0.18);
+  }
+
+  /* Gentle hover lift for interactive cards. Transform + shadow only. */
+  .lift {
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  }
+  .lift:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      0 2px 4px rgba(28, 25, 23, 0.05),
+      0 20px 44px -16px rgba(28, 25, 23, 0.18);
+  }
+
+  /* Subtle warm-teal wash for hero / CTA bands. Decorative background only —
+     all text placed on it keeps its existing contrast-checked colors. */
+  .hero-wash {
+    background:
+      radial-gradient(560px 300px at 12% 0%, rgba(45, 212, 191, 0.10), transparent 65%),
+      radial-gradient(520px 320px at 88% 12%, rgba(251, 191, 36, 0.10), transparent 65%),
+      #faf9f7;
+  }
+
+  .teal-band {
+    background: linear-gradient(135deg, #115e59 0%, #16655f 55%, #0e4a46 100%);
+  }
+
+  .card-hover {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .card-hover:hover {
+    border-color: #d6d3d1;
+    box-shadow: 0 2px 8px rgba(28, 25, 23, 0.07);
+  }
+
+  /* Legacy aliases — mapped to the plain system so older classNames
+     keep rendering calmly until their files are migrated. */
+  .glass-panel,
   .glass-card {
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.72) 100%);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(41, 37, 36, 0.07);
-    border-top: 1px solid rgba(255, 255, 255, 0.9);
-    box-shadow: 0 8px 32px rgba(41, 37, 36, 0.10);
+    background: #ffffff;
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05);
+  }
+  .card-lift {
+    transition: border-color 0.15s ease;
   }
 
-  .text-gradient {
-    background: linear-gradient(to right, #0d9488, #ea580c);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    color: transparent;
+  .btn-primary {
+    background: #16655f;
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(14, 74, 70, 0.25), 0 8px 20px -8px rgba(22, 101, 95, 0.45);
+    transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .btn-primary:hover {
+    background: #115e59;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(14, 74, 70, 0.25), 0 12px 26px -8px rgba(22, 101, 95, 0.5);
+  }
+  .btn-primary:active {
+    background: #0e4a46;
+    transform: translateY(0);
+  }
+
+  .btn-quiet {
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* Small premium pill badge with a live dot. */
+  .eyebrow-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #115e59;
+    background: #ffffff;
+    border: 1px solid #e7e5e4;
+    box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05);
+    border-radius: 999px;
+    padding: 0.4rem 0.85rem;
+  }
+  .eyebrow-badge .dot {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 999px;
+    background: #14b8a6;
+    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.18);
+  }
+
+  /* Lifestyle / trait pills. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .chip-teal {
+    background: #eff6f5;
+    color: #115e59;
+    border-color: #d7e9e6;
+  }
+  .chip-amber {
+    background: #fffbeb;
+    color: #92400e;
+    border-color: #fde68a;
+  }
+  .chip-stone {
+    background: #f5f5f4;
+    color: #57534e;
+    border-color: #e7e5e4;
+  }
+
+  /* Extremely subtle float for hero accents. Transform-only, slow. */
+  @keyframes rf-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-7px); }
+  }
+  .animate-float {
+    animation: rf-float 6s ease-in-out infinite;
+  }
+  .animate-float-slow {
+    animation: rf-float 8.5s ease-in-out infinite;
+  }
+
+  .ring-track {
+    stroke: #e7e5e4;
+  }
+
+  .nice-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .nice-scroll::-webkit-scrollbar-thumb {
+    background: #d6d3d1;
+    border-radius: 999px;
   }
 }
 
-/* Landing page: gentle float used by the hero's glass info-cards. Disabled
-   entirely under prefers-reduced-motion rather than just "made smaller" -
-   these cards read fine perfectly still. */
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  .animate-float,
+  .animate-float-slow {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;

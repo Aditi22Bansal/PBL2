@@ -143,6 +143,9 @@ const PORT = process.env.PORT || 5000;
 // racing a real MongoDB connection attempt. Zero behavior change for production.
 if (require.main === module) {
     connectDB();
+    // Large allocations (20k profiles) run for minutes; keep socket alive.
+    server.timeout = 600000;
+    server.headersTimeout = 610000;
     server.listen(PORT, () => {
         console.log(`Server & Socket.IO running on port ${PORT}`);
     });

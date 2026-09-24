@@ -47,10 +47,16 @@ services:
     environment:
       PORT: 5000
       # Service name, not 127.0.0.1/localhost - resolved via Docker's internal DNS.
-      MONGO_URI: mongodb://mongo:27017/hostel_allocator
+      # Set MONGO_URI in the root .env file to use MongoDB Atlas. The local
+      # container remains the default when MONGO_URI is not provided.
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/hostel_allocator}
       DEV_AUTH: "true"
       PYTHON_SERVICE_URL: http://python-service:8000
       USE_REST_ALLOCATION: "true"
+      # Headroom for real data scale (20k profiles / 6.6k rooms in one org).
+      # Matches the baked-in default in backend/Dockerfile; set explicitly so
+      # a plain `docker run` of the image and the compose stack agree.
+      NODE_OPTIONS: --max-old-space-size=3072
       # Must match python-service's INTERNAL_SERVICE_KEY above exactly.
       INTERNAL_SERVICE_KEY: docker-compose-internal-key-change-me
       # The frontend's real browser-facing origin - tracks whatever host port it's
